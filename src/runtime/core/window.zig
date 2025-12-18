@@ -1,6 +1,7 @@
 const std = @import("std");
 const c = @import("../c.zig");
 const glfw = c.glfw;
+const gl = c.glad;
 
 pub const Window = struct {
     window: c.Window,
@@ -23,6 +24,12 @@ pub const Window = struct {
 
         glfw.glfwMakeContextCurrent(window);
         glfw.glfwSwapInterval(1); // vsync
+
+        const loader: gl.GLADloadproc = @ptrCast(&glfw.glfwGetProcAddress);
+        if (gl.gladLoadGLLoader(loader) == 0) {
+            std.debug.print("Failed to load OpenGL\n", .{});
+            return null;
+        }
 
         return .{
             .window = window,
