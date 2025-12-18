@@ -26,10 +26,10 @@ pub const VertexBuffer = struct {
 
 pub const IndexBuffer = struct {
     id: u32,
-    count: u32,
+    count: usize,
 
     pub fn init(vertices: []const u32) IndexBuffer {
-        var ebo = IndexBuffer{ .id = 0, .count = @intCast(vertices.len) };
+        var ebo = IndexBuffer{ .id = 0, .count = vertices.len };
         gl.glGenBuffers(1, &ebo.id);
 
         gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, ebo.id);
