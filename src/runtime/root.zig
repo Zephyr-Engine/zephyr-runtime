@@ -1,28 +1,12 @@
 const std = @import("std");
 const c = @import("c.zig");
+const win = @import("core/window.zig");
 const glfw = c.glfw;
 const gl = c.glad;
 
 pub fn setupWindow() void {
-    if (glfw.glfwInit() == 0) {
-        std.debug.print("Failed to initialize glfw\n", .{});
-        return;
-    }
-    defer glfw.glfwTerminate();
-
-    glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfw.glfwWindowHint(glfw.GLFW_OPENGL_PROFILE, glfw.GLFW_OPENGL_CORE_PROFILE);
-
-    const window = glfw.glfwCreateWindow(1920, 1080, "zephyr", null, null);
-    if (window == null) {
-        std.debug.print("Failed to initialize glfw window\n", .{});
-        return;
-    }
-    defer glfw.glfwDestroyWindow(window);
-
-    glfw.glfwMakeContextCurrent(window);
-    glfw.glfwSwapInterval(1); // vsync
+    const window = win.Window.init().?;
+    defer window.deinit();
 
     const loader: gl.GLADloadproc = @ptrCast(&glfw.glfwGetProcAddress);
     if (gl.gladLoadGLLoader(loader) == 0) {
@@ -105,8 +89,8 @@ pub fn setupWindow() void {
     gl.glVertexAttribPointer(0, 3, gl.GL_FLOAT, gl.GL_FALSE, 3 * @sizeOf(f32), @ptrFromInt(0));
     gl.glEnableVertexAttribArray(0);
 
-    while (glfw.glfwWindowShouldClose(window) == 0) {
-        glfw.glfwPollEvents();
+    while (window.shouldCloseWindow()) {
+        window.handleInput();
 
         gl.glClearColor(0.4, 0.4, 0.4, 1);
         gl.glClear(gl.GL_COLOR_BUFFER_BIT);
@@ -117,7 +101,7 @@ pub fn setupWindow() void {
         gl.glDrawElements(gl.GL_TRIANGLES, 6, gl.GL_UNSIGNED_INT, @ptrFromInt(0));
         gl.glBindVertexArray(0);
 
-        glfw.glfwSwapBuffers(window);
+        window.swapBuffers();
     }
 
     glfw.glfwPollEvents();

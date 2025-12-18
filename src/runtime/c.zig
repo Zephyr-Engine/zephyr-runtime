@@ -6,4 +6,4 @@ pub const glad = @cImport({
     @cInclude("glad/glad.h");
 });
 
-pub const Widnow = ?*glfw.GLFWwindow;
+pub const Window = ?*glfw.GLFWwindow;
