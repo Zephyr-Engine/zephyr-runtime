@@ -7,7 +7,8 @@ const glfw = c.glfw;
 const gl = c.glad;
 
 pub fn run() void {
-    const window = win.Window.init().?;
+    var window = win.Window.init().?;
+    window.setupCallbacks();
     defer window.deinit();
 
     const vertices = [_]f32{
@@ -47,12 +48,12 @@ pub fn run() void {
     gl.glVertexAttribPointer(0, 3, gl.GL_FLOAT, gl.GL_FALSE, 3 * @sizeOf(f32), @ptrFromInt(0));
     gl.glEnableVertexAttribArray(0);
 
+    gl.glViewport(0, 0, 1920, 1080);
     while (window.shouldCloseWindow()) {
         window.handleInput();
 
         gl.glClearColor(0.4, 0.4, 0.4, 1);
         gl.glClear(gl.GL_COLOR_BUFFER_BIT);
-        gl.glViewport(0, 0, 1920, 1080);
 
         shader.bind();
         vao.bind();
