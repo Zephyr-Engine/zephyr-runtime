@@ -24,8 +24,18 @@ fn callback(e: event.ZEvent) void {
                 },
             }
         },
+        .MouseReleased => |m| {
+            switch (m) {
+                .Left => {
+                    std.debug.print("Left released\n", .{});
+                },
+                .Right => {
+                    std.debug.print("Right released\n", .{});
+                },
+            }
+        },
         .KeyPressed => |k| {
-            std.debug.print("{c} pressed\n", .{@as(u8, @intCast(k))});
+            std.debug.print("{s} pressed\n", .{@tagName(k)});
         },
         .WindowResize => |s| {
             std.debug.print("Resize w: {d}, h: {d}\n", .{ s.width, s.height });
@@ -51,12 +61,12 @@ pub const Window = struct {
 
     pub fn setupCallbacks(self: *Window) void {
         glfw.glfwSetWindowUserPointer(self.window, &self.data);
-        _ = glfw.glfwSetMouseButtonCallback(self.window, input.mouseButtonCallback);
-        _ = glfw.glfwSetKeyCallback(self.window, input.keyButtonCallback);
-        _ = glfw.glfwSetWindowSizeCallback(self.window, input.windowResizeCallback);
-        _ = glfw.glfwSetWindowCloseCallback(self.window, input.windowCloseCallback);
-        _ = glfw.glfwSetCursorPosCallback(self.window, input.cursorPosCallback);
-        _ = glfw.glfwSetScrollCallback(self.window, input.cursorScrollCallback);
+        _ = glfw.glfwSetMouseButtonCallback(self.window, event.mouseButtonCallback);
+        _ = glfw.glfwSetKeyCallback(self.window, event.keyButtonCallback);
+        _ = glfw.glfwSetWindowSizeCallback(self.window, event.windowResizeCallback);
+        _ = glfw.glfwSetWindowCloseCallback(self.window, event.windowCloseCallback);
+        _ = glfw.glfwSetCursorPosCallback(self.window, event.cursorPosCallback);
+        _ = glfw.glfwSetScrollCallback(self.window, event.cursorScrollCallback);
     }
 
     pub fn init() ?Window {
