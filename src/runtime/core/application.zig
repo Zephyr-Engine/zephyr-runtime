@@ -13,7 +13,7 @@ pub const Application = struct {
     pub fn init(allocator: std.mem.Allocator) !*Application {
         const window = try win.Window.init(allocator);
         if (window == null) {
-            std.debug.print("Window creation failed\n", .{});
+            std.log.err("Window creation failed", .{});
         }
 
         window.?.setEventCallback(Application.eventCallback);
@@ -36,37 +36,37 @@ pub const Application = struct {
             .MousePressed => |m| {
                 switch (m) {
                     .Left => {
-                        std.debug.print("Left pressed\n", .{});
+                        std.log.info("Left pressed", .{});
                     },
                     .Right => {
-                        std.debug.print("Right pressed\n", .{});
+                        std.log.info("Right pressed", .{});
                     },
                 }
             },
             .MouseReleased => |m| {
                 switch (m) {
                     .Left => {
-                        std.debug.print("Left released\n", .{});
+                        std.log.info("Left released", .{});
                     },
                     .Right => {
-                        std.debug.print("Right released\n", .{});
+                        std.log.info("Right released", .{});
                     },
                 }
             },
             .KeyPressed => |k| {
-                std.debug.print("{s} pressed\n", .{@tagName(k)});
+                std.log.info("{s} pressed", .{@tagName(k)});
             },
             .WindowResize => |s| {
-                std.debug.print("Resize w: {d}, h: {d}\n", .{ s.width, s.height });
+                std.log.info("Resize w: {d}, h: {d}", .{ s.width, s.height });
             },
             .WindowClose => {
-                std.debug.print("Shutting down\n", .{});
+                std.log.info("Shutting down", .{});
             },
             .MouseMove => |p| {
-                std.debug.print("Mouse x: {}, y: {}\n", .{ p.x, p.y });
+                std.log.info("Mouse x: {}, y: {}", .{ p.x, p.y });
             },
             .MouseScroll => |p| {
-                std.debug.print("Scroll x: {}, y: {}\n", .{ p.x, p.y });
+                std.log.info("Scroll x: {}, y: {}", .{ p.x, p.y });
             },
             else => return,
         }

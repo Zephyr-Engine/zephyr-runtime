@@ -28,7 +28,7 @@ pub const Window = struct {
 
     pub fn init(allocator: std.mem.Allocator) !?*Window {
         if (glfw.glfwInit() == 0) {
-            std.debug.print("Failed to initialize glfw\n", .{});
+            std.log.err("Failed to initialize glfw", .{});
             return null;
         }
 
@@ -38,7 +38,7 @@ pub const Window = struct {
 
         const window = glfw.glfwCreateWindow(1920, 1080, "zephyr", null, null);
         if (window == null) {
-            std.debug.print("Failed to initialize glfw window\n", .{});
+            std.log.err("Failed to initialize glfw window", .{});
             return null;
         }
 
@@ -47,7 +47,7 @@ pub const Window = struct {
 
         const loader: gl.GLADloadproc = @ptrCast(&glfw.glfwGetProcAddress);
         if (gl.gladLoadGLLoader(loader) == 0) {
-            std.debug.print("Failed to load OpenGL\n", .{});
+            std.log.err("Failed to load OpenGL", .{});
             return null;
         }
 
