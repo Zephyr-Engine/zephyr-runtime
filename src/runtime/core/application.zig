@@ -1,6 +1,7 @@
 const std = @import("std");
 const c = @import("../c.zig");
 const win = @import("window.zig");
+const event = @import("event.zig");
 const Shader = @import("../graphics/opengl_shader.zig").Shader;
 const va = @import("../graphics/opengl_vertex_array.zig");
 const glfw = c.glfw;
@@ -15,6 +16,8 @@ pub const Application = struct {
             std.debug.print("Window creation failed\n", .{});
         }
 
+        window.?.setEventCallback(Application.eventCallback);
+
         const app = try allocator.create(Application);
         app.* = Application{
             .window = window.?,
@@ -26,6 +29,49 @@ pub const Application = struct {
     pub fn deinit(self: *Application, allocator: std.mem.Allocator) void {
         self.window.deinit(allocator);
         allocator.destroy(self);
+    }
+
+    fn eventCallback(e: event.ZEvent) void {
+        switch (e) {
+            .MousePressed => |m| {
+                switch (m) {
+                    .Left => {
+                        std.debug.print("Left pressed\n", .{});
+                    },
+                    .Right => {
+                        std.debug.print("Right pressed\n", .{});
+                    },
+                }
+            },
+            .MouseReleased => |m| {
+                switch (m) {
+                    .Left => {
+                        std.debug.print("Left released\n", .{});
+                    },
+                    .Right => {
+                        std.debug.print("Right released\n", .{});
+                    },
+                }
+            },
+            .KeyPressed => |k| {
+                std.debug.print("{s} pressed\n", .{@tagName(k)});
+            },
+            .WindowResize => |s| {
+                std.debug.print("Resize w: {d}, h: {d}\n", .{ s.width, s.height });
+            },
+            .WindowClose => {
+                std.debug.print("Shutting down\n", .{});
+            },
+            .MouseMove => |p| {
+                std.debug.print("Mouse x: {}, y: {}\n", .{ p.x, p.y });
+            },
+            .MouseScroll => |p| {
+                std.debug.print("Scroll x: {}, y: {}\n", .{ p.x, p.y });
+            },
+            else => return,
+        }
+
+        return;
     }
 
     pub fn run(app: *Application) void {

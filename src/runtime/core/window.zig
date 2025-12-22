@@ -12,49 +12,6 @@ pub const WindowData = struct {
     eventCallback: event.ZEventCallback,
 };
 
-fn callback(e: event.ZEvent) void {
-    switch (e) {
-        .MousePressed => |m| {
-            switch (m) {
-                .Left => {
-                    std.debug.print("Left pressed\n", .{});
-                },
-                .Right => {
-                    std.debug.print("Right pressed\n", .{});
-                },
-            }
-        },
-        .MouseReleased => |m| {
-            switch (m) {
-                .Left => {
-                    std.debug.print("Left released\n", .{});
-                },
-                .Right => {
-                    std.debug.print("Right released\n", .{});
-                },
-            }
-        },
-        .KeyPressed => |k| {
-            std.debug.print("{s} pressed\n", .{@tagName(k)});
-        },
-        .WindowResize => |s| {
-            std.debug.print("Resize w: {d}, h: {d}\n", .{ s.width, s.height });
-        },
-        .WindowClose => {
-            std.debug.print("Shutting down\n", .{});
-        },
-        .MouseMove => |p| {
-            std.debug.print("Mouse x: {}, y: {}\n", .{ p.x, p.y });
-        },
-        .MouseScroll => |p| {
-            std.debug.print("Scroll x: {}, y: {}\n", .{ p.x, p.y });
-        },
-        else => return,
-    }
-
-    return;
-}
-
 pub const Window = struct {
     window: c.Window,
     data: WindowData,
@@ -100,11 +57,15 @@ pub const Window = struct {
             .data = WindowData{
                 .width = 1920,
                 .height = 1080,
-                .eventCallback = callback,
+                .eventCallback = undefined,
             },
         };
         win.setupCallbacks();
         return win;
+    }
+
+    pub fn setEventCallback(self: *Window, cb: event.ZEventCallback) void {
+        self.*.data.eventCallback = cb;
     }
 
     pub fn shouldCloseWindow(self: *Window) bool {
