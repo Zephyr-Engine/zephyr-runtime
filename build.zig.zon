@@ -1,12 +1,12 @@
 .{
     .name = .zephyr_runtime,
     .version = "0.0.0",
-    .fingerprint = 0x24a7f8b3f46b5601,
+    .fingerprint = 0x24a7f8b389db23fe, // Changing this has security and trust implications.
     .minimum_zig_version = "0.15.2",
     .dependencies = .{
         .glfw_zig = .{
-            .url = "git+https://github.com/tiawl/glfw.zig.git#65b02416fd6795c0566d6b155a8c0ea23f03a62f",
-            .hash = "glfw_zig-1.0.0-NrvYo8bXGQDQvMHLao8ML7L6L9kL_Idk8IOKBTDyg8aN",
+            .url = "git+https://github.com/tiawl/glfw.zig.git#83074bc9e1dd6b34ae5380bfff816ce0a3d9ffc1",
+            .hash = "glfw_zig-1.0.0-NrvYo8bXGQBjYIfoRj8XBqtJfR5G52TY_7Xr-bv6RBvb",
         },
         .zig_glad = .{
             .url = "git+https://github.com/jackparsonss/zig.glad.git#9c40257dad73762be788c252dbb47a4a34d0bb8b",
@@ -17,7 +17,8 @@
         "build.zig",
         "build.zig.zon",
         "src",
-        "LICENSE",
-        "README.md",
+        // For example...
+        //"LICENSE",
+        //"README.md",
     },
 }

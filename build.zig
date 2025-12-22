@@ -3,6 +3,7 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
     const glfw_dep = b.dependency("glfw_zig", .{
         .target = target,
         .optimize = optimize,
@@ -13,12 +14,13 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const runtime_mod = b.addModule("zephyr_runtime", .{
-        .root_source_file = b.path("src/runtime/root.zig"),
+    const mod = b.addModule("zephyr_runtime", .{
+        .root_source_file = b.path("src/root.zig"),
         .target = target,
     });
-    runtime_mod.linkLibrary(glfw_dep.artifact("glfw"));
-    runtime_mod.linkLibrary(glad_dep.artifact("glad"));
+
+    mod.linkLibrary(glfw_dep.artifact("glfw"));
+    mod.linkLibrary(glad_dep.artifact("glad"));
 
     const exe = b.addExecutable(.{
         .name = "zephyr_runtime",
@@ -27,7 +29,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "zephyr_runtime", .module = runtime_mod },
+                .{ .name = "zephyr_runtime", .module = mod },
             },
         }),
     });
@@ -43,6 +45,7 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(&run_cmd.step);
 
     run_cmd.step.dependOn(b.getInstallStep());
+
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
