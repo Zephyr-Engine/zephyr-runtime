@@ -4,20 +4,8 @@ const runtime = @import("zephyr_runtime");
 
 pub const std_options: std.Options = .{
     .log_level = if (builtin.mode == .ReleaseFast) .err else .debug,
-    .logFn = if (builtin.mode == .ReleaseFast) noopLog else runtime.log,
+    .logFn = runtime.log,
 };
-
-fn noopLog(
-    comptime level: std.log.Level,
-    comptime scope: @TypeOf(.EnumLiteral),
-    comptime format: []const u8,
-    args: anytype,
-) void {
-    _ = level;
-    _ = scope;
-    _ = format;
-    _ = args;
-}
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};

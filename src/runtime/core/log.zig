@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const Color = struct {
     const reset = "\x1b[0m";
@@ -15,6 +16,10 @@ pub fn log(
     comptime format: []const u8,
     args: anytype,
 ) void {
+    if (comptime builtin.mode == .ReleaseFast) {
+        return;
+    }
+
     const color = switch (level) {
         .err => Color.red,
         .warn => Color.orange,
