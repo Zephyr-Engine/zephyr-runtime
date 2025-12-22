@@ -2,12 +2,10 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 const Color = struct {
-    const reset = "\x1b[0m";
     const red = "\x1b[31m";
     const orange = "\x1b[33m";
     const blue = "\x1b[34m";
     const green = "\x1b[32m";
-    const gray = "\x1b[90m";
 };
 
 pub fn log(
