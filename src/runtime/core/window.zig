@@ -59,7 +59,7 @@ pub const Window = struct {
     window: c.Window,
     data: WindowData,
 
-    pub fn setupCallbacks(self: *Window) void {
+    fn setupCallbacks(self: *Window) void {
         glfw.glfwSetWindowUserPointer(self.window, &self.data);
         _ = glfw.glfwSetMouseButtonCallback(self.window, event.mouseButtonCallback);
         _ = glfw.glfwSetKeyCallback(self.window, event.keyButtonCallback);
@@ -69,7 +69,7 @@ pub const Window = struct {
         _ = glfw.glfwSetScrollCallback(self.window, event.cursorScrollCallback);
     }
 
-    pub fn init() ?Window {
+    pub fn init(allocator: std.mem.Allocator) !?*Window {
         if (glfw.glfwInit() == 0) {
             std.debug.print("Failed to initialize glfw\n", .{});
             return null;
@@ -94,7 +94,8 @@ pub const Window = struct {
             return null;
         }
 
-        return .{
+        const win = try allocator.create(Window);
+        win.* = Window{
             .window = window,
             .data = WindowData{
                 .width = 1920,
@@ -102,23 +103,26 @@ pub const Window = struct {
                 .eventCallback = callback,
             },
         };
+        win.setupCallbacks();
+        return win;
     }
 
-    pub fn shouldCloseWindow(self: Window) bool {
+    pub fn shouldCloseWindow(self: *Window) bool {
         return glfw.glfwWindowShouldClose(self.window) == 0;
     }
 
-    pub fn handleInput(self: Window) void {
+    pub fn handleInput(self: *Window) void {
         _ = self;
         glfw.glfwPollEvents();
     }
 
-    pub fn swapBuffers(self: Window) void {
+    pub fn swapBuffers(self: *Window) void {
         glfw.glfwSwapBuffers(self.window);
     }
 
-    pub fn deinit(self: Window) void {
+    pub fn deinit(self: *Window, allocator: std.mem.Allocator) void {
         glfw.glfwTerminate();
         glfw.glfwDestroyWindow(self.window);
+        allocator.destroy(self);
     }
 };
