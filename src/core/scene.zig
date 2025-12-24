@@ -90,10 +90,7 @@ pub const SceneManager = struct {
 
     pub fn init(allocator: std.mem.Allocator) SceneManager {
         return SceneManager{
-            .scenes = .{
-                .items = &.{},
-                .capacity = 0,
-            },
+            .scenes = .empty,
             .allocator = allocator,
         };
     }
@@ -111,7 +108,9 @@ pub const SceneManager = struct {
     }
 
     pub fn popScene(self: *SceneManager) ?Scene {
-        if (self.scenes.items.len == 0) return null;
+        if (self.scenes.items.len == 0) {
+            return null;
+        }
 
         const last_index = self.scenes.items.len - 1;
         const scene = self.scenes.items[last_index];
@@ -133,6 +132,7 @@ pub const SceneManager = struct {
             scene.onUpdate(delta_time);
         }
     }
+
     pub fn handleEvent(self: *SceneManager, e: event.ZEvent) void {
         var i: usize = self.scenes.items.len;
         while (i > 0) {
