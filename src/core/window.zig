@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const Application = @import("application.zig").Application;
 const input = @import("input.zig");
 const event = @import("event.zig");
 const c = @import("../c.zig");
@@ -10,6 +11,7 @@ pub const WindowData = struct {
     width: u32,
     height: u32,
     eventCallback: event.ZEventCallback,
+    app_ptr: ?*Application,
 };
 
 pub const Window = struct {
@@ -58,14 +60,16 @@ pub const Window = struct {
                 .width = 1920,
                 .height = 1080,
                 .eventCallback = undefined,
+                .app_ptr = null,
             },
         };
         win.setupCallbacks();
         return win;
     }
 
-    pub fn setEventCallback(self: *Window, cb: event.ZEventCallback) void {
+    pub fn setEventCallback(self: *Window, cb: event.ZEventCallback, app: *Application) void {
         self.*.data.eventCallback = cb;
+        self.*.data.app_ptr = app;
     }
 
     pub fn shouldCloseWindow(self: *Window) bool {

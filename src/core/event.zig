@@ -1,3 +1,4 @@
+const Application = @import("application.zig").Application;
 const WindowData = @import("window.zig").WindowData;
 const c = @import("../c.zig");
 const glfw = c.glfw;
@@ -269,7 +270,7 @@ pub const ZEvent = union(enum) {
     MouseReleased: MouseButton,
 };
 
-pub const ZEventCallback = *const fn (ZEvent) void;
+pub const ZEventCallback = *const fn (*Application, ZEvent) void;
 
 pub fn mouseButtonCallback(window: c.Window, btn: c_int, action: c_int, mods: c_int) callconv(.c) void {
     _ = mods;
@@ -290,14 +291,14 @@ pub fn mouseButtonCallback(window: c.Window, btn: c_int, action: c_int, mods: c_
         } else {
             ev = ZEvent{ .MouseReleased = .Left };
         }
-        windowData.eventCallback(ev);
+        windowData.eventCallback(windowData.app_ptr.?, ev);
     } else if (btn == glfw.GLFW_MOUSE_BUTTON_RIGHT) {
         if (isPress) {
             ev = ZEvent{ .MousePressed = .Right };
         } else {
             ev = ZEvent{ .MouseReleased = .Right };
         }
-        windowData.eventCallback(ev);
+        windowData.eventCallback(windowData.app_ptr.?, ev);
     }
 }
 
@@ -322,7 +323,7 @@ pub fn keyButtonCallback(window: c.Window, key: c_int, scancode: c_int, action: 
         ev = ZEvent{ .KeyReleased = mappedKey };
     }
 
-    windowData.eventCallback(ev);
+    windowData.eventCallback(windowData.app_ptr.?, ev);
 }
 
 pub fn windowResizeCallback(window: c.Window, width: c_int, height: c_int) callconv(.c) void {
@@ -336,7 +337,7 @@ pub fn windowResizeCallback(window: c.Window, width: c_int, height: c_int) callc
         .height = @intCast(height),
         .width = @intCast(width),
     } };
-    windowData.eventCallback(ev);
+    windowData.eventCallback(windowData.app_ptr.?, ev);
 }
 
 pub fn windowCloseCallback(window: c.Window) callconv(.c) void {
@@ -344,7 +345,7 @@ pub fn windowCloseCallback(window: c.Window) callconv(.c) void {
     const windowData: *WindowData = @ptrCast(@alignCast(windowDataPtr));
 
     const ev: ZEvent = .WindowClose;
-    windowData.eventCallback(ev);
+    windowData.eventCallback(windowData.app_ptr.?, ev);
 }
 
 pub fn cursorPosCallback(window: c.Window, x: f64, y: f64) callconv(.c) void {
@@ -352,7 +353,7 @@ pub fn cursorPosCallback(window: c.Window, x: f64, y: f64) callconv(.c) void {
     const windowData: *WindowData = @ptrCast(@alignCast(windowDataPtr));
 
     const ev = ZEvent{ .MouseMove = .{ .x = x, .y = y } };
-    windowData.eventCallback(ev);
+    windowData.eventCallback(windowData.app_ptr.?, ev);
 }
 
 pub fn cursorScrollCallback(window: c.Window, x: f64, y: f64) callconv(.c) void {
@@ -360,5 +361,5 @@ pub fn cursorScrollCallback(window: c.Window, x: f64, y: f64) callconv(.c) void 
     const windowData: *WindowData = @ptrCast(@alignCast(windowDataPtr));
 
     const ev = ZEvent{ .MouseScroll = .{ .x = x, .y = y } };
-    windowData.eventCallback(ev);
+    windowData.eventCallback(windowData.app_ptr.?, ev);
 }
