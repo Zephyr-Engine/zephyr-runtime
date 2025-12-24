@@ -88,27 +88,11 @@ pub const Application = struct {
         };
 
         const vao = va.VertexArray.init(&vertices, &indices);
-        const vs_src =
-            \\#version 330 core
-            \\
-            \\layout(location = 0) in vec3 aPos;
-            \\
-            \\void main() {
-            \\    gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);
-            \\}
-        ;
 
-        const fs_src =
-            \\#version 330 core
-            \\
-            \\out vec4 FragColor;
-            \\
-            \\void main() {
-            \\    FragColor = vec4(0.8f, 0.2f, 0.2f, 1.0f);
-            \\}
-        ;
-
+        const vs_src = @embedFile("../assets/shaders/vertex.glsl");
+        const fs_src = @embedFile("../assets/shaders/fragment.glsl");
         const shader = Shader.init(vs_src, fs_src);
+
         gl.glVertexAttribPointer(0, 3, gl.GL_FLOAT, gl.GL_FALSE, 3 * @sizeOf(f32), @ptrFromInt(0));
         gl.glEnableVertexAttribArray(0);
 
