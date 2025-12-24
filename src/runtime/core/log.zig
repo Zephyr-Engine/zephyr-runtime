@@ -7,7 +7,6 @@ const Color = struct {
     const orange = "\x1b[33m";
     const blue = "\x1b[34m";
     const green = "\x1b[32m";
-    const gray = "\x1b[90m";
 };
 
 pub fn log(
