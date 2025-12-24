@@ -19,31 +19,4 @@ pub fn build(b: *std.Build) void {
     });
     runtime_mod.linkLibrary(glfw_dep.artifact("glfw"));
     runtime_mod.linkLibrary(glad_dep.artifact("glad"));
-
-    const exe = b.addExecutable(.{
-        .name = "zephyr_runtime",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "zephyr_runtime", .module = runtime_mod },
-            },
-        }),
-    });
-
-    exe.root_module.linkLibrary(glfw_dep.artifact("glfw"));
-    exe.root_module.linkLibrary(glad_dep.artifact("glad"));
-
-    b.installArtifact(exe);
-
-    const run_step = b.step("run", "Run the app");
-
-    const run_cmd = b.addRunArtifact(exe);
-    run_step.dependOn(&run_cmd.step);
-
-    run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
 }
