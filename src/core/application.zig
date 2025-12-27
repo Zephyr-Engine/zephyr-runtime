@@ -16,8 +16,8 @@ pub const Application = struct {
     last_frame_time: f64,
     allocator: std.mem.Allocator,
 
-    pub fn init(allocator: std.mem.Allocator) !*Application {
-        const window = try win.Window.init(allocator);
+    pub fn init(allocator: std.mem.Allocator, params: win.WindowParams) !*Application {
+        const window = try win.Window.init(allocator, params);
         if (window == null) {
             std.log.err("Window creation failed", .{});
         }
@@ -56,9 +56,9 @@ pub const Application = struct {
     }
 
     pub fn run(app: *Application) void {
-        while (app.window.shouldCloseWindow()) {
-            gl.glViewport(0, 0, @intCast(app.window.data.width), @intCast(app.window.data.height));
+        gl.glViewport(0, 0, @intCast(app.window.data.width), @intCast(app.window.data.height));
 
+        while (app.window.shouldCloseWindow()) {
             const current_time = glfw.glfwGetTime();
             const delta_time: f32 = @floatCast(current_time - app.last_frame_time);
             app.last_frame_time = current_time;

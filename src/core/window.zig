@@ -14,6 +14,12 @@ pub const WindowData = struct {
     app_ptr: ?*Application,
 };
 
+pub const WindowParams = struct {
+    width: u32,
+    height: u32,
+    title: []const u8,
+};
+
 pub const Window = struct {
     window: c.Window,
     data: WindowData,
@@ -28,7 +34,7 @@ pub const Window = struct {
         _ = glfw.glfwSetScrollCallback(self.window, event.cursorScrollCallback);
     }
 
-    pub fn init(allocator: std.mem.Allocator) !?*Window {
+    pub fn init(allocator: std.mem.Allocator, params: WindowParams) !?*Window {
         if (glfw.glfwInit() == 0) {
             std.log.err("Failed to initialize glfw", .{});
             return null;
@@ -38,7 +44,14 @@ pub const Window = struct {
         glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MINOR, 3);
         glfw.glfwWindowHint(glfw.GLFW_OPENGL_PROFILE, glfw.GLFW_OPENGL_CORE_PROFILE);
 
-        const window = glfw.glfwCreateWindow(1920, 1080, "zephyr", null, null);
+        const title = allocator.dupeZ(u8, params.title) catch {
+            std.log.err("Failed to duplicate window title", .{});
+            glfw.glfwTerminate();
+            return null;
+        };
+        defer allocator.free(title);
+
+        const window = glfw.glfwCreateWindow(@intCast(params.width), @intCast(params.height), title, null, null);
         if (window == null) {
             std.log.err("Failed to initialize glfw window", .{});
             return null;
@@ -57,8 +70,8 @@ pub const Window = struct {
         win.* = Window{
             .window = window,
             .data = WindowData{
-                .width = 1920,
-                .height = 1080,
+                .width = params.width,
+                .height = params.height,
                 .eventCallback = undefined,
                 .app_ptr = null,
             },

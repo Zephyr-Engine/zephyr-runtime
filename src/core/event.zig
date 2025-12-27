@@ -2,6 +2,7 @@ const Application = @import("application.zig").Application;
 const WindowData = @import("window.zig").WindowData;
 const c = @import("../c.zig");
 const glfw = c.glfw;
+const gl = c.glad;
 
 pub const MouseButton = enum(u8) {
     Left = 0,
@@ -334,6 +335,8 @@ pub fn windowResizeCallback(window: c.Window, width: c_int, height: c_int) callc
 
     windowData.*.height = @intCast(height);
     windowData.*.width = @intCast(width);
+
+    gl.glViewport(0, 0, @intCast(width), @intCast(height));
 
     const ev = ZEvent{ .WindowResize = .{
         .height = @intCast(height),
