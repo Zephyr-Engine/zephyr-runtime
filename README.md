@@ -8,5 +8,5 @@ A game engine written in Zig for learning, currently uses glfw for window manage
 zig fetch --save git+https://github.com/tiawl/glfw.zig.git
 zig fetch --save git+https://github.com/jackparsonss/zig.glad.git
 
-zig build
+zig build check // this will generate a zig cache for lsp autocomplete
 ```
