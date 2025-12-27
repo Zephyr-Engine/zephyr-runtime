@@ -40,7 +40,7 @@ pub const Shader = struct {
 
     pub fn setUniform(self: Shader, name: []const u8, comptime T: type, value: T) void {
         const location = gl.glGetUniformLocation(self.id, @ptrCast(name.ptr));
-        switch (@typeInfo(T)) {
+        switch (comptime @typeInfo(T)) {
             .float => {
                 gl.glUniform1f(location, @as(f32, value));
             },
