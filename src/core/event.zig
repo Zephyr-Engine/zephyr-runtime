@@ -6,6 +6,12 @@ const glfw = c.glfw;
 pub const MouseButton = enum(u8) {
     Left = 0,
     Right = 1,
+    Middle = 2,
+    Button3 = 3,
+    Button4 = 4,
+    Button5 = 5,
+    Button6 = 6,
+    Button7 = 7,
 };
 
 pub const Key = enum(u16) {
@@ -281,25 +287,21 @@ pub fn mouseButtonCallback(window: c.Window, btn: c_int, action: c_int, mods: c_
         return;
     }
 
+    // Only handle buttons 0-7
+    if (btn < 0 or btn > 7) {
+        return;
+    }
+
     const windowDataPtr = glfw.glfwGetWindowUserPointer(window).?;
     const windowData: *WindowData = @ptrCast(@alignCast(windowDataPtr));
 
-    var ev: ZEvent = undefined;
-    if (btn == glfw.GLFW_MOUSE_BUTTON_LEFT) {
-        if (isPress) {
-            ev = ZEvent{ .MousePressed = .Left };
-        } else {
-            ev = ZEvent{ .MouseReleased = .Left };
-        }
-        windowData.eventCallback(windowData.app_ptr.?, ev);
-    } else if (btn == glfw.GLFW_MOUSE_BUTTON_RIGHT) {
-        if (isPress) {
-            ev = ZEvent{ .MousePressed = .Right };
-        } else {
-            ev = ZEvent{ .MouseReleased = .Right };
-        }
-        windowData.eventCallback(windowData.app_ptr.?, ev);
-    }
+    const button: MouseButton = @enumFromInt(@as(u8, @intCast(btn)));
+    const ev: ZEvent = if (isPress)
+        ZEvent{ .MousePressed = button }
+    else
+        ZEvent{ .MouseReleased = button };
+
+    windowData.eventCallback(windowData.app_ptr.?, ev);
 }
 
 pub fn keyButtonCallback(window: c.Window, key: c_int, scancode: c_int, action: c_int, mods: c_int) callconv(.c) void {
