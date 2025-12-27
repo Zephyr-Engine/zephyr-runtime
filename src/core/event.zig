@@ -336,13 +336,16 @@ pub fn windowResizeCallback(window: c.Window, width: c_int, height: c_int) callc
     windowData.*.height = @intCast(height);
     windowData.*.width = @intCast(width);
 
-    gl.glViewport(0, 0, @intCast(width), @intCast(height));
-
     const ev = ZEvent{ .WindowResize = .{
         .height = @intCast(height),
         .width = @intCast(width),
     } };
     windowData.eventCallback(windowData.app_ptr.?, ev);
+}
+
+pub fn framebufferSizeCallback(window: c.Window, width: c_int, height: c_int) callconv(.c) void {
+    _ = window;
+    gl.glViewport(0, 0, @intCast(width), @intCast(height));
 }
 
 pub fn windowCloseCallback(window: c.Window) callconv(.c) void {

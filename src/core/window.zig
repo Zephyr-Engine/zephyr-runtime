@@ -15,10 +15,22 @@ pub const WindowData = struct {
 };
 
 pub const WindowParams = struct {
-    width: u32,
-    height: u32,
+    width: ?u32,
+    height: ?u32,
     title: []const u8,
 };
+
+pub fn getDefaultWidth() u32 {
+    const monitor = glfw.glfwGetPrimaryMonitor();
+    const video_mode = glfw.glfwGetVideoMode(monitor);
+    return @intCast(video_mode.*.width);
+}
+
+pub fn getDefaultHeight() u32 {
+    const monitor = glfw.glfwGetPrimaryMonitor();
+    const video_mode = glfw.glfwGetVideoMode(monitor);
+    return @intCast(video_mode.*.height);
+}
 
 pub const Window = struct {
     window: c.Window,
@@ -51,7 +63,10 @@ pub const Window = struct {
         };
         defer allocator.free(title);
 
-        const window = glfw.glfwCreateWindow(@intCast(params.width), @intCast(params.height), title, null, null);
+        const width = if (params.width) |w| w else getDefaultWidth();
+        const height = if (params.height) |h| h else getDefaultHeight();
+
+        const window = glfw.glfwCreateWindow(@intCast(width), @intCast(height), title, null, null);
         if (window == null) {
             std.log.err("Failed to initialize glfw window", .{});
             return null;
@@ -70,8 +85,8 @@ pub const Window = struct {
         win.* = Window{
             .window = window,
             .data = WindowData{
-                .width = params.width,
-                .height = params.height,
+                .width = width,
+                .height = height,
                 .eventCallback = undefined,
                 .app_ptr = null,
             },

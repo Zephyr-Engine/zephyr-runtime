@@ -56,7 +56,10 @@ pub const Application = struct {
     }
 
     pub fn run(app: *Application) void {
-        gl.glViewport(0, 0, @intCast(app.window.data.width), @intCast(app.window.data.height));
+        var fb_width: c_int = undefined;
+        var fb_height: c_int = undefined;
+        glfw.glfwGetFramebufferSize(app.window.window, &fb_width, &fb_height);
+        gl.glViewport(0, 0, @intCast(fb_width), @intCast(fb_height));
 
         while (app.window.shouldCloseWindow()) {
             const current_time = glfw.glfwGetTime();
