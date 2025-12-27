@@ -22,3 +22,5 @@ pub const recommended_std_options: std.Options = .{
     .log_level = if (builtin.mode == .ReleaseFast) .err else .debug,
     .logFn = @import("core/log.zig").log,
 };
+
+pub const Input = &@import("core/input.zig").Input;

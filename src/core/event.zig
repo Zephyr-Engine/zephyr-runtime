@@ -3,9 +3,9 @@ const WindowData = @import("window.zig").WindowData;
 const c = @import("../c.zig");
 const glfw = c.glfw;
 
-pub const MouseButton = enum {
-    Left,
-    Right,
+pub const MouseButton = enum(u8) {
+    Left = 0,
+    Right = 1,
 };
 
 pub const Key = enum(u16) {

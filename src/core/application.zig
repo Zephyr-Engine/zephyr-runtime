@@ -1,10 +1,12 @@
 const std = @import("std");
+
 const c = @import("../c.zig");
 const win = @import("window.zig");
 const event = @import("event.zig");
 const scene = @import("scene.zig");
-const Shader = @import("../graphics/opengl_shader.zig").Shader;
+const input = @import("input.zig");
 const va = @import("../graphics/opengl_vertex_array.zig");
+const Shader = @import("../graphics/opengl_shader.zig").Shader;
 const glfw = c.glfw;
 const gl = c.glad;
 
@@ -28,6 +30,7 @@ pub const Application = struct {
             .allocator = allocator,
         };
 
+        input.Input = input.InputManager.init();
         window.?.setEventCallback(Application.eventCallback, app);
 
         return app;
@@ -48,6 +51,7 @@ pub const Application = struct {
     }
 
     fn eventCallback(self: *Application, e: event.ZEvent) void {
+        input.Input.update(e);
         self.scene_manager.handleEvent(e);
     }
 
@@ -66,6 +70,7 @@ pub const Application = struct {
             app.scene_manager.update(delta_time);
 
             app.window.swapBuffers();
+            input.Input.clear();
         }
 
         glfw.glfwPollEvents();
