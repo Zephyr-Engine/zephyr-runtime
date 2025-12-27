@@ -46,6 +46,5 @@ pub const Shader = struct {
             },
             else => {},
         }
-        gl.glUniform1f(location, value);
     }
 };
