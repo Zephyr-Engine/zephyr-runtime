@@ -2,13 +2,13 @@ name: Build
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   build:
-    runs-on: ubunutu-latest
+    runs-on: ubuntu-latest
     container: jackpar/x11-zig:0.15.2
 
     steps:
