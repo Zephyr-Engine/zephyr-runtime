@@ -5,6 +5,7 @@ const win = @import("window.zig");
 const event = @import("event.zig");
 const scene = @import("scene.zig");
 const input = @import("input.zig");
+const Time = @import("time.zig").Time;
 const va = @import("../graphics/opengl_vertex_array.zig");
 const Shader = @import("../graphics/opengl_shader.zig").Shader;
 const glfw = c.glfw;
@@ -13,8 +14,8 @@ const gl = c.glad;
 pub const Application = struct {
     window: *win.Window,
     scene_manager: scene.SceneManager,
-    last_frame_time: f64,
     allocator: std.mem.Allocator,
+    time: Time,
 
     pub fn init(allocator: std.mem.Allocator, params: win.WindowParams) !*Application {
         const window = try win.Window.init(allocator, params);
@@ -26,8 +27,8 @@ pub const Application = struct {
         app.* = Application{
             .window = window.?,
             .scene_manager = scene.SceneManager.init(allocator),
-            .last_frame_time = glfw.glfwGetTime(),
             .allocator = allocator,
+            .time = Time.init(),
         };
 
         input.Input = input.InputManager.init();
@@ -63,14 +64,13 @@ pub const Application = struct {
 
         while (app.window.shouldCloseWindow()) {
             const current_time = glfw.glfwGetTime();
-            const delta_time: f32 = @floatCast(current_time - app.last_frame_time);
-            app.last_frame_time = current_time;
+            app.time.update(@floatCast(current_time));
 
             gl.glClearColor(0.4, 0.4, 0.4, 1);
             gl.glClear(gl.GL_COLOR_BUFFER_BIT);
 
             app.window.handleInput();
-            app.scene_manager.update(delta_time);
+            app.scene_manager.update(app.time.delta_time);
 
             app.window.swapBuffers();
             input.Input.clear();
