@@ -41,6 +41,7 @@ pub const Window = struct {
         _ = glfw.glfwSetMouseButtonCallback(self.window, event.mouseButtonCallback);
         _ = glfw.glfwSetKeyCallback(self.window, event.keyButtonCallback);
         _ = glfw.glfwSetWindowSizeCallback(self.window, event.windowResizeCallback);
+        _ = glfw.glfwSetFramebufferSizeCallback(self.window, event.framebufferSizeCallback);
         _ = glfw.glfwSetWindowCloseCallback(self.window, event.windowCloseCallback);
         _ = glfw.glfwSetCursorPosCallback(self.window, event.cursorPosCallback);
         _ = glfw.glfwSetScrollCallback(self.window, event.cursorScrollCallback);
