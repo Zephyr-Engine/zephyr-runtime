@@ -54,7 +54,6 @@ pub const Window = struct {
             std.log.err("Failed to initialize glfw", .{});
             return null;
         }
-
         glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MAJOR, 3);
         glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MINOR, 3);
         glfw.glfwWindowHint(glfw.GLFW_OPENGL_PROFILE, glfw.GLFW_OPENGL_CORE_PROFILE);

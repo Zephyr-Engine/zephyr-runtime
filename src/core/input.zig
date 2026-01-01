@@ -33,7 +33,6 @@ pub const InputManager = struct {
     pub fn clear(self: *InputManager) void {
         @memset(&self.pressed_keys, false);
         @memset(&self.released_keys, false);
-        @memset(&self.held_keys, false);
         @memset(&self.pressed_buttons, false);
         @memset(&self.released_buttons, false);
         self.mouse_scroll = .{ .x = 0.0, .y = 0.0 };
