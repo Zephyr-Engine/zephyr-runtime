@@ -23,8 +23,7 @@ pub const VertexArray = struct {
         gl.glBindVertexArray(self.id);
     }
 
-    pub fn unbind(self: VertexArray) void {
-        _ = self;
+    pub fn unbind() void {
         gl.glBindVertexArray(0);
     }
 

@@ -18,8 +18,7 @@ pub const VertexBuffer = struct {
         gl.glBindBuffer(gl.GL_ARRAY_BUFFER, self.id);
     }
 
-    pub fn unbind(self: VertexBuffer) void {
-        _ = self;
+    pub fn unbind() void {
         gl.glBindBuffer(gl.GL_ARRAY_BUFFER, 0);
     }
 };
@@ -42,8 +41,7 @@ pub const IndexBuffer = struct {
         gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, self.id);
     }
 
-    pub fn unbind(self: IndexBuffer) void {
-        _ = self;
+    pub fn unbind() void {
         gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, 0);
     }
 };
