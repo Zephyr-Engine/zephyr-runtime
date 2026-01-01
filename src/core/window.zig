@@ -23,13 +23,15 @@ pub const WindowParams = struct {
 pub fn getDefaultWidth() u32 {
     const monitor = glfw.glfwGetPrimaryMonitor();
     const video_mode = glfw.glfwGetVideoMode(monitor);
-    return @intCast(video_mode.*.width);
+    const full_width: u32 = @intCast(video_mode.*.width);
+    return @intFromFloat(@as(f32, @floatFromInt(full_width)) * 0.5);
 }
 
 pub fn getDefaultHeight() u32 {
     const monitor = glfw.glfwGetPrimaryMonitor();
     const video_mode = glfw.glfwGetVideoMode(monitor);
-    return @intCast(video_mode.*.height);
+    const full_height: u32 = @intCast(video_mode.*.height);
+    return @intFromFloat(@as(f32, @floatFromInt(full_height)) * 0.5);
 }
 
 pub const Window = struct {
