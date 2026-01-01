@@ -11,6 +11,8 @@ const Shader = @import("../graphics/opengl_shader.zig").Shader;
 const glfw = c.glfw;
 const gl = c.glad;
 
+var isRunning = true;
+
 pub const Application = struct {
     window: *win.Window,
     scene_manager: scene.SceneManager,
@@ -56,13 +58,17 @@ pub const Application = struct {
         self.scene_manager.handleEvent(e);
     }
 
+    pub fn Shutdown() void {
+        isRunning = false;
+    }
+
     pub fn run(app: *Application) void {
         var fb_width: c_int = undefined;
         var fb_height: c_int = undefined;
         glfw.glfwGetFramebufferSize(app.window.window, &fb_width, &fb_height);
         gl.glViewport(0, 0, @intCast(fb_width), @intCast(fb_height));
 
-        while (app.window.shouldCloseWindow()) {
+        while (app.window.shouldCloseWindow() and isRunning) {
             const current_time = glfw.glfwGetTime();
             app.time.update(@floatCast(current_time));
 
