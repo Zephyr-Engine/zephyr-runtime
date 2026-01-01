@@ -438,23 +438,19 @@ test "MouseButton enum values" {
 
 test "ZEvent union creation" {
     const close_event = ZEvent.WindowClose;
-    try std.testing.expect(std.meta.activeTag(close_event) == .WindowClose);
+    try std.testing.expect(close_event == .WindowClose);
 
     const resize_event = ZEvent{ .WindowResize = .{ .width = 800, .height = 600 } };
-    try std.testing.expect(std.meta.activeTag(resize_event) == .WindowResize);
     try std.testing.expectEqual(@as(u32, 800), resize_event.WindowResize.width);
     try std.testing.expectEqual(@as(u32, 600), resize_event.WindowResize.height);
 
     const key_event = ZEvent{ .KeyPressed = Key.A };
-    try std.testing.expect(std.meta.activeTag(key_event) == .KeyPressed);
     try std.testing.expectEqual(Key.A, key_event.KeyPressed);
 
     const mouse_event = ZEvent{ .MousePressed = MouseButton.Left };
-    try std.testing.expect(std.meta.activeTag(mouse_event) == .MousePressed);
     try std.testing.expectEqual(MouseButton.Left, mouse_event.MousePressed);
 
     const scroll_event = ZEvent{ .MouseScroll = .{ .x = 1.5, .y = -2.0 } };
-    try std.testing.expect(std.meta.activeTag(scroll_event) == .MouseScroll);
     try std.testing.expectEqual(@as(f64, 1.5), scroll_event.MouseScroll.x);
     try std.testing.expectEqual(@as(f64, -2.0), scroll_event.MouseScroll.y);
 }
