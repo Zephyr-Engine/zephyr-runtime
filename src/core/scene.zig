@@ -150,3 +150,127 @@ pub const SceneManager = struct {
         return self.scenes.items.len;
     }
 };
+
+test "SceneManager initialization" {
+    const allocator = std.testing.allocator;
+    var manager = SceneManager.init(allocator);
+    defer manager.deinit();
+
+    try std.testing.expect(!manager.hasScenes());
+    try std.testing.expectEqual(@as(usize, 0), manager.sceneCount());
+    try std.testing.expectEqual(@as(?Scene, null), manager.currentScene());
+}
+
+const TestScene = struct {
+    startup_called: bool = false,
+    update_called: bool = false,
+    event_called: bool = false,
+    cleanup_called: bool = false,
+    last_delta: f32 = 0.0,
+
+    pub fn onStartup(self: *TestScene, allocator: std.mem.Allocator) !void {
+        _ = allocator;
+        self.startup_called = true;
+    }
+
+    pub fn onUpdate(self: *TestScene, delta_time: f32) void {
+        self.update_called = true;
+        self.last_delta = delta_time;
+    }
+
+    pub fn onEvent(self: *TestScene, e: event.ZEvent) void {
+        _ = e;
+        self.event_called = true;
+    }
+
+    pub fn onCleanup(self: *TestScene, allocator: std.mem.Allocator) void {
+        _ = allocator;
+        self.cleanup_called = true;
+    }
+};
+
+test "Scene interface validation" {
+    try std.testing.expect(isScene(TestScene));
+
+    const NotAScene = struct {
+        value: i32,
+    };
+    try std.testing.expect(!isScene(NotAScene));
+}
+
+test "SceneManager push and pop scenes" {
+    const allocator = std.testing.allocator;
+    var manager = SceneManager.init(allocator);
+    defer manager.deinit();
+
+    var test_scene = TestScene{};
+    const scene = Scene.init(&test_scene);
+
+    try manager.pushScene(scene);
+    try std.testing.expect(test_scene.startup_called);
+    try std.testing.expect(manager.hasScenes());
+    try std.testing.expectEqual(@as(usize, 1), manager.sceneCount());
+
+    const popped = manager.popScene();
+    try std.testing.expect(popped != null);
+    try std.testing.expect(test_scene.cleanup_called);
+    try std.testing.expect(!manager.hasScenes());
+}
+
+test "SceneManager update calls current scene" {
+    const allocator = std.testing.allocator;
+    var manager = SceneManager.init(allocator);
+    defer manager.deinit();
+
+    var test_scene = TestScene{};
+    const scene = Scene.init(&test_scene);
+
+    try manager.pushScene(scene);
+    manager.update(0.016);
+
+    try std.testing.expect(test_scene.update_called);
+    try std.testing.expectEqual(@as(f32, 0.016), test_scene.last_delta);
+}
+
+test "SceneManager handleEvent propagates to all scenes" {
+    const allocator = std.testing.allocator;
+    var manager = SceneManager.init(allocator);
+    defer manager.deinit();
+
+    var scene1 = TestScene{};
+    var scene2 = TestScene{};
+
+    try manager.pushScene(Scene.init(&scene1));
+    try manager.pushScene(Scene.init(&scene2));
+
+    const test_event = event.ZEvent.WindowClose;
+    manager.handleEvent(test_event);
+
+    try std.testing.expect(scene1.event_called);
+    try std.testing.expect(scene2.event_called);
+}
+
+test "SceneManager multiple scenes stack behavior" {
+    const allocator = std.testing.allocator;
+    var manager = SceneManager.init(allocator);
+    defer manager.deinit();
+
+    var scene1 = TestScene{};
+    var scene2 = TestScene{};
+    var scene3 = TestScene{};
+
+    try manager.pushScene(Scene.init(&scene1));
+    try manager.pushScene(Scene.init(&scene2));
+    try manager.pushScene(Scene.init(&scene3));
+
+    try std.testing.expectEqual(@as(usize, 3), manager.sceneCount());
+
+    manager.update(0.1);
+    try std.testing.expect(!scene1.update_called);
+    try std.testing.expect(!scene2.update_called);
+    try std.testing.expect(scene3.update_called);
+
+    _ = manager.popScene();
+    try std.testing.expectEqual(@as(usize, 2), manager.sceneCount());
+    try std.testing.expect(scene3.cleanup_called);
+}

@@ -12,6 +12,10 @@
             .url = "git+https://github.com/jackparsonss/zig.glad.git#9c40257dad73762be788c252dbb47a4a34d0bb8b",
             .hash = "zig_glad-0.0.3-6OirnirhBgDz6aL0IVJ_YtvIOeyKeXklRLvT1mTH878m",
         },
+        .zlm = .{
+            .url = "git+https://github.com/ziglibs/zlm.git#35ab7df57cfb5392a11486f6e4b03a82f849a118",
+            .hash = "zlm-0.1.0-LoZ6yDawAADMopilIe9MDzer0UqmruCy_PuhNv4OMc7c",
+        },
     },
     .paths = .{
         "build.zig",

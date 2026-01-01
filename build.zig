@@ -13,12 +13,18 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const zlm = b.dependency("zlm", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     const runtime_mod = b.addModule("zephyr_runtime", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
     });
     runtime_mod.linkLibrary(glfw_dep.artifact("glfw"));
     runtime_mod.linkLibrary(glad_dep.artifact("glad"));
+    runtime_mod.addImport("zlm", zlm.module("zlm"));
 
     // Add a check step to populate LSP data
     const check = b.step("check", "Check if the library compiles");
@@ -35,4 +41,22 @@ pub fn build(b: *std.Build) void {
         .root_module = lib_check,
     });
     check.dependOn(&check_compile.step);
+
+    const test_step = b.step("test", "Run unit tests");
+
+    const test_mod = b.createModule(.{
+        .root_source_file = b.path("src/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    test_mod.linkLibrary(glfw_dep.artifact("glfw"));
+    test_mod.linkLibrary(glad_dep.artifact("glad"));
+    test_mod.addImport("zlm", zlm.module("zlm"));
+
+    const tests = b.addTest(.{
+        .root_module = test_mod,
+    });
+
+    const run_tests = b.addRunArtifact(tests);
+    test_step.dependOn(&run_tests.step);
 }

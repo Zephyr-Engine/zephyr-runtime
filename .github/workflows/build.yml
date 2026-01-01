@@ -1,4 +1,4 @@
-name: Build
+name: Build and Test
 
 on:
   push:
@@ -17,3 +17,6 @@ jobs:
 
       - name: Build project
         run: zig build
+
+      - name: Test project
+        run: zig build test --summary all

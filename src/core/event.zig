@@ -371,3 +371,90 @@ pub fn cursorScrollCallback(window: c.Window, x: f64, y: f64) callconv(.c) void 
     const ev = ZEvent{ .MouseScroll = .{ .x = x, .y = y } };
     windowData.eventCallback(windowData.app_ptr.?, ev);
 }
+
+const std = @import("std");
+
+test "Key.fromGLFW converts letter keys correctly" {
+    try std.testing.expectEqual(Key.A, Key.fromGLFW(glfw.GLFW_KEY_A));
+    try std.testing.expectEqual(Key.B, Key.fromGLFW(glfw.GLFW_KEY_B));
+    try std.testing.expectEqual(Key.Z, Key.fromGLFW(glfw.GLFW_KEY_Z));
+}
+
+test "Key.fromGLFW converts number keys correctly" {
+    try std.testing.expectEqual(Key.Num0, Key.fromGLFW(glfw.GLFW_KEY_0));
+    try std.testing.expectEqual(Key.Num5, Key.fromGLFW(glfw.GLFW_KEY_5));
+    try std.testing.expectEqual(Key.Num9, Key.fromGLFW(glfw.GLFW_KEY_9));
+}
+
+test "Key.fromGLFW converts special keys correctly" {
+    try std.testing.expectEqual(Key.Space, Key.fromGLFW(glfw.GLFW_KEY_SPACE));
+    try std.testing.expectEqual(Key.Enter, Key.fromGLFW(glfw.GLFW_KEY_ENTER));
+    try std.testing.expectEqual(Key.Escape, Key.fromGLFW(glfw.GLFW_KEY_ESCAPE));
+    try std.testing.expectEqual(Key.Tab, Key.fromGLFW(glfw.GLFW_KEY_TAB));
+    try std.testing.expectEqual(Key.Backspace, Key.fromGLFW(glfw.GLFW_KEY_BACKSPACE));
+}
+
+test "Key.fromGLFW converts arrow keys correctly" {
+    try std.testing.expectEqual(Key.Up, Key.fromGLFW(glfw.GLFW_KEY_UP));
+    try std.testing.expectEqual(Key.Down, Key.fromGLFW(glfw.GLFW_KEY_DOWN));
+    try std.testing.expectEqual(Key.Left, Key.fromGLFW(glfw.GLFW_KEY_LEFT));
+    try std.testing.expectEqual(Key.Right, Key.fromGLFW(glfw.GLFW_KEY_RIGHT));
+}
+
+test "Key.fromGLFW converts function keys correctly" {
+    try std.testing.expectEqual(Key.F1, Key.fromGLFW(glfw.GLFW_KEY_F1));
+    try std.testing.expectEqual(Key.F5, Key.fromGLFW(glfw.GLFW_KEY_F5));
+    try std.testing.expectEqual(Key.F12, Key.fromGLFW(glfw.GLFW_KEY_F12));
+}
+
+test "Key.fromGLFW converts modifier keys correctly" {
+    try std.testing.expectEqual(Key.LeftShift, Key.fromGLFW(glfw.GLFW_KEY_LEFT_SHIFT));
+    try std.testing.expectEqual(Key.RightShift, Key.fromGLFW(glfw.GLFW_KEY_RIGHT_SHIFT));
+    try std.testing.expectEqual(Key.LeftControl, Key.fromGLFW(glfw.GLFW_KEY_LEFT_CONTROL));
+    try std.testing.expectEqual(Key.RightControl, Key.fromGLFW(glfw.GLFW_KEY_RIGHT_CONTROL));
+    try std.testing.expectEqual(Key.LeftAlt, Key.fromGLFW(glfw.GLFW_KEY_LEFT_ALT));
+    try std.testing.expectEqual(Key.RightAlt, Key.fromGLFW(glfw.GLFW_KEY_RIGHT_ALT));
+}
+
+test "Key.fromGLFW converts keypad keys correctly" {
+    try std.testing.expectEqual(Key.Kp0, Key.fromGLFW(glfw.GLFW_KEY_KP_0));
+    try std.testing.expectEqual(Key.Kp9, Key.fromGLFW(glfw.GLFW_KEY_KP_9));
+    try std.testing.expectEqual(Key.KpAdd, Key.fromGLFW(glfw.GLFW_KEY_KP_ADD));
+    try std.testing.expectEqual(Key.KpSubtract, Key.fromGLFW(glfw.GLFW_KEY_KP_SUBTRACT));
+    try std.testing.expectEqual(Key.KpMultiply, Key.fromGLFW(glfw.GLFW_KEY_KP_MULTIPLY));
+    try std.testing.expectEqual(Key.KpDivide, Key.fromGLFW(glfw.GLFW_KEY_KP_DIVIDE));
+}
+
+test "Key.fromGLFW returns Unknown for invalid keys" {
+    try std.testing.expectEqual(Key.Unknown, Key.fromGLFW(-1));
+    try std.testing.expectEqual(Key.Unknown, Key.fromGLFW(9999));
+}
+
+test "MouseButton enum values" {
+    try std.testing.expectEqual(@as(u8, 0), @intFromEnum(MouseButton.Left));
+    try std.testing.expectEqual(@as(u8, 1), @intFromEnum(MouseButton.Right));
+    try std.testing.expectEqual(@as(u8, 2), @intFromEnum(MouseButton.Middle));
+}
+
+test "ZEvent union creation" {
+    const close_event = ZEvent.WindowClose;
+    try std.testing.expect(std.meta.activeTag(close_event) == .WindowClose);
+
+    const resize_event = ZEvent{ .WindowResize = .{ .width = 800, .height = 600 } };
+    try std.testing.expect(std.meta.activeTag(resize_event) == .WindowResize);
+    try std.testing.expectEqual(@as(u32, 800), resize_event.WindowResize.width);
+    try std.testing.expectEqual(@as(u32, 600), resize_event.WindowResize.height);
+
+    const key_event = ZEvent{ .KeyPressed = Key.A };
+    try std.testing.expect(std.meta.activeTag(key_event) == .KeyPressed);
+    try std.testing.expectEqual(Key.A, key_event.KeyPressed);
+
+    const mouse_event = ZEvent{ .MousePressed = MouseButton.Left };
+    try std.testing.expect(std.meta.activeTag(mouse_event) == .MousePressed);
+    try std.testing.expectEqual(MouseButton.Left, mouse_event.MousePressed);
+
+    const scroll_event = ZEvent{ .MouseScroll = .{ .x = 1.5, .y = -2.0 } };
+    try std.testing.expect(std.meta.activeTag(scroll_event) == .MouseScroll);
+    try std.testing.expectEqual(@as(f64, 1.5), scroll_event.MouseScroll.x);
+    try std.testing.expectEqual(@as(f64, -2.0), scroll_event.MouseScroll.y);
+}
