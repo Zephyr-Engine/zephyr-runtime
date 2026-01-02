@@ -94,6 +94,12 @@ pub const Window = struct {
             },
         };
         win.setupCallbacks();
+
+        var fb_width: c_int = undefined;
+        var fb_height: c_int = undefined;
+        glfw.glfwGetFramebufferSize(window, &fb_width, &fb_height);
+        gl.glViewport(0, 0, @intCast(fb_width), @intCast(fb_height));
+
         return win;
     }
 
