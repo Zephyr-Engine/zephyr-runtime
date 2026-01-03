@@ -13,11 +13,9 @@ pub const ZEvent = event.ZEvent;
 pub const Key = event.Key;
 pub const MouseButton = event.MouseButton;
 
+pub const RenderCommand = @import("core/renderer.zig").RenderCommand;
 pub const Shader = @import("graphics/opengl_shader.zig").Shader;
 pub const VertexArray = @import("graphics/opengl_vertex_array.zig").VertexArray;
-
-pub const c = @import("c.zig");
-pub const gl = c.glad;
 
 pub const recommended_std_options: std.Options = .{
     .log_level = if (builtin.mode == .ReleaseFast) .err else .debug,

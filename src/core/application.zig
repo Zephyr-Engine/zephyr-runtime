@@ -1,6 +1,5 @@
 const std = @import("std");
 
-const c = @import("../c.zig");
 const win = @import("window.zig");
 const event = @import("event.zig");
 const scene = @import("scene.zig");
@@ -8,8 +7,6 @@ const input = @import("input.zig");
 const Time = @import("time.zig").Time;
 const va = @import("../graphics/opengl_vertex_array.zig");
 const Shader = @import("../graphics/opengl_shader.zig").Shader;
-const glfw = c.glfw;
-const gl = c.glad;
 
 var isRunning = true;
 
@@ -64,11 +61,8 @@ pub const Application = struct {
 
     pub fn run(app: *Application) void {
         while (app.window.shouldCloseWindow() and isRunning) {
-            const current_time = glfw.glfwGetTime();
+            const current_time = win.Window.GetTime();
             app.time.update(@floatCast(current_time));
-
-            gl.glClearColor(0.4, 0.4, 0.4, 1);
-            gl.glClear(gl.GL_COLOR_BUFFER_BIT);
 
             app.window.handleInput();
             app.scene_manager.update(app.time.delta_time);
@@ -77,6 +71,6 @@ pub const Application = struct {
             input.Input.clear();
         }
 
-        glfw.glfwPollEvents();
+        app.window.handleInput();
     }
 };

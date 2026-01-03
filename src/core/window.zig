@@ -117,6 +117,10 @@ pub const Window = struct {
         glfw.glfwPollEvents();
     }
 
+    pub fn GetTime() f64 {
+        return glfw.glfwGetTime();
+    }
+
     pub fn swapBuffers(self: *Window) void {
         glfw.glfwSwapBuffers(self.window);
     }

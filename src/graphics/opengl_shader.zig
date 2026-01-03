@@ -1,11 +1,13 @@
 const std = @import("std");
+const layout = @import("layout.zig");
 const c = @import("../c.zig");
 const gl = c.glad;
 
 pub const Shader = struct {
     id: u32,
+    buffer_layout: layout.BufferLayout,
 
-    pub fn init(vs_src: []const u8, fs_src: []const u8) Shader {
+    pub fn init(allocator: std.mem.Allocator, vs_src: []const u8, fs_src: []const u8) !Shader {
         const vs_ptrs = [_][*c]const u8{
             @ptrCast(vs_src.ptr),
         };
@@ -30,9 +32,47 @@ pub const Shader = struct {
         gl.glDeleteShader(vs);
         gl.glDeleteShader(fs);
 
+        var count: i32 = 0;
+        gl.glGetProgramiv(program, gl.GL_ACTIVE_ATTRIBUTES, &count);
+
+        var stride: u32 = 0;
+        var bufferElements = try layout.BufferElements.initCapacity(allocator, @intCast(count));
+        for (0..@intCast(count)) |i| {
+            var length: i32 = 0;
+            var size: i32 = 0;
+            var ty: u32 = 0;
+            var name: [256]u8 = undefined;
+
+            gl.glGetActiveAttrib(program, @intCast(i), name.len, &length, &size, &ty, @ptrCast(&name));
+
+            const shader_type: layout.DataType = switch (ty) {
+                gl.GL_FLOAT => .Float,
+                gl.GL_FLOAT_VEC2 => .Float2,
+                gl.GL_FLOAT_VEC3 => .Float3,
+                gl.GL_FLOAT_VEC4 => .Float4,
+                gl.GL_INT => .Int,
+                gl.GL_INT_VEC2 => .Int2,
+                gl.GL_INT_VEC3 => .Int3,
+                gl.GL_INT_VEC4 => .Int4,
+                gl.GL_BOOL => .Bool,
+                gl.GL_FLOAT_MAT3 => .Mat3,
+                gl.GL_FLOAT_MAT4 => .Mat4,
+                else => .Float,
+            };
+
+            const element = layout.BufferElement.new(shader_type, stride, false);
+            stride += element.size;
+            try bufferElements.append(allocator, element);
+        }
+
         return .{
             .id = program,
+            .buffer_layout = layout.BufferLayout.new(bufferElements, stride),
         };
+    }
+
+    pub fn deinit(self: *Shader, allocator: std.mem.Allocator) void {
+        self.buffer_layout.elements.deinit(allocator);
     }
 
     pub fn bind(self: Shader) void {
