@@ -1,6 +1,6 @@
 const std = @import("std");
-const runtime = @import("zephyr_runtime");
+const zp = @import("zephyr_runtime");
 
-pub fn main() !void {
-    try runtime.bufferedPrint();
+pub fn main() void {
+    zp.run();
 }
