@@ -49,7 +49,7 @@ pub fn run() void {
 
     const fs_src: [*c]const u8 = @embedFile("assets/fragment.glsl");
     const fs: u32 = gl.glCreateShader(gl.GL_FRAGMENT_SHADER);
-    gl.glShaderSource(fs, 1, @ptrCast(&fs_src), null);
+    gl.glShaderSource(fs, 1, &fs_src, null);
     gl.glCompileShader(fs);
 
     const program = gl.glCreateProgram();
