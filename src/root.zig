@@ -40,4 +40,5 @@ test {
     _ = @import("core/scene.zig");
     _ = @import("core/event.zig");
     _ = @import("core/input.zig");
+    _ = @import("scene/camera.zig");
 }

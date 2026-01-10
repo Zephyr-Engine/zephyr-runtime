@@ -116,3 +116,296 @@ pub const Camera = struct {
         return self.orientation.mulVec3(math.Vec3.new(0, 1, 0));
     }
 };
+
+test "Camera.new creates camera with default values" {
+    const camera = Camera.new(
+        math.Vec3.new(0, 0, 5),
+        std.math.pi / 4.0,
+        16.0 / 9.0,
+        0.1,
+        100.0,
+        true,
+    );
+
+    try std.testing.expectEqual(math.Vec3.new(0, 0, 5), camera.position);
+    try std.testing.expectEqual(Quat.IDENTITY, camera.orientation);
+    try std.testing.expectApproxEqAbs(std.math.pi / 4.0, camera.fov, 0.001);
+    try std.testing.expectApproxEqAbs(16.0 / 9.0, camera.aspect_ratio, 0.001);
+    try std.testing.expectApproxEqAbs(0.1, camera.near_plane, 0.001);
+    try std.testing.expectApproxEqAbs(100.0, camera.far_plane, 0.001);
+    try std.testing.expect(camera.is_active);
+    try std.testing.expectApproxEqAbs(0.0, camera.yaw, 0.001);
+    try std.testing.expectApproxEqAbs(0.0, camera.pitch, 0.001);
+}
+
+test "Camera.fpsLook updates orientation" {
+    var camera = Camera.new(
+        math.Vec3.new(0, 0, 0),
+        std.math.pi / 4.0,
+        16.0 / 9.0,
+        0.1,
+        100.0,
+        true,
+    );
+
+    camera.fpsLook(0.1, 0.1, 1.0);
+
+    try std.testing.expectApproxEqAbs(-0.1, camera.yaw, 0.001);
+    try std.testing.expectApproxEqAbs(-0.1, camera.pitch, 0.001);
+    try std.testing.expect(camera.orientation.x != 0.0 or camera.orientation.y != 0.0 or camera.orientation.z != 0.0 or camera.orientation.w != 1.0);
+}
+
+test "Camera.fpsLook clamps pitch" {
+    var camera = Camera.new(
+        math.Vec3.new(0, 0, 0),
+        std.math.pi / 4.0,
+        16.0 / 9.0,
+        0.1,
+        100.0,
+        true,
+    );
+
+    const max_pitch = FRAC_PI_2 - 0.01;
+    camera.fpsLook(0.0, -10.0, 1.0);
+    try std.testing.expectApproxEqAbs(max_pitch, camera.pitch, 0.001);
+
+    camera.fpsLook(0.0, 20.0, 1.0);
+    try std.testing.expectApproxEqAbs(-max_pitch, camera.pitch, 0.001);
+}
+
+test "Camera.pan moves camera position" {
+    var camera = Camera.new(
+        math.Vec3.new(0, 0, 0),
+        std.math.pi / 4.0,
+        16.0 / 9.0,
+        0.1,
+        100.0,
+        true,
+    );
+
+    const initial_pos = camera.position;
+    camera.pan(1.0, 1.0, 0.1);
+
+    try std.testing.expect(!math.Vec3.eql(initial_pos, camera.position));
+}
+
+test "Camera.zoom adjusts fov" {
+    var camera = Camera.new(
+        math.Vec3.new(0, 0, 0),
+        std.math.pi / 4.0,
+        16.0 / 9.0,
+        0.1,
+        100.0,
+        true,
+    );
+
+    const initial_fov = camera.fov;
+    camera.zoom(1.0, 0.1);
+
+    try std.testing.expect(camera.fov < initial_fov);
+}
+
+test "Camera.zoom clamps fov" {
+    var camera = Camera.new(
+        math.Vec3.new(0, 0, 0),
+        std.math.pi / 4.0,
+        16.0 / 9.0,
+        0.1,
+        100.0,
+        true,
+    );
+
+    camera.zoom(-100.0, 1.0);
+    const max_fov = std.math.pi - 0.1;
+    try std.testing.expectApproxEqAbs(max_fov, camera.fov, 0.001);
+
+    camera.zoom(100.0, 1.0);
+    const min_fov = 0.1;
+    try std.testing.expectApproxEqAbs(min_fov, camera.fov, 0.001);
+}
+
+test "Camera.setPosition updates position" {
+    var camera = Camera.new(
+        math.Vec3.new(0, 0, 0),
+        std.math.pi / 4.0,
+        16.0 / 9.0,
+        0.1,
+        100.0,
+        true,
+    );
+
+    const new_pos = math.Vec3.new(1, 2, 3);
+    camera.setPosition(new_pos);
+
+    try std.testing.expectEqual(new_pos, camera.position);
+}
+
+test "Camera.setOrientation updates and normalizes orientation" {
+    var camera = Camera.new(
+        math.Vec3.new(0, 0, 0),
+        std.math.pi / 4.0,
+        16.0 / 9.0,
+        0.1,
+        100.0,
+        true,
+    );
+
+    const new_quat = Quat{ .x = 0.5, .y = 0.5, .z = 0.5, .w = 0.5 };
+    camera.setOrientation(new_quat);
+
+    const len = @sqrt(camera.orientation.x * camera.orientation.x +
+        camera.orientation.y * camera.orientation.y +
+        camera.orientation.z * camera.orientation.z +
+        camera.orientation.w * camera.orientation.w);
+
+    try std.testing.expectApproxEqAbs(1.0, len, 0.001);
+}
+
+test "Camera.setActive updates active state" {
+    var camera = Camera.new(
+        math.Vec3.new(0, 0, 0),
+        std.math.pi / 4.0,
+        16.0 / 9.0,
+        0.1,
+        100.0,
+        true,
+    );
+
+    camera.setActive(false);
+    try std.testing.expect(!camera.is_active);
+
+    camera.setActive(true);
+    try std.testing.expect(camera.is_active);
+}
+
+test "Camera.setAspectRatio updates aspect ratio" {
+    var camera = Camera.new(
+        math.Vec3.new(0, 0, 0),
+        std.math.pi / 4.0,
+        16.0 / 9.0,
+        0.1,
+        100.0,
+        true,
+    );
+
+    camera.setAspectRatio(4.0 / 3.0);
+    try std.testing.expectApproxEqAbs(4.0 / 3.0, camera.aspect_ratio, 0.001);
+}
+
+test "Camera.forward returns correct direction vector" {
+    const camera = Camera.new(
+        math.Vec3.new(0, 0, 0),
+        std.math.pi / 4.0,
+        16.0 / 9.0,
+        0.1,
+        100.0,
+        true,
+    );
+
+    const forward_vec = camera.forward();
+    const expected = math.Vec3.new(0, 0, -1);
+
+    try std.testing.expectApproxEqAbs(expected.x, forward_vec.x, 0.001);
+    try std.testing.expectApproxEqAbs(expected.y, forward_vec.y, 0.001);
+    try std.testing.expectApproxEqAbs(expected.z, forward_vec.z, 0.001);
+}
+
+test "Camera.right returns correct direction vector" {
+    const camera = Camera.new(
+        math.Vec3.new(0, 0, 0),
+        std.math.pi / 4.0,
+        16.0 / 9.0,
+        0.1,
+        100.0,
+        true,
+    );
+
+    const right_vec = camera.right();
+    const expected = math.Vec3.new(1, 0, 0);
+
+    try std.testing.expectApproxEqAbs(expected.x, right_vec.x, 0.001);
+    try std.testing.expectApproxEqAbs(expected.y, right_vec.y, 0.001);
+    try std.testing.expectApproxEqAbs(expected.z, right_vec.z, 0.001);
+}
+
+test "Camera.up returns correct direction vector" {
+    const camera = Camera.new(
+        math.Vec3.new(0, 0, 0),
+        std.math.pi / 4.0,
+        16.0 / 9.0,
+        0.1,
+        100.0,
+        true,
+    );
+
+    const up_vec = camera.up();
+    const expected = math.Vec3.new(0, 1, 0);
+
+    try std.testing.expectApproxEqAbs(expected.x, up_vec.x, 0.001);
+    try std.testing.expectApproxEqAbs(expected.y, up_vec.y, 0.001);
+    try std.testing.expectApproxEqAbs(expected.z, up_vec.z, 0.001);
+}
+
+test "Camera.lookAt points camera at target" {
+    var camera = Camera.new(
+        math.Vec3.new(5, 5, 5),
+        std.math.pi / 4.0,
+        16.0 / 9.0,
+        0.1,
+        100.0,
+        true,
+    );
+
+    const initial_orientation = camera.orientation;
+    const target = math.Vec3.new(0, 0, 0);
+    camera.lookAt(target, math.Vec3.new(0, 1, 0));
+
+    const orientation_changed = camera.orientation.x != initial_orientation.x or
+        camera.orientation.y != initial_orientation.y or
+        camera.orientation.z != initial_orientation.z or
+        camera.orientation.w != initial_orientation.w;
+
+    try std.testing.expect(orientation_changed);
+}
+
+test "Camera.viewMatrix returns valid matrix" {
+    const camera = Camera.new(
+        math.Vec3.new(0, 0, 5),
+        std.math.pi / 4.0,
+        16.0 / 9.0,
+        0.1,
+        100.0,
+        true,
+    );
+
+    const view_mat = camera.viewMatrix();
+    try std.testing.expect(view_mat.fields[0][0] != 0.0 or view_mat.fields[1][1] != 0.0 or view_mat.fields[2][2] != 0.0);
+}
+
+test "Camera.projectionMatrix returns valid matrix" {
+    const camera = Camera.new(
+        math.Vec3.new(0, 0, 5),
+        std.math.pi / 4.0,
+        16.0 / 9.0,
+        0.1,
+        100.0,
+        true,
+    );
+
+    const proj_mat = camera.projectionMatrix();
+    try std.testing.expect(proj_mat.fields[0][0] != 0.0 or proj_mat.fields[1][1] != 0.0 or proj_mat.fields[2][2] != 0.0);
+}
+
+test "Camera.viewProjectionMatrix returns valid matrix" {
+    const camera = Camera.new(
+        math.Vec3.new(0, 0, 5),
+        std.math.pi / 4.0,
+        16.0 / 9.0,
+        0.1,
+        100.0,
+        true,
+    );
+
+    const vp_mat = camera.viewProjectionMatrix();
+    try std.testing.expect(vp_mat.fields[0][0] != 0.0 or vp_mat.fields[1][1] != 0.0 or vp_mat.fields[2][2] != 0.0);
+}
