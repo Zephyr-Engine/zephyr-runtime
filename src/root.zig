@@ -42,20 +42,14 @@ pub fn run() void {
     var vbo: u32 = 0;
     gl.glGenBuffers(1, &vbo);
 
-    const vs_ptrs = [_][*c]const u8{
-        @ptrCast(@embedFile("assets/vertex.glsl")),
-    };
-
+    const vs_src: [*c]const u8 = @embedFile("assets/vertex.glsl");
     const vs: u32 = gl.glCreateShader(gl.GL_VERTEX_SHADER);
-    gl.glShaderSource(vs, 1, &vs_ptrs, null);
+    gl.glShaderSource(vs, 1, &vs_src, null);
     gl.glCompileShader(vs);
 
-    const fs_ptrs = [_][*c]const u8{
-        @ptrCast(@embedFile("assets/fragment.glsl")),
-    };
-
+    const fs_src: [*c]const u8 = @embedFile("assets/fragment.glsl");
     const fs: u32 = gl.glCreateShader(gl.GL_FRAGMENT_SHADER);
-    gl.glShaderSource(fs, 1, &fs_ptrs, null);
+    gl.glShaderSource(fs, 1, @ptrCast(&fs_src), null);
     gl.glCompileShader(fs);
 
     const program = gl.glCreateProgram();
