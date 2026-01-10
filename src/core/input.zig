@@ -12,8 +12,12 @@ pub const InputManager = struct {
         y: f32,
     },
     mouse_scroll: struct {
-        x: f64,
-        y: f64,
+        x: f32,
+        y: f32,
+    },
+    mouse_scroll_delta: struct {
+        x: f32,
+        y: f32,
     },
     pressed_keys: [512]bool,
     released_keys: [512]bool,
@@ -27,6 +31,7 @@ pub const InputManager = struct {
             .mouse_pos = .{ .x = 0.0, .y = 0.0 },
             .mouse_delta = .{ .x = 0.0, .y = 0.0 },
             .mouse_scroll = .{ .x = 0.0, .y = 0.0 },
+            .mouse_scroll_delta = .{ .x = 0.0, .y = 0.0 },
             .pressed_keys = [_]bool{false} ** 512,
             .released_keys = [_]bool{false} ** 512,
             .held_keys = [_]bool{false} ** 512,
@@ -54,6 +59,8 @@ pub const InputManager = struct {
                 self.mouse_pos.y = move_event.y;
             },
             event.ZEvent.MouseScroll => |scroll_event| {
+                self.mouse_scroll_delta.x = scroll_event.x - self.mouse_scroll.x;
+                self.mouse_scroll_delta.y = scroll_event.y - self.mouse_scroll.y;
                 self.mouse_scroll.x += scroll_event.x;
                 self.mouse_scroll.y += scroll_event.y;
             },
@@ -107,6 +114,14 @@ pub const InputManager = struct {
     pub fn isButtonReleased(self: *InputManager, button: event.MouseButton) bool {
         const b = @intFromEnum(button);
         return self.released_buttons[b];
+    }
+
+    pub fn isScrollingY(self: *InputManager) bool {
+        return self.mouse_scroll.y > 0;
+    }
+
+    pub fn isScrollingX(self: *InputManager) bool {
+        return self.mouse_scroll.x > 0;
     }
 };
 
