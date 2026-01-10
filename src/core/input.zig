@@ -266,8 +266,10 @@ test "InputManager clear resets all state" {
 
     try std.testing.expect(!input.isKeyPressed(.A));
     try std.testing.expect(!input.isButtonPressed(.Left));
-    try std.testing.expectEqual(@as(f64, 0.0), input.mouse_pos.x);
-    try std.testing.expectEqual(@as(f64, 0.0), input.mouse_pos.y);
+    try std.testing.expectEqual(@as(f64, 100), input.mouse_pos.x);
+    try std.testing.expectEqual(@as(f64, 200), input.mouse_pos.y);
+    try std.testing.expectEqual(@as(f64, 0.0), input.mouse_delta.x);
+    try std.testing.expectEqual(@as(f64, 0.0), input.mouse_delta.y);
     try std.testing.expectEqual(@as(f64, 0.0), input.mouse_scroll.x);
     try std.testing.expectEqual(@as(f64, 0.0), input.mouse_scroll.y);
 }
