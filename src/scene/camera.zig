@@ -178,7 +178,7 @@ pub const Camera = struct {
     }
 
     pub fn viewProjectionMatrix(self: *const Camera) math.Mat4 {
-        return self.projectionMatrix().mul(self.viewMatrix());
+        return self.viewMatrix().mul(self.projectionMatrix());
     }
 
     pub fn lookAt(self: *Camera, target: math.Vec3, up_vec: math.Vec3) void {
@@ -214,10 +214,6 @@ pub const Camera = struct {
 
     pub fn setAspectRatio(self: *Camera, aspect_ratio: f32) void {
         self.aspect_ratio = aspect_ratio;
-    }
-
-    pub fn lookat(self: *const Camera) math.Mat4 {
-        return self.projectionMatrix().mul(self.viewMatrix());
     }
 
     fn forward(self: *const Camera) math.Vec3 {
