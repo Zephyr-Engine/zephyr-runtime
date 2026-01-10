@@ -25,6 +25,7 @@ pub const InputManager = struct {
 
     pressed_buttons: [8]bool,
     released_buttons: [8]bool,
+    held_buttons: [8]bool,
 
     pub fn init() InputManager {
         return InputManager{
@@ -37,6 +38,7 @@ pub const InputManager = struct {
             .held_keys = [_]bool{false} ** 512,
             .pressed_buttons = [_]bool{false} ** 8,
             .released_buttons = [_]bool{false} ** 8,
+            .held_buttons = [_]bool{false} ** 8,
         };
     }
 
@@ -47,7 +49,6 @@ pub const InputManager = struct {
         @memset(&self.released_buttons, false);
         self.mouse_scroll = .{ .x = 0.0, .y = 0.0 };
         self.mouse_delta = .{ .x = 0.0, .y = 0.0 };
-        self.mouse_pos = .{ .x = 0.0, .y = 0.0 };
     }
 
     pub fn update(self: *InputManager, ev: event.ZEvent) void {
@@ -82,10 +83,12 @@ pub const InputManager = struct {
             event.ZEvent.MousePressed => |button_event| {
                 const button = @intFromEnum(button_event);
                 self.pressed_buttons[button] = true;
+                self.held_buttons[button] = true;
             },
             event.ZEvent.MouseReleased => |button_event| {
                 const button = @intFromEnum(button_event);
                 self.released_buttons[button] = true;
+                self.held_buttons[button] = false;
             },
             else => {},
         }
@@ -114,6 +117,11 @@ pub const InputManager = struct {
     pub fn isButtonReleased(self: *InputManager, button: event.MouseButton) bool {
         const b = @intFromEnum(button);
         return self.released_buttons[b];
+    }
+
+    pub fn isButtonHeld(self: *InputManager, button: event.MouseButton) bool {
+        const b = @intFromEnum(button);
+        return self.held_buttons[b];
     }
 
     pub fn isScrollingY(self: *InputManager) bool {
