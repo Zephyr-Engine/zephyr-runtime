@@ -103,6 +103,16 @@ pub const Window = struct {
         return win;
     }
 
+    pub fn setWireframeMode(self: *Window) void {
+        _ = self;
+        gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_LINE);
+    }
+
+    pub fn setVsync(self: *Window, value: bool) void {
+        _ = self;
+        glfw.glfwSwapInterval(value);
+    }
+
     pub fn setEventCallback(self: *Window, cb: event.ZEventCallback, app: *Application) void {
         self.*.data.eventCallback = cb;
         self.*.data.app_ptr = app;

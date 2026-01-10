@@ -1,7 +1,9 @@
 const builtin = @import("builtin");
 const std = @import("std");
 
-pub const Application = @import("core/application.zig").Application;
+const application = @import("core/application.zig");
+pub const Application = application.Application;
+pub const ApplicationProps = application.ApplicationProps;
 
 const scene = @import("core/scene.zig");
 pub const Scene = scene.Scene;
