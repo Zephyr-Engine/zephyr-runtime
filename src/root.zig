@@ -1,6 +1,5 @@
 const builtin = @import("builtin");
 const std = @import("std");
-const math = @import("zlm").as(f32);
 
 pub const Application = @import("core/application.zig").Application;
 
@@ -24,6 +23,7 @@ pub const recommended_std_options: std.Options = .{
 
 pub const Input = &@import("core/input.zig").Input;
 
+const math = @import("core/math.zig");
 pub const Vec3 = math.Vec3;
 pub const Vec2 = math.Vec2;
 pub const Mat2 = math.Mat2;
