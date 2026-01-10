@@ -4,12 +4,20 @@ const event = @import("event.zig");
 
 pub const InputManager = struct {
     mouse_pos: struct {
-        x: f64,
-        y: f64,
+        x: f32,
+        y: f32,
+    },
+    mouse_delta: struct {
+        x: f32,
+        y: f32,
     },
     mouse_scroll: struct {
-        x: f64,
-        y: f64,
+        x: f32,
+        y: f32,
+    },
+    mouse_scroll_delta: struct {
+        x: f32,
+        y: f32,
     },
     pressed_keys: [512]bool,
     released_keys: [512]bool,
@@ -17,16 +25,20 @@ pub const InputManager = struct {
 
     pressed_buttons: [8]bool,
     released_buttons: [8]bool,
+    held_buttons: [8]bool,
 
     pub fn init() InputManager {
         return InputManager{
             .mouse_pos = .{ .x = 0.0, .y = 0.0 },
+            .mouse_delta = .{ .x = 0.0, .y = 0.0 },
             .mouse_scroll = .{ .x = 0.0, .y = 0.0 },
+            .mouse_scroll_delta = .{ .x = 0.0, .y = 0.0 },
             .pressed_keys = [_]bool{false} ** 512,
             .released_keys = [_]bool{false} ** 512,
             .held_keys = [_]bool{false} ** 512,
             .pressed_buttons = [_]bool{false} ** 8,
             .released_buttons = [_]bool{false} ** 8,
+            .held_buttons = [_]bool{false} ** 8,
         };
     }
 
@@ -36,16 +48,20 @@ pub const InputManager = struct {
         @memset(&self.pressed_buttons, false);
         @memset(&self.released_buttons, false);
         self.mouse_scroll = .{ .x = 0.0, .y = 0.0 };
-        self.mouse_pos = .{ .x = 0.0, .y = 0.0 };
+        self.mouse_delta = .{ .x = 0.0, .y = 0.0 };
     }
 
     pub fn update(self: *InputManager, ev: event.ZEvent) void {
         switch (ev) {
             event.ZEvent.MouseMove => |move_event| {
+                self.mouse_delta.x = move_event.x - self.mouse_pos.x;
+                self.mouse_delta.y = move_event.y - self.mouse_pos.y;
                 self.mouse_pos.x = move_event.x;
                 self.mouse_pos.y = move_event.y;
             },
             event.ZEvent.MouseScroll => |scroll_event| {
+                self.mouse_scroll_delta.x = scroll_event.x - self.mouse_scroll.x;
+                self.mouse_scroll_delta.y = scroll_event.y - self.mouse_scroll.y;
                 self.mouse_scroll.x += scroll_event.x;
                 self.mouse_scroll.y += scroll_event.y;
             },
@@ -67,10 +83,12 @@ pub const InputManager = struct {
             event.ZEvent.MousePressed => |button_event| {
                 const button = @intFromEnum(button_event);
                 self.pressed_buttons[button] = true;
+                self.held_buttons[button] = true;
             },
             event.ZEvent.MouseReleased => |button_event| {
                 const button = @intFromEnum(button_event);
                 self.released_buttons[button] = true;
+                self.held_buttons[button] = false;
             },
             else => {},
         }
@@ -99,6 +117,19 @@ pub const InputManager = struct {
     pub fn isButtonReleased(self: *InputManager, button: event.MouseButton) bool {
         const b = @intFromEnum(button);
         return self.released_buttons[b];
+    }
+
+    pub fn isButtonHeld(self: *InputManager, button: event.MouseButton) bool {
+        const b = @intFromEnum(button);
+        return self.held_buttons[b];
+    }
+
+    pub fn isScrollingY(self: *InputManager) bool {
+        return self.mouse_scroll.y != 0;
+    }
+
+    pub fn isScrollingX(self: *InputManager) bool {
+        return self.mouse_scroll.x != 0;
     }
 };
 
@@ -235,8 +266,10 @@ test "InputManager clear resets all state" {
 
     try std.testing.expect(!input.isKeyPressed(.A));
     try std.testing.expect(!input.isButtonPressed(.Left));
-    try std.testing.expectEqual(@as(f64, 0.0), input.mouse_pos.x);
-    try std.testing.expectEqual(@as(f64, 0.0), input.mouse_pos.y);
+    try std.testing.expectEqual(@as(f64, 100), input.mouse_pos.x);
+    try std.testing.expectEqual(@as(f64, 200), input.mouse_pos.y);
+    try std.testing.expectEqual(@as(f64, 0.0), input.mouse_delta.x);
+    try std.testing.expectEqual(@as(f64, 0.0), input.mouse_delta.y);
     try std.testing.expectEqual(@as(f64, 0.0), input.mouse_scroll.x);
     try std.testing.expectEqual(@as(f64, 0.0), input.mouse_scroll.y);
 }

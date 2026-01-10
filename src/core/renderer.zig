@@ -12,6 +12,6 @@ pub const RenderCommand = struct {
 
     pub fn Clear(color: math.Vec3) void {
         gl.glClearColor(color.x, color.y, color.z, 1);
-        gl.glClear(gl.GL_COLOR_BUFFER_BIT);
+        gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT);
     }
 };

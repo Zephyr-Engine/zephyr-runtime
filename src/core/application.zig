@@ -10,6 +10,11 @@ const Shader = @import("../graphics/opengl_shader.zig").Shader;
 
 var isRunning = true;
 
+pub const ApplicationProps = struct {
+    width: u32,
+    height: u32,
+};
+
 pub const Application = struct {
     window: *win.Window,
     scene_manager: scene.SceneManager,
@@ -48,6 +53,13 @@ pub const Application = struct {
 
     pub fn popScene(self: *Application) ?scene.Scene {
         return self.scene_manager.popScene();
+    }
+
+    pub fn getProps(self: *Application) ApplicationProps {
+        return ApplicationProps{
+            .width = self.window.data.width,
+            .height = self.window.data.height,
+        };
     }
 
     fn eventCallback(self: *Application, e: event.ZEvent) void {
