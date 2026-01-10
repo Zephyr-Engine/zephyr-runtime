@@ -271,8 +271,8 @@ pub const ZEvent = union(enum) {
     KeyPressed: Key,
     KeyReleased: Key,
     KeyRepeated: Key,
-    MouseScroll: struct { x: f64, y: f64 },
-    MouseMove: struct { x: f64, y: f64 },
+    MouseScroll: struct { x: f32, y: f32 },
+    MouseMove: struct { x: f32, y: f32 },
     MousePressed: MouseButton,
     MouseReleased: MouseButton,
 };
@@ -360,7 +360,7 @@ pub fn cursorPosCallback(window: c.Window, x: f64, y: f64) callconv(.c) void {
     const windowDataPtr = glfw.glfwGetWindowUserPointer(window).?;
     const windowData: *WindowData = @ptrCast(@alignCast(windowDataPtr));
 
-    const ev = ZEvent{ .MouseMove = .{ .x = x, .y = y } };
+    const ev = ZEvent{ .MouseMove = .{ .x = @floatCast(x), .y = @floatCast(y) } };
     windowData.eventCallback(windowData.app_ptr.?, ev);
 }
 
@@ -368,7 +368,7 @@ pub fn cursorScrollCallback(window: c.Window, x: f64, y: f64) callconv(.c) void 
     const windowDataPtr = glfw.glfwGetWindowUserPointer(window).?;
     const windowData: *WindowData = @ptrCast(@alignCast(windowDataPtr));
 
-    const ev = ZEvent{ .MouseScroll = .{ .x = x, .y = y } };
+    const ev = ZEvent{ .MouseScroll = .{ .x = @floatCast(x), .y = @floatCast(y) } };
     windowData.eventCallback(windowData.app_ptr.?, ev);
 }
 

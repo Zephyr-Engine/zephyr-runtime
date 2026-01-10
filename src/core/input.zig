@@ -4,8 +4,12 @@ const event = @import("event.zig");
 
 pub const InputManager = struct {
     mouse_pos: struct {
-        x: f64,
-        y: f64,
+        x: f32,
+        y: f32,
+    },
+    mouse_delta: struct {
+        x: f32,
+        y: f32,
     },
     mouse_scroll: struct {
         x: f64,
@@ -21,6 +25,7 @@ pub const InputManager = struct {
     pub fn init() InputManager {
         return InputManager{
             .mouse_pos = .{ .x = 0.0, .y = 0.0 },
+            .mouse_delta = .{ .x = 0.0, .y = 0.0 },
             .mouse_scroll = .{ .x = 0.0, .y = 0.0 },
             .pressed_keys = [_]bool{false} ** 512,
             .released_keys = [_]bool{false} ** 512,
@@ -36,12 +41,15 @@ pub const InputManager = struct {
         @memset(&self.pressed_buttons, false);
         @memset(&self.released_buttons, false);
         self.mouse_scroll = .{ .x = 0.0, .y = 0.0 };
+        self.mouse_delta = .{ .x = 0.0, .y = 0.0 };
         self.mouse_pos = .{ .x = 0.0, .y = 0.0 };
     }
 
     pub fn update(self: *InputManager, ev: event.ZEvent) void {
         switch (ev) {
             event.ZEvent.MouseMove => |move_event| {
+                self.mouse_delta.x = move_event.x - self.mouse_pos.x;
+                self.mouse_delta.y = move_event.y - self.mouse_pos.y;
                 self.mouse_pos.x = move_event.x;
                 self.mouse_pos.y = move_event.y;
             },
