@@ -117,11 +117,11 @@ pub const InputManager = struct {
     }
 
     pub fn isScrollingY(self: *InputManager) bool {
-        return self.mouse_scroll.y > 0;
+        return self.mouse_scroll.y != 0;
     }
 
     pub fn isScrollingX(self: *InputManager) bool {
-        return self.mouse_scroll.x > 0;
+        return self.mouse_scroll.x != 0;
     }
 };
 
