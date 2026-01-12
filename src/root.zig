@@ -30,11 +30,52 @@ pub fn run() void {
         return;
     }
 
+    const vertices: [3][3]f32 = .{
+        .{ -0.5, -0.5, 0.0 },
+        .{ 0.5, -0.5, 0.0 },
+        .{ 0.0, 0.5, 0.0 },
+    };
+
+    var vao: u32 = 0;
+    gl.glGenVertexArrays(1, &vao);
+
+    var vbo: u32 = 0;
+    gl.glGenBuffers(1, &vbo);
+
+    const vs_src: [*c]const u8 = @embedFile("assets/shaders/vertex.glsl");
+    const vs: u32 = gl.glCreateShader(gl.GL_VERTEX_SHADER);
+    gl.glShaderSource(vs, 1, &vs_src, null);
+    gl.glCompileShader(vs);
+
+    const fs_src: [*c]const u8 = @embedFile("assets/shaders/fragment.glsl");
+    const fs: u32 = gl.glCreateShader(gl.GL_FRAGMENT_SHADER);
+    gl.glShaderSource(fs, 1, &fs_src, null);
+    gl.glCompileShader(fs);
+
+    const program = gl.glCreateProgram();
+    gl.glAttachShader(program, vs);
+    gl.glAttachShader(program, fs);
+    gl.glLinkProgram(program);
+
+    gl.glDeleteShader(vs);
+    gl.glDeleteShader(fs);
+
+    gl.glBindVertexArray(vao);
+    gl.glBindBuffer(gl.GL_ARRAY_BUFFER, vbo);
+    gl.glBufferData(gl.GL_ARRAY_BUFFER, @sizeOf(f32) * 9, &vertices, gl.GL_STATIC_DRAW);
+
+    gl.glVertexAttribPointer(0, 3, gl.GL_FLOAT, gl.GL_FALSE, 3 * @sizeOf(f32), @ptrFromInt(0));
+    gl.glEnableVertexAttribArray(0);
+
     while (glfw.glfwWindowShouldClose(window) == 0) {
         glfw.glfwPollEvents();
 
-        gl.glClearColor(0.6, 0.4, 0.4, 1);
+        gl.glClearColor(0.4, 0.4, 0.4, 1);
         gl.glClear(gl.GL_COLOR_BUFFER_BIT);
+
+        gl.glUseProgram(program);
+        gl.glBindVertexArray(vao);
+        gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3);
 
         glfw.glfwSwapBuffers(window);
     }
