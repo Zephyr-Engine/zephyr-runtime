@@ -8,6 +8,7 @@ const gl = c.glad;
 pub const Shader = struct {
     id: ShaderHandle,
     buffer_layout: layout.BufferLayout,
+    allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator, vs_src: []const u8, fs_src: []const u8) !Shader {
         const vs_ptrs = [_][*c]const u8{
@@ -70,11 +71,12 @@ pub const Shader = struct {
         return .{
             .id = program,
             .buffer_layout = layout.BufferLayout.new(bufferElements, stride),
+            .allocator = allocator,
         };
     }
 
-    pub fn deinit(self: *Shader, allocator: std.mem.Allocator) void {
-        self.buffer_layout.elements.deinit(allocator);
+    pub fn deinit(self: *Shader) void {
+        self.buffer_layout.elements.deinit(self.allocator);
     }
 
     pub fn bind(self: Shader) void {

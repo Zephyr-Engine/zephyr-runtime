@@ -26,7 +26,6 @@ pub const Material = struct {
     }
 
     pub fn deinit(self: *Material) void {
-        // Free all the allocated uniform name strings
         var it = self.uniforms.keyIterator();
         while (it.next()) |key| {
             self.allocator.free(key.*);
