@@ -1,10 +1,12 @@
 const std = @import("std");
+const Map = std.StringHashMap(i32);
 const layout = @import("layout.zig");
+const ShaderHandle = @import("../asset/shader.zig").ShaderHandle;
 const c = @import("../c.zig");
 const gl = c.glad;
 
 pub const Shader = struct {
-    id: u32,
+    id: ShaderHandle,
     buffer_layout: layout.BufferLayout,
 
     pub fn init(allocator: std.mem.Allocator, vs_src: []const u8, fs_src: []const u8) !Shader {
@@ -60,7 +62,7 @@ pub const Shader = struct {
                 else => .Float,
             };
 
-            const element = layout.BufferElement.new(shader_type, stride, false);
+            const element = layout.BufferElement.new(shader_type, stride, false, name);
             stride += element.size;
             try bufferElements.append(allocator, element);
         }
@@ -79,8 +81,39 @@ pub const Shader = struct {
         gl.glUseProgram(self.id);
     }
 
-    pub fn setUniform(self: Shader, name: []const u8, value: anytype) void {
-        const location = gl.glGetUniformLocation(self.id, @ptrCast(name.ptr));
+    pub fn getUniformLocation(self: Shader, name: [256]u8) i32 {
+        return gl.glGetUniformLocation(self.id, @ptrCast(&name));
+    }
+
+    const locations = struct {
+        name: *const []u8,
+        location: i32,
+    };
+    pub fn getUniformLocations(self: Shader, allocator: std.mem.Allocator) !Map {
+        var count: i32 = 0;
+        gl.glGetProgramiv(self.id, gl.GL_ACTIVE_UNIFORMS, &count);
+
+        var map = Map.init(allocator);
+        try map.ensureTotalCapacity(@intCast(count));
+
+        for (0..@intCast(count)) |i| {
+            var length: i32 = 0;
+            var size: i32 = 0;
+            var ty: u32 = 0;
+            var name: [256]u8 = undefined;
+            gl.glGetActiveUniform(self.id, @intCast(i), 257, &length, &size, &ty, @ptrCast(&name));
+            const loc = gl.glGetUniformLocation(self.id, @ptrCast(&name));
+
+            const name_slice = name[0..@intCast(length)];
+            const owned_name = try allocator.dupe(u8, name_slice);
+            try map.put(owned_name, loc);
+        }
+
+        return map;
+    }
+
+    pub fn setUniform(self: Shader, location: i32, value: anytype) void {
+        _ = self;
         const T = comptime @TypeOf(value);
         switch (comptime @typeInfo(T)) {
             .float => {

@@ -15,6 +15,7 @@ pub const Key = event.Key;
 pub const MouseButton = event.MouseButton;
 
 pub const RenderCommand = @import("core/renderer.zig").RenderCommand;
+pub const Material = @import("asset/material.zig").Material;
 pub const Shader = @import("graphics/opengl_shader.zig").Shader;
 pub const VertexArray = @import("graphics/opengl_vertex_array.zig").VertexArray;
 
