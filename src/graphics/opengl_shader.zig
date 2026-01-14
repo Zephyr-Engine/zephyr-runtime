@@ -83,10 +83,6 @@ pub const Shader = struct {
         gl.glUseProgram(self.id);
     }
 
-    pub fn getUniformLocation(self: Shader, name: [256]u8) i32 {
-        return gl.glGetUniformLocation(self.id, @ptrCast(&name));
-    }
-
     const locations = struct {
         name: *const []u8,
         location: i32,
