@@ -75,8 +75,6 @@ pub const Window = struct {
         }
 
         glfw.glfwMakeContextCurrent(window);
-        glfw.glfwSwapInterval(1); // vsync
-
         const loader: gl.GLADloadproc = @ptrCast(&glfw.glfwGetProcAddress);
         if (gl.gladLoadGLLoader(loader) == 0) {
             std.log.err("Failed to load OpenGL", .{});
@@ -94,6 +92,7 @@ pub const Window = struct {
             },
         };
         win.setupCallbacks();
+        win.setVsync(true);
 
         var fb_width: c_int = undefined;
         var fb_height: c_int = undefined;
@@ -110,7 +109,7 @@ pub const Window = struct {
 
     pub fn setVsync(self: *Window, value: bool) void {
         _ = self;
-        glfw.glfwSwapInterval(value);
+        glfw.glfwSwapInterval(if (value) 1 else 0);
     }
 
     pub fn setEventCallback(self: *Window, cb: event.ZEventCallback, app: *Application) void {
