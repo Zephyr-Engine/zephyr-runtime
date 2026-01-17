@@ -36,9 +36,9 @@ pub const VertexArray = struct {
 
     pub fn setLayout(self: VertexArray, layout: BufferLayout) void {
         _ = self;
-        for (layout.elements.items, 0..) |element, i| {
-            gl.glVertexAttribPointer(@intCast(i), @intCast(element.ty.componentCount()), layoutTypeToGL(element.ty), if (element.normalized) 1 else 0, @intCast(layout.stride), @ptrFromInt(element.offset));
-            gl.glEnableVertexAttribArray(@intCast(i));
+        for (layout.elements.items) |element| {
+            gl.glVertexAttribPointer(element.location, @intCast(element.ty.componentCount()), layoutTypeToGL(element.ty), if (element.normalized) 1 else 0, @intCast(layout.stride), @ptrFromInt(element.offset));
+            gl.glEnableVertexAttribArray(element.location);
         }
     }
 };

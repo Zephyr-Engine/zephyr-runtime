@@ -52,14 +52,16 @@ pub const BufferElement = struct {
     size: u32,
     ty: DataType,
     name: [256]u8,
+    location: u32,
 
-    pub fn new(ty: DataType, offset: u32, normalized: bool, name: [256]u8) BufferElement {
+    pub fn new(ty: DataType, offset: u32, normalized: bool, name: [256]u8, location: u32) BufferElement {
         return .{
             .normalized = normalized,
             .offset = offset,
             .ty = ty,
             .size = ty.size(),
             .name = name,
+            .location = location,
         };
     }
 };

@@ -38,8 +38,14 @@ pub const Shader = struct {
         var count: i32 = 0;
         gl.glGetProgramiv(program, gl.GL_ACTIVE_ATTRIBUTES, &count);
 
-        var stride: u32 = 0;
-        var bufferElements = try layout.BufferElements.initCapacity(allocator, @intCast(count));
+        const AttributeInfo = struct {
+            shader_type: layout.DataType,
+            name: [256]u8,
+            location: u32,
+        };
+        var attrs = try allocator.alloc(AttributeInfo, @intCast(count));
+        defer allocator.free(attrs);
+
         for (0..@intCast(count)) |i| {
             var length: i32 = 0;
             var size: i32 = 0;
@@ -63,7 +69,24 @@ pub const Shader = struct {
                 else => .Float,
             };
 
-            const element = layout.BufferElement.new(shader_type, stride, false, name);
+            const loc: i32 = gl.glGetAttribLocation(program, @ptrCast(&name));
+            attrs[i] = .{
+                .shader_type = shader_type,
+                .name = name,
+                .location = @intCast(loc),
+            };
+        }
+
+        std.mem.sort(AttributeInfo, attrs, {}, struct {
+            fn lessThan(_: void, a: AttributeInfo, b: AttributeInfo) bool {
+                return a.location < b.location;
+            }
+        }.lessThan);
+
+        var stride: u32 = 0;
+        var bufferElements = try layout.BufferElements.initCapacity(allocator, @intCast(count));
+        for (attrs) |attr| {
+            const element = layout.BufferElement.new(attr.shader_type, stride, false, attr.name, attr.location);
             stride += element.size;
             try bufferElements.append(allocator, element);
         }

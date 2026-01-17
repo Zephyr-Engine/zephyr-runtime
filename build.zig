@@ -18,13 +18,20 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const obj_mod = b.dependency("obj", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     const runtime_mod = b.addModule("zephyr_runtime", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
+        .optimize = optimize,
     });
     runtime_mod.linkLibrary(glfw_dep.artifact("glfw"));
     runtime_mod.linkLibrary(glad_dep.artifact("glad"));
     runtime_mod.addImport("zlm", zlm.module("zlm"));
+    runtime_mod.addImport("obj", obj_mod.module("obj"));
 
     // Add a check step to populate LSP data
     const check = b.step("check", "Check if the library compiles");
