@@ -151,169 +151,245 @@ pub const InputManager = struct {
 };
 
 test "InputManager initialization" {
-    const input = InputManager.init();
+    InputManager.Clear();
 
-    try std.testing.expectEqual(@as(f64, 0.0), input.mouse_pos.x);
-    try std.testing.expectEqual(@as(f64, 0.0), input.mouse_pos.y);
-    try std.testing.expectEqual(@as(f64, 0.0), input.mouse_scroll.x);
-    try std.testing.expectEqual(@as(f64, 0.0), input.mouse_scroll.y);
+    const self = InputManager.getInstance();
 
-    for (input.pressed_keys) |key| {
+    try std.testing.expectEqual(@as(f32, 0.0), self.mouse_pos.x);
+    try std.testing.expectEqual(@as(f32, 0.0), self.mouse_pos.y);
+    try std.testing.expectEqual(@as(f32, 0.0), self.mouse_scroll.x);
+    try std.testing.expectEqual(@as(f32, 0.0), self.mouse_scroll.y);
+
+    for (self.pressed_keys) |key| {
         try std.testing.expect(!key);
     }
-    for (input.released_keys) |key| {
+    for (self.released_keys) |key| {
         try std.testing.expect(!key);
     }
-    for (input.held_keys) |key| {
+    for (self.held_keys) |key| {
         try std.testing.expect(!key);
     }
-    for (input.pressed_buttons) |button| {
+    for (self.pressed_buttons) |button| {
         try std.testing.expect(!button);
     }
-    for (input.released_buttons) |button| {
+    for (self.released_buttons) |button| {
         try std.testing.expect(!button);
     }
 }
 
 test "InputManager key press detection" {
-    var input = InputManager.init();
+    InputManager.Clear();
 
     const press_event = event.ZEvent{ .KeyPressed = event.Key.A };
-    input.update(press_event);
+    InputManager.Update(press_event);
 
-    try std.testing.expect(input.isKeyPressed(.A));
-    try std.testing.expect(input.isKeyHeld(.A));
-    try std.testing.expect(!input.isKeyReleased(.A));
-    try std.testing.expect(!input.isKeyPressed(.B));
+    try std.testing.expect(InputManager.IsKeyPressed(.A));
+    try std.testing.expect(InputManager.IsKeyHeld(.A));
+    try std.testing.expect(!InputManager.IsKeyReleased(.A));
+    try std.testing.expect(!InputManager.IsKeyPressed(.B));
 }
 
 test "InputManager key release detection" {
-    var input = InputManager.init();
+    InputManager.Clear();
 
     const press_event = event.ZEvent{ .KeyPressed = event.Key.Space };
-    input.update(press_event);
+    InputManager.Update(press_event);
 
-    try std.testing.expect(input.isKeyHeld(.Space));
+    try std.testing.expect(InputManager.IsKeyHeld(.Space));
 
     const release_event = event.ZEvent{ .KeyReleased = event.Key.Space };
-    input.update(release_event);
+    InputManager.Update(release_event);
 
-    try std.testing.expect(input.isKeyReleased(.Space));
-    try std.testing.expect(!input.isKeyHeld(.Space));
+    try std.testing.expect(InputManager.IsKeyReleased(.Space));
+    try std.testing.expect(!InputManager.IsKeyHeld(.Space));
 }
 
 test "InputManager key repeated detection" {
-    var input = InputManager.init();
+    InputManager.Clear();
 
     const repeat_event = event.ZEvent{ .KeyRepeated = event.Key.W };
-    input.update(repeat_event);
+    InputManager.Update(repeat_event);
 
-    try std.testing.expect(input.isKeyPressed(.W));
-    try std.testing.expect(input.isKeyHeld(.W));
+    try std.testing.expect(InputManager.IsKeyPressed(.W));
+    try std.testing.expect(InputManager.IsKeyHeld(.W));
 }
 
 test "InputManager mouse button press detection" {
-    var input = InputManager.init();
+    InputManager.Clear();
 
     const press_event = event.ZEvent{ .MousePressed = event.MouseButton.Left };
-    input.update(press_event);
+    InputManager.Update(press_event);
 
-    try std.testing.expect(input.isButtonPressed(.Left));
-    try std.testing.expect(!input.isButtonPressed(.Right));
+    try std.testing.expect(InputManager.IsButtonPressed(.Left));
+    try std.testing.expect(!InputManager.IsButtonPressed(.Right));
 }
 
 test "InputManager mouse button release detection" {
-    var input = InputManager.init();
+    InputManager.Clear();
 
     const press_event = event.ZEvent{ .MousePressed = event.MouseButton.Right };
-    input.update(press_event);
+    InputManager.Update(press_event);
 
     const release_event = event.ZEvent{ .MouseReleased = event.MouseButton.Right };
-    input.update(release_event);
+    InputManager.Update(release_event);
 
-    try std.testing.expect(input.isButtonReleased(.Right));
+    try std.testing.expect(InputManager.IsButtonReleased(.Right));
 }
 
 test "InputManager mouse position tracking" {
-    var input = InputManager.init();
+    InputManager.Clear();
 
     const move_event = event.ZEvent{ .MouseMove = .{ .x = 100.5, .y = 200.75 } };
-    input.update(move_event);
+    InputManager.Update(move_event);
 
-    try std.testing.expectEqual(@as(f64, 100.5), input.mouse_pos.x);
-    try std.testing.expectEqual(@as(f64, 200.75), input.mouse_pos.y);
+    const self = InputManager.getInstance();
+    try std.testing.expectEqual(@as(f32, 100.5), self.mouse_pos.x);
+    try std.testing.expectEqual(@as(f32, 200.75), self.mouse_pos.y);
 
     const move_event2 = event.ZEvent{ .MouseMove = .{ .x = 50.0, .y = 75.0 } };
-    input.update(move_event2);
+    InputManager.Update(move_event2);
 
-    try std.testing.expectEqual(@as(f64, 50.0), input.mouse_pos.x);
-    try std.testing.expectEqual(@as(f64, 75.0), input.mouse_pos.y);
+    try std.testing.expectEqual(@as(f32, 50.0), self.mouse_pos.x);
+    try std.testing.expectEqual(@as(f32, 75.0), self.mouse_pos.y);
 }
 
 test "InputManager mouse scroll accumulation" {
-    var input = InputManager.init();
+    InputManager.Clear();
 
     const scroll_event1 = event.ZEvent{ .MouseScroll = .{ .x = 1.0, .y = 2.0 } };
-    input.update(scroll_event1);
+    InputManager.Update(scroll_event1);
 
-    try std.testing.expectEqual(@as(f64, 1.0), input.mouse_scroll.x);
-    try std.testing.expectEqual(@as(f64, 2.0), input.mouse_scroll.y);
+    const scroll = InputManager.GetMouseScroll();
+    try std.testing.expectEqual(@as(f32, 1.0), scroll.x);
+    try std.testing.expectEqual(@as(f32, 2.0), scroll.y);
 
     const scroll_event2 = event.ZEvent{ .MouseScroll = .{ .x = 0.5, .y = -1.0 } };
-    input.update(scroll_event2);
+    InputManager.Update(scroll_event2);
 
-    try std.testing.expectEqual(@as(f64, 1.5), input.mouse_scroll.x);
-    try std.testing.expectEqual(@as(f64, 1.0), input.mouse_scroll.y);
+    const scroll2 = InputManager.GetMouseScroll();
+    try std.testing.expectEqual(@as(f32, 1.5), scroll2.x);
+    try std.testing.expectEqual(@as(f32, 1.0), scroll2.y);
 }
 
 test "InputManager clear resets all state" {
-    var input = InputManager.init();
+    InputManager.Clear();
 
-    input.update(event.ZEvent{ .KeyPressed = event.Key.A });
-    input.update(event.ZEvent{ .MousePressed = event.MouseButton.Left });
-    input.update(event.ZEvent{ .MouseMove = .{ .x = 100.0, .y = 200.0 } });
-    input.update(event.ZEvent{ .MouseScroll = .{ .x = 5.0, .y = 10.0 } });
+    InputManager.Update(event.ZEvent{ .KeyPressed = event.Key.A });
+    InputManager.Update(event.ZEvent{ .MousePressed = event.MouseButton.Left });
+    InputManager.Update(event.ZEvent{ .MouseMove = .{ .x = 100.0, .y = 200.0 } });
+    InputManager.Update(event.ZEvent{ .MouseScroll = .{ .x = 5.0, .y = 10.0 } });
 
-    try std.testing.expect(input.isKeyPressed(.A));
-    try std.testing.expect(input.isButtonPressed(.Left));
+    try std.testing.expect(InputManager.IsKeyPressed(.A));
+    try std.testing.expect(InputManager.IsButtonPressed(.Left));
 
-    input.clear();
+    InputManager.Clear();
 
-    try std.testing.expect(!input.isKeyPressed(.A));
-    try std.testing.expect(!input.isButtonPressed(.Left));
-    try std.testing.expectEqual(@as(f64, 100), input.mouse_pos.x);
-    try std.testing.expectEqual(@as(f64, 200), input.mouse_pos.y);
-    try std.testing.expectEqual(@as(f64, 0.0), input.mouse_delta.x);
-    try std.testing.expectEqual(@as(f64, 0.0), input.mouse_delta.y);
-    try std.testing.expectEqual(@as(f64, 0.0), input.mouse_scroll.x);
-    try std.testing.expectEqual(@as(f64, 0.0), input.mouse_scroll.y);
+    try std.testing.expect(!InputManager.IsKeyPressed(.A));
+    try std.testing.expect(!InputManager.IsButtonPressed(.Left));
+
+    const self = InputManager.getInstance();
+    try std.testing.expectEqual(@as(f32, 100.0), self.mouse_pos.x);
+    try std.testing.expectEqual(@as(f32, 200.0), self.mouse_pos.y);
+    try std.testing.expectEqual(@as(f32, 0.0), self.mouse_delta.x);
+    try std.testing.expectEqual(@as(f32, 0.0), self.mouse_delta.y);
+    try std.testing.expectEqual(@as(f32, 0.0), self.mouse_scroll.x);
+    try std.testing.expectEqual(@as(f32, 0.0), self.mouse_scroll.y);
 }
 
 test "InputManager multiple keys simultaneously" {
-    var input = InputManager.init();
+    InputManager.Clear();
 
-    input.update(event.ZEvent{ .KeyPressed = event.Key.W });
-    input.update(event.ZEvent{ .KeyPressed = event.Key.A });
-    input.update(event.ZEvent{ .KeyPressed = event.Key.LeftShift });
+    InputManager.Update(event.ZEvent{ .KeyPressed = event.Key.W });
+    InputManager.Update(event.ZEvent{ .KeyPressed = event.Key.A });
+    InputManager.Update(event.ZEvent{ .KeyPressed = event.Key.LeftShift });
 
-    try std.testing.expect(input.isKeyHeld(.W));
-    try std.testing.expect(input.isKeyHeld(.A));
-    try std.testing.expect(input.isKeyHeld(.LeftShift));
+    try std.testing.expect(InputManager.IsKeyHeld(.W));
+    try std.testing.expect(InputManager.IsKeyHeld(.A));
+    try std.testing.expect(InputManager.IsKeyHeld(.LeftShift));
 
-    input.update(event.ZEvent{ .KeyReleased = event.Key.A });
+    InputManager.Update(event.ZEvent{ .KeyReleased = event.Key.A });
 
-    try std.testing.expect(input.isKeyHeld(.W));
-    try std.testing.expect(!input.isKeyHeld(.A));
-    try std.testing.expect(input.isKeyReleased(.A));
-    try std.testing.expect(input.isKeyHeld(.LeftShift));
+    try std.testing.expect(InputManager.IsKeyHeld(.W));
+    try std.testing.expect(!InputManager.IsKeyHeld(.A));
+    try std.testing.expect(InputManager.IsKeyReleased(.A));
+    try std.testing.expect(InputManager.IsKeyHeld(.LeftShift));
 }
 
 test "InputManager window close event ignored" {
-    var input = InputManager.init();
+    InputManager.Clear();
 
-    const initial_state = input;
-    input.update(event.ZEvent.WindowClose);
+    const self = InputManager.getInstance();
+    const initial_x = self.mouse_pos.x;
+    const initial_y = self.mouse_pos.y;
 
-    try std.testing.expectEqual(initial_state.mouse_pos.x, input.mouse_pos.x);
-    try std.testing.expectEqual(initial_state.mouse_pos.y, input.mouse_pos.y);
+    InputManager.Update(event.ZEvent.WindowClose);
+
+    try std.testing.expectEqual(initial_x, self.mouse_pos.x);
+    try std.testing.expectEqual(initial_y, self.mouse_pos.y);
+}
+
+test "InputManager mouse button held detection" {
+    InputManager.Clear();
+
+    const press_event = event.ZEvent{ .MousePressed = event.MouseButton.Left };
+    InputManager.Update(press_event);
+
+    try std.testing.expect(InputManager.IsButtonHeld(.Left));
+    try std.testing.expect(!InputManager.IsButtonHeld(.Right));
+
+    const release_event = event.ZEvent{ .MouseReleased = event.MouseButton.Left };
+    InputManager.Update(release_event);
+
+    try std.testing.expect(!InputManager.IsButtonHeld(.Left));
+}
+
+test "InputManager scroll detection Y axis" {
+    InputManager.Clear();
+
+    try std.testing.expect(!InputManager.IsScrollingY());
+
+    const scroll_event = event.ZEvent{ .MouseScroll = .{ .x = 0.0, .y = 1.5 } };
+    InputManager.Update(scroll_event);
+
+    try std.testing.expect(InputManager.IsScrollingY());
+
+    InputManager.Clear();
+    try std.testing.expect(!InputManager.IsScrollingY());
+}
+
+test "InputManager scroll detection X axis" {
+    InputManager.Clear();
+
+    try std.testing.expect(!InputManager.IsScrollingX());
+
+    const scroll_event = event.ZEvent{ .MouseScroll = .{ .x = 2.0, .y = 0.0 } };
+    InputManager.Update(scroll_event);
+
+    try std.testing.expect(InputManager.IsScrollingX());
+
+    InputManager.Clear();
+    try std.testing.expect(!InputManager.IsScrollingX());
+}
+
+test "InputManager mouse move delta tracking" {
+    InputManager.Clear();
+
+    const move_event1 = event.ZEvent{ .MouseMove = .{ .x = 100.0, .y = 200.0 } };
+    InputManager.Update(move_event1);
+
+    var delta = InputManager.GetMouseMoveDelta();
+    try std.testing.expectEqual(@as(f32, 100.0), delta.x);
+    try std.testing.expectEqual(@as(f32, 200.0), delta.y);
+
+    const move_event2 = event.ZEvent{ .MouseMove = .{ .x = 150.0, .y = 250.0 } };
+    InputManager.Update(move_event2);
+
+    delta = InputManager.GetMouseMoveDelta();
+    try std.testing.expectEqual(@as(f32, 50.0), delta.x);
+    try std.testing.expectEqual(@as(f32, 50.0), delta.y);
+
+    InputManager.Clear();
+    delta = InputManager.GetMouseMoveDelta();
+    try std.testing.expectEqual(@as(f32, 0.0), delta.x);
+    try std.testing.expectEqual(@as(f32, 0.0), delta.y);
 }
