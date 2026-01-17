@@ -3,8 +3,8 @@ const std = @import("std");
 const win = @import("window.zig");
 const event = @import("event.zig");
 const scene = @import("scene.zig");
-const input = @import("input.zig");
 const Time = @import("time.zig").Time;
+const Input = @import("input.zig").InputManager;
 const va = @import("../graphics/opengl_vertex_array.zig");
 const Shader = @import("../graphics/opengl_shader.zig").Shader;
 
@@ -35,7 +35,6 @@ pub const Application = struct {
             .time = Time.init(),
         };
 
-        input.Input = input.InputManager.init();
         window.?.setEventCallback(Application.eventCallback, app);
 
         return app;
@@ -63,7 +62,7 @@ pub const Application = struct {
     }
 
     fn eventCallback(self: *Application, e: event.ZEvent) void {
-        input.Input.update(e);
+        Input.Update(e);
         self.scene_manager.handleEvent(e);
     }
 
@@ -80,7 +79,7 @@ pub const Application = struct {
             app.scene_manager.update(app.time.delta_time);
 
             app.window.swapBuffers();
-            input.Input.clear();
+            Input.Clear();
         }
 
         app.window.handleInput();

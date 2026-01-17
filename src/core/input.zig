@@ -2,23 +2,15 @@ const std = @import("std");
 
 const event = @import("event.zig");
 
+const Position = struct {
+    x: f32,
+    y: f32,
+};
+
 pub const InputManager = struct {
-    mouse_pos: struct {
-        x: f32,
-        y: f32,
-    },
-    mouse_delta: struct {
-        x: f32,
-        y: f32,
-    },
-    mouse_scroll: struct {
-        x: f32,
-        y: f32,
-    },
-    mouse_scroll_delta: struct {
-        x: f32,
-        y: f32,
-    },
+    mouse_pos: Position,
+    mouse_delta: Position,
+    mouse_scroll: Position,
     pressed_keys: [512]bool,
     released_keys: [512]bool,
     held_keys: [512]bool,
@@ -27,12 +19,14 @@ pub const InputManager = struct {
     released_buttons: [8]bool,
     held_buttons: [8]bool,
 
-    pub fn init() InputManager {
-        return InputManager{
+    var instance: ?InputManager = null;
+    var once = std.once(init);
+
+    fn init() void {
+        instance = InputManager{
             .mouse_pos = .{ .x = 0.0, .y = 0.0 },
             .mouse_delta = .{ .x = 0.0, .y = 0.0 },
             .mouse_scroll = .{ .x = 0.0, .y = 0.0 },
-            .mouse_scroll_delta = .{ .x = 0.0, .y = 0.0 },
             .pressed_keys = [_]bool{false} ** 512,
             .released_keys = [_]bool{false} ** 512,
             .held_keys = [_]bool{false} ** 512,
@@ -42,7 +36,13 @@ pub const InputManager = struct {
         };
     }
 
-    pub fn clear(self: *InputManager) void {
+    inline fn getInstance() *InputManager {
+        once.call();
+        return &instance.?;
+    }
+
+    pub fn Clear() void {
+        const self = getInstance();
         @memset(&self.pressed_keys, false);
         @memset(&self.released_keys, false);
         @memset(&self.pressed_buttons, false);
@@ -51,7 +51,8 @@ pub const InputManager = struct {
         self.mouse_delta = .{ .x = 0.0, .y = 0.0 };
     }
 
-    pub fn update(self: *InputManager, ev: event.ZEvent) void {
+    pub fn Update(ev: event.ZEvent) void {
+        const self = getInstance();
         switch (ev) {
             event.ZEvent.MouseMove => |move_event| {
                 self.mouse_delta.x = move_event.x - self.mouse_pos.x;
@@ -60,8 +61,6 @@ pub const InputManager = struct {
                 self.mouse_pos.y = move_event.y;
             },
             event.ZEvent.MouseScroll => |scroll_event| {
-                self.mouse_scroll_delta.x = scroll_event.x - self.mouse_scroll.x;
-                self.mouse_scroll_delta.y = scroll_event.y - self.mouse_scroll.y;
                 self.mouse_scroll.x += scroll_event.x;
                 self.mouse_scroll.y += scroll_event.y;
             },
@@ -94,46 +93,62 @@ pub const InputManager = struct {
         }
     }
 
-    pub fn isKeyPressed(self: *InputManager, key: event.Key) bool {
+    pub fn IsKeyPressed(key: event.Key) bool {
+        const self = getInstance();
         const k = @intFromEnum(key);
         return self.pressed_keys[k];
     }
 
-    pub fn isKeyReleased(self: *InputManager, key: event.Key) bool {
+    pub fn IsKeyReleased(key: event.Key) bool {
+        const self = getInstance();
         const k = @intFromEnum(key);
         return self.released_keys[k];
     }
 
-    pub fn isKeyHeld(self: *InputManager, key: event.Key) bool {
+    pub fn IsKeyHeld(key: event.Key) bool {
+        const self = getInstance();
         const k = @intFromEnum(key);
         return self.held_keys[k];
     }
 
-    pub fn isButtonPressed(self: *InputManager, button: event.MouseButton) bool {
+    pub fn IsButtonPressed(button: event.MouseButton) bool {
+        const self = getInstance();
         const b = @intFromEnum(button);
         return self.pressed_buttons[b];
     }
 
-    pub fn isButtonReleased(self: *InputManager, button: event.MouseButton) bool {
+    pub fn IsButtonReleased(button: event.MouseButton) bool {
+        const self = getInstance();
         const b = @intFromEnum(button);
         return self.released_buttons[b];
     }
 
-    pub fn isButtonHeld(self: *InputManager, button: event.MouseButton) bool {
+    pub fn IsButtonHeld(button: event.MouseButton) bool {
+        const self = getInstance();
         const b = @intFromEnum(button);
         return self.held_buttons[b];
     }
 
-    pub fn isScrollingY(self: *InputManager) bool {
+    pub fn IsScrollingY() bool {
+        const self = getInstance();
         return self.mouse_scroll.y != 0;
     }
 
-    pub fn isScrollingX(self: *InputManager) bool {
+    pub fn IsScrollingX() bool {
+        const self = getInstance();
         return self.mouse_scroll.x != 0;
     }
-};
 
-pub var Input: InputManager = InputManager.init();
+    pub fn GetMouseMoveDelta() Position {
+        const self = getInstance();
+        return self.mouse_delta;
+    }
+
+    pub fn GetMouseScroll() Position {
+        const self = getInstance();
+        return self.mouse_scroll;
+    }
+};
 
 test "InputManager initialization" {
     const input = InputManager.init();
