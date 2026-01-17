@@ -1,15 +1,9 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-/// Mesh data ready for GPU upload with interleaved vertex attributes
 pub const Mesh = struct {
-    /// Interleaved vertex data: [pos.xyz, normal.xyz, texcoord.uv, pos.xyz, normal.xyz, texcoord.uv, ...]
-    /// 8 floats per vertex (3 + 3 + 2)
     vertices: []f32,
-
-    /// Triangle indices (u32)
     indices: []u32,
-
     allocator: Allocator,
 
     pub fn deinit(self: *Mesh) void {
@@ -18,7 +12,6 @@ pub const Mesh = struct {
     }
 };
 
-/// Parse an OBJ file and return triangulated mesh data ready for rendering
 pub fn parse(allocator: Allocator, data: []const u8) !Mesh {
     var parser = Parser.init(allocator);
     defer parser.deinit();

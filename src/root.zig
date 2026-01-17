@@ -33,7 +33,7 @@ pub const Mat2 = math.Mat2;
 pub const Mat3 = math.Mat3;
 pub const Mat4 = math.Mat4;
 
-pub const obj = @import("asset/object.zig");
+pub const Model = @import("asset/model.zig").Model;
 
 pub const Camera = @import("scene/camera.zig").Camera;
 

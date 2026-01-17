@@ -35,11 +35,18 @@ pub const VertexArray = struct {
     }
 
     pub fn setLayout(self: VertexArray, layout: BufferLayout) void {
-        _ = self;
+        self.bind();
         for (layout.elements.items) |element| {
             gl.glVertexAttribPointer(element.location, @intCast(element.ty.componentCount()), layoutTypeToGL(element.ty), if (element.normalized) 1 else 0, @intCast(layout.stride), @ptrFromInt(element.offset));
             gl.glEnableVertexAttribArray(element.location);
         }
+        self.unbind();
+    }
+
+    pub fn draw(self: VertexArray) void {
+        self.bind();
+        gl.glDrawElements(gl.GL_TRIANGLES, @intCast(self.indexCount()), gl.GL_UNSIGNED_INT, @ptrFromInt(0));
+        self.unbind();
     }
 };
 
