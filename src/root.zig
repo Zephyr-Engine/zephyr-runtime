@@ -24,7 +24,7 @@ pub const recommended_std_options: std.Options = .{
     .logFn = @import("core/log.zig").log,
 };
 
-pub const Input = &@import("core/input.zig").Input;
+pub const Input = @import("core/input.zig").InputManager;
 
 const math = @import("core/math.zig");
 pub const Vec3 = math.Vec3;
