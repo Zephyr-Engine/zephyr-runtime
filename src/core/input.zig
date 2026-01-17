@@ -374,20 +374,27 @@ test "InputManager scroll detection X axis" {
 test "InputManager mouse move delta tracking" {
     InputManager.Clear();
 
+    // Set initial position
     const move_event1 = event.ZEvent{ .MouseMove = .{ .x = 100.0, .y = 200.0 } };
     InputManager.Update(move_event1);
 
-    var delta = InputManager.GetMouseMoveDelta();
-    try std.testing.expectEqual(@as(f32, 100.0), delta.x);
-    try std.testing.expectEqual(@as(f32, 200.0), delta.y);
-
+    // Move to new position and check delta
     const move_event2 = event.ZEvent{ .MouseMove = .{ .x = 150.0, .y = 250.0 } };
     InputManager.Update(move_event2);
 
-    delta = InputManager.GetMouseMoveDelta();
+    var delta = InputManager.GetMouseMoveDelta();
     try std.testing.expectEqual(@as(f32, 50.0), delta.x);
     try std.testing.expectEqual(@as(f32, 50.0), delta.y);
 
+    // Move again and check new delta
+    const move_event3 = event.ZEvent{ .MouseMove = .{ .x = 125.0, .y = 225.0 } };
+    InputManager.Update(move_event3);
+
+    delta = InputManager.GetMouseMoveDelta();
+    try std.testing.expectEqual(@as(f32, -25.0), delta.x);
+    try std.testing.expectEqual(@as(f32, -25.0), delta.y);
+
+    // Clear should reset delta to zero
     InputManager.Clear();
     delta = InputManager.GetMouseMoveDelta();
     try std.testing.expectEqual(@as(f32, 0.0), delta.x);
