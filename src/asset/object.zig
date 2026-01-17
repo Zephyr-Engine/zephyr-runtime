@@ -152,13 +152,13 @@ const Parser = struct {
 
         const tex_str = indices.next() orelse "";
         const tex_idx = if (tex_str.len > 0)
-            try parseIndex(tex_str, self.texcoords.items.len / 2)
+            (try parseIndex(tex_str, self.texcoords.items.len / 2)) + 1
         else
             0;
 
         const norm_str = indices.next() orelse "";
         const norm_idx = if (norm_str.len > 0)
-            try parseIndex(norm_str, self.normals.items.len / 3)
+            (try parseIndex(norm_str, self.normals.items.len / 3)) + 1
         else
             0;
 
@@ -221,4 +221,251 @@ fn parseIndex(str: []const u8, count: usize) !u32 {
     } else {
         return error.InvalidIndex;
     }
+}
+
+const testing = std.testing;
+
+test "parse simple triangle" {
+    const data =
+        \\v 0.0 0.0 0.0
+        \\v 1.0 0.0 0.0
+        \\v 0.0 1.0 0.0
+        \\f 1 2 3
+    ;
+
+    var mesh = try parse(testing.allocator, data);
+    defer mesh.deinit();
+
+    // Should have 3 vertices (8 floats each = 24 total)
+    try testing.expectEqual(24, mesh.vertices.len);
+    try testing.expectEqual(3, mesh.indices.len);
+
+    // Check first vertex position
+    try testing.expectEqual(0.0, mesh.vertices[0]);
+    try testing.expectEqual(0.0, mesh.vertices[1]);
+    try testing.expectEqual(0.0, mesh.vertices[2]);
+
+    // Check indices
+    try testing.expectEqual(0, mesh.indices[0]);
+    try testing.expectEqual(1, mesh.indices[1]);
+    try testing.expectEqual(2, mesh.indices[2]);
+}
+
+test "parse quad - should triangulate" {
+    const data =
+        \\v 0.0 0.0 0.0
+        \\v 1.0 0.0 0.0
+        \\v 1.0 1.0 0.0
+        \\v 0.0 1.0 0.0
+        \\f 1 2 3 4
+    ;
+
+    var mesh = try parse(testing.allocator, data);
+    defer mesh.deinit();
+
+    // Should have 4 unique vertices
+    try testing.expectEqual(32, mesh.vertices.len); // 4 vertices * 8 floats
+
+    // Should have 2 triangles = 6 indices
+    try testing.expectEqual(6, mesh.indices.len);
+
+    // First triangle: [0, 1, 2]
+    try testing.expectEqual(0, mesh.indices[0]);
+    try testing.expectEqual(1, mesh.indices[1]);
+    try testing.expectEqual(2, mesh.indices[2]);
+
+    // Second triangle: [0, 2, 3]
+    try testing.expectEqual(0, mesh.indices[3]);
+    try testing.expectEqual(2, mesh.indices[4]);
+    try testing.expectEqual(3, mesh.indices[5]);
+}
+
+test "parse with normals and texcoords" {
+    const data =
+        \\v 0.0 0.0 0.0
+        \\v 1.0 0.0 0.0
+        \\v 0.0 1.0 0.0
+        \\vn 0.0 0.0 1.0
+        \\vt 0.0 0.0
+        \\vt 1.0 0.0
+        \\vt 0.0 1.0
+        \\f 1/1/1 2/2/1 3/3/1
+    ;
+
+    var mesh = try parse(testing.allocator, data);
+    defer mesh.deinit();
+
+    try testing.expectEqual(24, mesh.vertices.len);
+    try testing.expectEqual(3, mesh.indices.len);
+
+    // Check first vertex has correct normal
+    try testing.expectEqual(0.0, mesh.vertices[3]); // normal.x
+    try testing.expectEqual(0.0, mesh.vertices[4]); // normal.y
+    try testing.expectEqual(1.0, mesh.vertices[5]); // normal.z
+
+    // Check first vertex has correct texcoord
+    try testing.expectEqual(0.0, mesh.vertices[6]); // texcoord.u
+    try testing.expectEqual(0.0, mesh.vertices[7]); // texcoord.v
+}
+
+test "parse with missing normals - should use defaults" {
+    const data =
+        \\v 0.0 0.0 0.0
+        \\v 1.0 0.0 0.0
+        \\v 0.0 1.0 0.0
+        \\f 1 2 3
+    ;
+
+    var mesh = try parse(testing.allocator, data);
+    defer mesh.deinit();
+
+    // Check default normal (0, 1, 0)
+    try testing.expectEqual(0.0, mesh.vertices[3]);
+    try testing.expectEqual(1.0, mesh.vertices[4]);
+    try testing.expectEqual(0.0, mesh.vertices[5]);
+
+    // Check default texcoord (0, 0)
+    try testing.expectEqual(0.0, mesh.vertices[6]);
+    try testing.expectEqual(0.0, mesh.vertices[7]);
+}
+
+test "parse with vertex deduplication" {
+    const data =
+        \\v 0.0 0.0 0.0
+        \\v 1.0 0.0 0.0
+        \\vn 0.0 0.0 1.0
+        \\vt 0.0 0.0
+        \\vt 1.0 0.0
+        \\f 1/1/1 2/2/1 1/1/1
+    ;
+
+    var mesh = try parse(testing.allocator, data);
+    defer mesh.deinit();
+
+    // Should only have 2 unique vertices (vertex 0 is reused)
+    try testing.expectEqual(16, mesh.vertices.len); // 2 vertices * 8 floats
+    try testing.expectEqual(3, mesh.indices.len);
+
+    // Indices should reuse vertex 0
+    try testing.expectEqual(0, mesh.indices[0]);
+    try testing.expectEqual(1, mesh.indices[1]);
+    try testing.expectEqual(0, mesh.indices[2]);
+}
+
+test "parse with negative indices" {
+    const data =
+        \\v 0.0 0.0 0.0
+        \\v 1.0 0.0 0.0
+        \\v 0.0 1.0 0.0
+        \\f -3 -2 -1
+    ;
+
+    var mesh = try parse(testing.allocator, data);
+    defer mesh.deinit();
+
+    try testing.expectEqual(24, mesh.vertices.len);
+    try testing.expectEqual(3, mesh.indices.len);
+
+    // Should parse correctly (relative indices)
+    try testing.expectEqual(0, mesh.indices[0]);
+    try testing.expectEqual(1, mesh.indices[1]);
+    try testing.expectEqual(2, mesh.indices[2]);
+}
+
+test "parse face format v//vn" {
+    const data =
+        \\v 0.0 0.0 0.0
+        \\v 1.0 0.0 0.0
+        \\v 0.0 1.0 0.0
+        \\vn 0.0 0.0 1.0
+        \\f 1//1 2//1 3//1
+    ;
+
+    var mesh = try parse(testing.allocator, data);
+    defer mesh.deinit();
+
+    try testing.expectEqual(24, mesh.vertices.len);
+
+    // Should have normal but default texcoord
+    try testing.expectEqual(0.0, mesh.vertices[3]); // normal.x
+    try testing.expectEqual(0.0, mesh.vertices[4]); // normal.y
+    try testing.expectEqual(1.0, mesh.vertices[5]); // normal.z
+    try testing.expectEqual(0.0, mesh.vertices[6]); // texcoord.u
+    try testing.expectEqual(0.0, mesh.vertices[7]); // texcoord.v
+}
+
+test "parse multiple faces" {
+    const data =
+        \\v 0.0 0.0 0.0
+        \\v 1.0 0.0 0.0
+        \\v 0.0 1.0 0.0
+        \\v 1.0 1.0 0.0
+        \\f 1 2 3
+        \\f 2 4 3
+    ;
+
+    var mesh = try parse(testing.allocator, data);
+    defer mesh.deinit();
+
+    // Should have 4 unique vertices
+    try testing.expectEqual(32, mesh.vertices.len);
+
+    // Should have 2 triangles = 6 indices
+    try testing.expectEqual(6, mesh.indices.len);
+}
+
+test "parse ignores comments and other commands" {
+    const data =
+        \\# This is a comment
+        \\o Object1
+        \\v 0.0 0.0 0.0
+        \\v 1.0 0.0 0.0
+        \\v 0.0 1.0 0.0
+        \\g Group1
+        \\usemtl Material1
+        \\s 1
+        \\f 1 2 3
+    ;
+
+    var mesh = try parse(testing.allocator, data);
+    defer mesh.deinit();
+
+    // Should parse the triangle correctly, ignoring other commands
+    try testing.expectEqual(24, mesh.vertices.len);
+    try testing.expectEqual(3, mesh.indices.len);
+}
+
+test "parse pentagon - should create 3 triangles" {
+    const data =
+        \\v 0.0 0.0 0.0
+        \\v 1.0 0.0 0.0
+        \\v 1.5 1.0 0.0
+        \\v 0.5 1.5 0.0
+        \\v -0.5 1.0 0.0
+        \\f 1 2 3 4 5
+    ;
+
+    var mesh = try parse(testing.allocator, data);
+    defer mesh.deinit();
+
+    // Should have 5 unique vertices
+    try testing.expectEqual(40, mesh.vertices.len); // 5 * 8
+
+    // Pentagon triangulated into 3 triangles = 9 indices
+    try testing.expectEqual(9, mesh.indices.len);
+
+    // Triangle 1: [0, 1, 2]
+    try testing.expectEqual(0, mesh.indices[0]);
+    try testing.expectEqual(1, mesh.indices[1]);
+    try testing.expectEqual(2, mesh.indices[2]);
+
+    // Triangle 2: [0, 2, 3]
+    try testing.expectEqual(0, mesh.indices[3]);
+    try testing.expectEqual(2, mesh.indices[4]);
+    try testing.expectEqual(3, mesh.indices[5]);
+
+    // Triangle 3: [0, 3, 4]
+    try testing.expectEqual(0, mesh.indices[6]);
+    try testing.expectEqual(3, mesh.indices[7]);
+    try testing.expectEqual(4, mesh.indices[8]);
 }
