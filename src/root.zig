@@ -30,10 +30,16 @@ pub fn run() void {
         return;
     }
 
-    const vertices: [3][3]f32 = .{
-        .{ -0.5, -0.5, 0.0 },
-        .{ 0.5, -0.5, 0.0 },
-        .{ 0.0, 0.5, 0.0 },
+    const vertices: [4][3]f32 = .{
+        .{ 0.5, 0.5, 0.0 }, // top right
+        .{ 0.5, -0.5, 0.0 }, // bottom right
+        .{ -0.5, -0.5, 0.0 }, // bottom left
+        .{ -0.5, 0.5, 0.0 }, // top left
+    };
+
+    const indices: [6]u32 = .{
+        0, 1, 3, // first triangle
+        1, 2, 3, // second triangle
     };
 
     var vao: u32 = 0;
@@ -41,6 +47,9 @@ pub fn run() void {
 
     var vbo: u32 = 0;
     gl.glGenBuffers(1, &vbo);
+
+    var ebo: u32 = 0;
+    gl.glGenBuffers(1, &ebo);
 
     const vs_src: [*c]const u8 = @embedFile("assets/shaders/vertex.glsl");
     const vs: u32 = gl.glCreateShader(gl.GL_VERTEX_SHADER);
@@ -62,7 +71,10 @@ pub fn run() void {
 
     gl.glBindVertexArray(vao);
     gl.glBindBuffer(gl.GL_ARRAY_BUFFER, vbo);
-    gl.glBufferData(gl.GL_ARRAY_BUFFER, @sizeOf(f32) * 9, &vertices, gl.GL_STATIC_DRAW);
+    gl.glBufferData(gl.GL_ARRAY_BUFFER, @sizeOf(f32) * 18, &vertices, gl.GL_STATIC_DRAW);
+
+    gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, ebo);
+    gl.glBufferData(gl.GL_ELEMENT_ARRAY_BUFFER, @sizeOf(f32) * 6, &indices, gl.GL_STATIC_DRAW);
 
     gl.glVertexAttribPointer(0, 3, gl.GL_FLOAT, gl.GL_FALSE, 3 * @sizeOf(f32), @ptrFromInt(0));
     gl.glEnableVertexAttribArray(0);
@@ -75,7 +87,7 @@ pub fn run() void {
 
         gl.glUseProgram(program);
         gl.glBindVertexArray(vao);
-        gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3);
+        gl.glDrawElements(gl.GL_TRIANGLES, 6, gl.GL_UNSIGNED_INT, @ptrFromInt(0));
 
         glfw.glfwSwapBuffers(window);
     }
