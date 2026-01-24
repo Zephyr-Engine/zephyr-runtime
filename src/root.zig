@@ -5,6 +5,8 @@ const application = @import("core/application.zig");
 pub const Application = application.Application;
 pub const ApplicationProps = application.ApplicationProps;
 
+pub const Window = @import("core/window.zig").Window;
+
 const scene = @import("core/scene.zig");
 pub const Scene = scene.Scene;
 pub const SceneManager = scene.SceneManager;
@@ -19,6 +21,7 @@ pub const material = @import("asset/material.zig");
 pub const Material = material.Material;
 pub const MaterialInstance = material.MaterialInstance;
 pub const MaterialLighting = material.Lighting;
+pub const Light = @import("asset/light.zig").Light;
 
 pub const Shader = @import("graphics/opengl_shader.zig").Shader;
 pub const VertexArray = @import("graphics/opengl_vertex_array.zig").VertexArray;
