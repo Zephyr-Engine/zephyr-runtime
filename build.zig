@@ -21,6 +21,7 @@ pub fn build(b: *std.Build) void {
     const runtime_mod = b.addModule("zephyr_runtime", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
+        .optimize = optimize,
     });
     runtime_mod.linkLibrary(glfw_dep.artifact("glfw"));
     runtime_mod.linkLibrary(glad_dep.artifact("glad"));

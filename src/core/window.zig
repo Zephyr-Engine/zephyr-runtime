@@ -99,6 +99,8 @@ pub const Window = struct {
         glfw.glfwGetFramebufferSize(window, &fb_width, &fb_height);
         gl.glViewport(0, 0, @intCast(fb_width), @intCast(fb_height));
 
+        gl.glEnable(gl.GL_DEPTH_TEST);
+
         return win;
     }
 

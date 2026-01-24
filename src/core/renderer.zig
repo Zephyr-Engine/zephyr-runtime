@@ -1,13 +1,21 @@
-const VertexArray = @import("../graphics/opengl_vertex_array.zig").VertexArray;
+const Model = @import("../asset/model.zig").Model;
+const Camera = @import("../scene/camera.zig").Camera;
 const math = @import("zlm").as(f32);
 const c = @import("../c.zig");
 const gl = c.glad;
 
 pub const RenderCommand = struct {
-    pub fn Draw(vao: VertexArray) void {
-        vao.bind();
-        gl.glDrawElements(gl.GL_TRIANGLES, @intCast(vao.indexCount()), gl.GL_UNSIGNED_INT, @ptrFromInt(0));
-        vao.unbind();
+    pub fn Draw(model: *Model, camera: *Camera) void {
+        const modelMatrix = math.Mat4.createTranslation(model.position);
+        model.material.setUniform("r_position", camera.viewProjectionMatrix().mul(modelMatrix));
+        model.material.setUniform("r_viewPos", camera.position);
+
+        model.material.setUniform("r_model", modelMatrix);
+        model.material.setUniform("material.ambient", model.material.lighting.ambient);
+        model.material.setUniform("material.diffuse", model.material.lighting.diffuse);
+        model.material.setUniform("material.specular", model.material.lighting.specular);
+        model.material.setUniform("material.shininess", model.material.lighting.shininess);
+        model.draw();
     }
 
     pub fn Clear(color: math.Vec3) void {

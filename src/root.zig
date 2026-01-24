@@ -15,7 +15,11 @@ pub const Key = event.Key;
 pub const MouseButton = event.MouseButton;
 
 pub const RenderCommand = @import("core/renderer.zig").RenderCommand;
-pub const Material = @import("asset/material.zig").Material;
+pub const material = @import("asset/material.zig");
+pub const Material = material.Material;
+pub const MaterialInstance = material.MaterialInstance;
+pub const MaterialLighting = material.Lighting;
+
 pub const Shader = @import("graphics/opengl_shader.zig").Shader;
 pub const VertexArray = @import("graphics/opengl_vertex_array.zig").VertexArray;
 
@@ -32,6 +36,8 @@ pub const Vec2 = math.Vec2;
 pub const Mat2 = math.Mat2;
 pub const Mat3 = math.Mat3;
 pub const Mat4 = math.Mat4;
+
+pub const Model = @import("asset/model.zig").Model;
 
 pub const Camera = @import("scene/camera.zig").Camera;
 
