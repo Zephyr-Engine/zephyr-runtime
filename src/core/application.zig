@@ -46,8 +46,8 @@ pub const Application = struct {
         allocator.destroy(self);
     }
 
-    pub fn pushScene(self: *Application, new_scene: scene.Scene) !void {
-        try self.scene_manager.pushScene(new_scene);
+    pub fn pushScene(self: *Application, new_scene: scene.Scene) void {
+        self.scene_manager.pushScene(new_scene);
     }
 
     pub fn popScene(self: *Application) ?scene.Scene {
@@ -76,6 +76,7 @@ pub const Application = struct {
             app.time.update(@floatCast(current_time));
 
             app.window.handleInput();
+
             app.scene_manager.update(app.time.delta_time);
 
             app.window.swapBuffers();

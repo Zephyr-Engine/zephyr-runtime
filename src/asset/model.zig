@@ -12,10 +12,10 @@ pub const Model = struct {
 
     pub fn init(allocator: std.mem.Allocator, mesh_data: []const u8, material: *const MaterialInstance, position: Vec3) !Model {
         var mesh = try obj.parse(allocator, mesh_data);
-        const vao = VertexArray.init(mesh.vertices, mesh.indices);
+        const vao = try VertexArray.init(mesh.vertices, mesh.indices);
         mesh.deinit();
 
-        vao.setLayout(material.material.shader.buffer_layout);
+        try vao.setLayout(material.material.shader.buffer_layout);
 
         return .{
             .vao = vao,

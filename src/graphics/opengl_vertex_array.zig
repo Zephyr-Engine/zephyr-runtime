@@ -4,20 +4,54 @@ const buffer = @import("opengl_buffer.zig");
 const BufferLayout = @import("layout.zig").BufferLayout;
 const ShaderType = @import("layout.zig").DataType;
 
+pub const VertexArrayError = error{
+    VertexArrayCreationFailed,
+    VertexBufferCreationFailed,
+    IndexBufferCreationFailed,
+    OpenGLError,
+};
+
 pub const VertexArray = struct {
     id: u32,
     vbo: buffer.VertexBuffer,
     ebo: buffer.IndexBuffer,
 
-    pub fn init(vertices: []const f32, indices: []const u32) VertexArray {
+    pub fn init(vertices: []const f32, indices: []const u32) VertexArrayError!VertexArray {
         var vao: u32 = 0;
         gl.glGenVertexArrays(1, &vao);
+
+        if (vao == 0) {
+            return VertexArrayError.VertexArrayCreationFailed;
+        }
+        errdefer gl.glDeleteVertexArrays(1, &vao);
+
         gl.glBindVertexArray(vao);
+
+        const vbo = buffer.VertexBuffer.init(vertices) catch |err| {
+            return switch (err) {
+                buffer.BufferError.BufferCreationFailed, buffer.BufferError.OpenGLError => VertexArrayError.VertexBufferCreationFailed,
+            };
+        };
+        errdefer gl.glDeleteBuffers(1, &vbo.id);
+
+        const ebo = buffer.IndexBuffer.init(indices) catch |err| {
+            gl.glDeleteBuffers(1, &vbo.id);
+            return switch (err) {
+                buffer.BufferError.BufferCreationFailed, buffer.BufferError.OpenGLError => VertexArrayError.IndexBufferCreationFailed,
+            };
+        };
+
+        const gl_err = gl.glGetError();
+        if (gl_err != gl.GL_NO_ERROR) {
+            gl.glDeleteBuffers(1, &vbo.id);
+            gl.glDeleteBuffers(1, &ebo.id);
+            return VertexArrayError.OpenGLError;
+        }
 
         return .{
             .id = vao,
-            .vbo = buffer.VertexBuffer.init(vertices),
-            .ebo = buffer.IndexBuffer.init(indices),
+            .vbo = vbo,
+            .ebo = ebo,
         };
     }
 
@@ -34,11 +68,17 @@ pub const VertexArray = struct {
         return self.ebo.count;
     }
 
-    pub fn setLayout(self: VertexArray, layout: BufferLayout) void {
+    pub fn setLayout(self: VertexArray, layout: BufferLayout) VertexArrayError!void {
         self.bind();
         for (layout.elements.items) |element| {
             gl.glVertexAttribPointer(element.location, @intCast(element.ty.componentCount()), layoutTypeToGL(element.ty), if (element.normalized) 1 else 0, @intCast(layout.stride), @ptrFromInt(element.offset));
             gl.glEnableVertexAttribArray(element.location);
+
+            const err = gl.glGetError();
+            if (err != gl.GL_NO_ERROR) {
+                self.unbind();
+                return VertexArrayError.OpenGLError;
+            }
         }
         self.unbind();
     }
