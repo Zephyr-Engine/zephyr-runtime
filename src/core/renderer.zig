@@ -6,7 +6,15 @@ const gl = c.glad;
 
 pub const RenderCommand = struct {
     pub fn Draw(model: *Model, camera: *Camera) void {
-        model.material.setUniform("r_position", camera.viewProjectionMatrix().mul(math.Mat4.createTranslation(model.position)));
+        const modelMatrix = math.Mat4.createTranslation(model.position);
+        model.material.setUniform("r_position", camera.viewProjectionMatrix().mul(modelMatrix));
+        model.material.setUniform("r_viewPos", camera.position);
+
+        model.material.setUniform("r_model", modelMatrix);
+        model.material.setUniform("material.ambient", model.material.lighting.ambient);
+        model.material.setUniform("material.diffuse", model.material.lighting.diffuse);
+        model.material.setUniform("material.specular", model.material.lighting.specular);
+        model.material.setUniform("material.shininess", model.material.lighting.shininess);
         model.draw();
     }
 
