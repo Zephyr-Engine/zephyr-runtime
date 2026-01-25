@@ -3,7 +3,10 @@ const c = @import("c.zig");
 const glfw = c.glfw;
 const gl = c.glad;
 
-pub fn run() void {
+const Shader = @import("graphics/opengl/shader.zig").Shader;
+const VertexArray = @import("graphics/opengl/vertex_array.zig").VertexArray;
+
+pub fn run() !void {
     if (glfw.glfwInit() == 0) {
         std.debug.print("Failed to initialize glfw\n", .{});
         return;
@@ -30,52 +33,25 @@ pub fn run() void {
         return;
     }
 
-    const vertices: [4][3]f32 = .{
-        .{ 0.5, 0.5, 0.0 }, // top right
-        .{ 0.5, -0.5, 0.0 }, // bottom right
-        .{ -0.5, -0.5, 0.0 }, // bottom left
-        .{ -0.5, 0.5, 0.0 }, // top left
+    const vertices = [_]f32{
+        0.5, 0.5, 0.0, // top right
+        0.5, -0.5, 0.0, // bottom right
+        -0.5, -0.5, 0.0, // bottom left
+        -0.5, 0.5, 0.0, // top left
     };
 
-    const indices: [6]u32 = .{
+    const indices = [_]u32{
         0, 1, 3, // first triangle
         1, 2, 3, // second triangle
     };
 
-    var vao: u32 = 0;
-    gl.glGenVertexArrays(1, &vao);
-
-    var vbo: u32 = 0;
-    gl.glGenBuffers(1, &vbo);
-
-    var ebo: u32 = 0;
-    gl.glGenBuffers(1, &ebo);
+    const vao = VertexArray.init(&vertices, &indices);
 
     const vs_src: [*c]const u8 = @embedFile("assets/shaders/vertex.glsl");
-    const vs: u32 = gl.glCreateShader(gl.GL_VERTEX_SHADER);
-    gl.glShaderSource(vs, 1, &vs_src, null);
-    gl.glCompileShader(vs);
-
     const fs_src: [*c]const u8 = @embedFile("assets/shaders/fragment.glsl");
-    const fs: u32 = gl.glCreateShader(gl.GL_FRAGMENT_SHADER);
-    gl.glShaderSource(fs, 1, &fs_src, null);
-    gl.glCompileShader(fs);
+    const shader = try Shader.init(vs_src, fs_src);
 
-    const program = gl.glCreateProgram();
-    gl.glAttachShader(program, vs);
-    gl.glAttachShader(program, fs);
-    gl.glLinkProgram(program);
-
-    gl.glDeleteShader(vs);
-    gl.glDeleteShader(fs);
-
-    gl.glBindVertexArray(vao);
-    gl.glBindBuffer(gl.GL_ARRAY_BUFFER, vbo);
-    gl.glBufferData(gl.GL_ARRAY_BUFFER, @sizeOf(f32) * 18, &vertices, gl.GL_STATIC_DRAW);
-
-    gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, ebo);
-    gl.glBufferData(gl.GL_ELEMENT_ARRAY_BUFFER, @sizeOf(f32) * 6, &indices, gl.GL_STATIC_DRAW);
-
+    vao.bind();
     gl.glVertexAttribPointer(0, 3, gl.GL_FLOAT, gl.GL_FALSE, 3 * @sizeOf(f32), @ptrFromInt(0));
     gl.glEnableVertexAttribArray(0);
 
@@ -85,8 +61,8 @@ pub fn run() void {
         gl.glClearColor(0.4, 0.4, 0.4, 1);
         gl.glClear(gl.GL_COLOR_BUFFER_BIT);
 
-        gl.glUseProgram(program);
-        gl.glBindVertexArray(vao);
+        shader.bind();
+        vao.bind();
         gl.glDrawElements(gl.GL_TRIANGLES, 6, gl.GL_UNSIGNED_INT, @ptrFromInt(0));
 
         glfw.glfwSwapBuffers(window);

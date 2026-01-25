@@ -1,6 +1,6 @@
 const std = @import("std");
 const zp = @import("zephyr_runtime");
 
-pub fn main() void {
-    zp.run();
+pub fn main() !void {
+    try zp.run();
 }
