@@ -42,8 +42,10 @@ pub const Window = struct {
         glfw.glfwSetWindowUserPointer(self.window, &self.data);
         _ = glfw.glfwSetMouseButtonCallback(self.window, event.mouseButtonCallback);
         _ = glfw.glfwSetKeyCallback(self.window, event.keyButtonCallback);
+        _ = glfw.glfwSetCharCallback(self.window, event.charCallback);
         _ = glfw.glfwSetWindowSizeCallback(self.window, event.windowResizeCallback);
         _ = glfw.glfwSetFramebufferSizeCallback(self.window, event.framebufferSizeCallback);
+        _ = glfw.glfwSetWindowContentScaleCallback(self.window, event.contentScaleCallback);
         _ = glfw.glfwSetWindowCloseCallback(self.window, event.windowCloseCallback);
         _ = glfw.glfwSetCursorPosCallback(self.window, event.cursorPosCallback);
         _ = glfw.glfwSetScrollCallback(self.window, event.cursorScrollCallback);
@@ -130,6 +132,20 @@ pub const Window = struct {
 
     pub fn GetTime() f64 {
         return glfw.glfwGetTime();
+    }
+
+    pub fn getContentScale(self: *Window) struct { x: f32, y: f32 } {
+        var xscale: f32 = 1.0;
+        var yscale: f32 = 1.0;
+        glfw.glfwGetWindowContentScale(self.window, &xscale, &yscale);
+        return .{ .x = xscale, .y = yscale };
+    }
+
+    pub fn getFramebufferSize(self: *Window) struct { width: u32, height: u32 } {
+        var w: c_int = 0;
+        var h: c_int = 0;
+        glfw.glfwGetFramebufferSize(self.window, &w, &h);
+        return .{ .width = @intCast(w), .height = @intCast(h) };
     }
 
     pub fn swapBuffers(self: *Window) void {
