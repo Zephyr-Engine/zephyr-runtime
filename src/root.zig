@@ -5,6 +5,11 @@ const application = @import("core/application.zig");
 pub const Application = application.Application;
 pub const ApplicationProps = application.ApplicationProps;
 
+const window_mod = @import("core/window.zig");
+pub const Window = window_mod.Window;
+pub const Cursor = window_mod.Cursor;
+pub const CursorShape = window_mod.CursorShape;
+
 const scene = @import("core/scene.zig");
 pub const Scene = scene.Scene;
 pub const SceneManager = scene.SceneManager;
@@ -19,9 +24,14 @@ pub const material = @import("asset/material.zig");
 pub const Material = material.Material;
 pub const MaterialInstance = material.MaterialInstance;
 pub const MaterialLighting = material.Lighting;
+pub const Light = @import("asset/light.zig").Light;
 
 pub const Shader = @import("graphics/opengl_shader.zig").Shader;
 pub const VertexArray = @import("graphics/opengl_vertex_array.zig").VertexArray;
+
+pub const Texture = @import("graphics/opengl_texture.zig").Texture;
+pub const TextureFormat = @import("graphics/opengl_texture.zig").TextureFormat;
+pub const Framebuffer = @import("graphics/opengl_framebuffer.zig").Framebuffer;
 
 pub const recommended_std_options: std.Options = .{
     .log_level = if (builtin.mode == .ReleaseFast) .err else .debug,

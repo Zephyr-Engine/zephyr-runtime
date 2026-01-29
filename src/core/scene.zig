@@ -13,12 +13,71 @@ pub fn isScene(comptime T: type) bool {
     return has_onStartup and has_onUpdate and has_onEvent and has_onCleanup;
 }
 
+fn validateSceneSignatures(comptime T: type) void {
+    // Get function types
+    const onStartup_type = @TypeOf(@field(T, "onStartup"));
+    const onUpdate_type = @TypeOf(@field(T, "onUpdate"));
+    const onEvent_type = @TypeOf(@field(T, "onEvent"));
+    const onCleanup_type = @TypeOf(@field(T, "onCleanup"));
+
+    const onStartup_info = @typeInfo(onStartup_type);
+    const onUpdate_info = @typeInfo(onUpdate_type);
+    const onEvent_info = @typeInfo(onEvent_type);
+    const onCleanup_info = @typeInfo(onCleanup_type);
+
+    // Validate onStartup signature: fn(*T, std.mem.Allocator) !void
+    // Note: We accept both !void and void, but !void errors will be caught at runtime
+    if (onStartup_info != .@"fn") {
+        @compileError("onStartup must be a function");
+    }
+    const startup_fn = onStartup_info.@"fn";
+    if (startup_fn.params.len != 2) {
+        @compileError("onStartup must have signature: fn(*" ++ @typeName(T) ++ ", std.mem.Allocator) !void or void");
+    }
+
+    // Validate onUpdate signature: fn(*T, f32) void
+    if (onUpdate_info != .@"fn") {
+        @compileError("onUpdate must be a function");
+    }
+    const update_fn = onUpdate_info.@"fn";
+    if (update_fn.params.len != 2) {
+        @compileError("onUpdate must have signature: fn(*" ++ @typeName(T) ++ ", f32) void");
+    }
+    if (update_fn.return_type != null and update_fn.return_type.? != void) {
+        @compileError("onUpdate must return void, not " ++ @typeName(update_fn.return_type.?));
+    }
+
+    // Validate onEvent signature: fn(*T, event.ZEvent) void
+    if (onEvent_info != .@"fn") {
+        @compileError("onEvent must be a function");
+    }
+    const event_fn = onEvent_info.@"fn";
+    if (event_fn.params.len != 2) {
+        @compileError("onEvent must have signature: fn(*" ++ @typeName(T) ++ ", event.ZEvent) void");
+    }
+    if (event_fn.return_type != null and event_fn.return_type.? != void) {
+        @compileError("onEvent must return void, not " ++ @typeName(event_fn.return_type.?));
+    }
+
+    // Validate onCleanup signature: fn(*T, std.mem.Allocator) void
+    if (onCleanup_info != .@"fn") {
+        @compileError("onCleanup must be a function");
+    }
+    const cleanup_fn = onCleanup_info.@"fn";
+    if (cleanup_fn.params.len != 2) {
+        @compileError("onCleanup must have signature: fn(*" ++ @typeName(T) ++ ", std.mem.Allocator) void");
+    }
+    if (cleanup_fn.return_type != null and cleanup_fn.return_type.? != void) {
+        @compileError("onCleanup must return void, not " ++ @typeName(cleanup_fn.return_type.?));
+    }
+}
+
 pub const Scene = struct {
     ptr: *anyopaque,
     vtable: *const VTable,
 
     const VTable = struct {
-        onStartup: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!void,
+        onStartup: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator) void,
         onUpdate: *const fn (ptr: *anyopaque, delta_time: f32) void,
         onEvent: *const fn (ptr: *anyopaque, e: event.ZEvent) void,
         onCleanup: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator) void,
@@ -32,10 +91,15 @@ pub const Scene = struct {
                 "Required methods: onStartup, onUpdate, onEvent, onCleanup");
         }
 
+        // Compile-time validation of function signatures
+        comptime validateSceneSignatures(T);
+
         const gen = struct {
-            fn onStartup(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!void {
+            fn onStartup(ptr: *anyopaque, allocator: std.mem.Allocator) void {
                 const self: *T = @ptrCast(@alignCast(ptr));
-                return self.onStartup(allocator);
+                self.onStartup(allocator) catch |err| {
+                    std.log.err("Scene onStartup failed: {any}", .{err});
+                };
             }
 
             fn onUpdate(ptr: *anyopaque, delta_time: f32) void {
@@ -67,8 +131,8 @@ pub const Scene = struct {
         };
     }
 
-    pub fn onStartup(self: Scene, allocator: std.mem.Allocator) !void {
-        return self.vtable.onStartup(self.ptr, allocator);
+    pub fn onStartup(self: Scene, allocator: std.mem.Allocator) void {
+        self.vtable.onStartup(self.ptr, allocator);
     }
 
     pub fn onUpdate(self: Scene, delta_time: f32) void {
@@ -102,9 +166,11 @@ pub const SceneManager = struct {
         self.scenes.deinit(self.allocator);
     }
 
-    pub fn pushScene(self: *SceneManager, scene: Scene) !void {
-        try scene.onStartup(self.allocator);
-        try self.scenes.append(self.allocator, scene);
+    pub fn pushScene(self: *SceneManager, scene: Scene) void {
+        scene.onStartup(self.allocator);
+        self.scenes.append(self.allocator, scene) catch |err| {
+            std.log.err("Failed to append scene: {any}", .{err});
+        };
     }
 
     pub fn popScene(self: *SceneManager) ?Scene {
@@ -129,6 +195,7 @@ pub const SceneManager = struct {
 
     pub fn update(self: *SceneManager, delta_time: f32) void {
         if (self.currentScene()) |scene| {
+            // Wrap onUpdate in error handling in case it panics or has issues
             scene.onUpdate(delta_time);
         }
     }
@@ -138,6 +205,7 @@ pub const SceneManager = struct {
         while (i > 0) {
             i -= 1;
             const scene = self.scenes.items[i];
+            // Wrap onEvent in error handling in case it has issues
             scene.onEvent(e);
         }
     }
@@ -206,7 +274,7 @@ test "SceneManager push and pop scenes" {
     var test_scene = TestScene{};
     const scene = Scene.init(&test_scene);
 
-    try manager.pushScene(scene);
+    manager.pushScene(scene);
     try std.testing.expect(test_scene.startup_called);
     try std.testing.expect(manager.hasScenes());
     try std.testing.expectEqual(@as(usize, 1), manager.sceneCount());
@@ -225,7 +293,7 @@ test "SceneManager update calls current scene" {
     var test_scene = TestScene{};
     const scene = Scene.init(&test_scene);
 
-    try manager.pushScene(scene);
+    manager.pushScene(scene);
     manager.update(0.016);
 
     try std.testing.expect(test_scene.update_called);
@@ -240,8 +308,8 @@ test "SceneManager handleEvent propagates to all scenes" {
     var scene1 = TestScene{};
     var scene2 = TestScene{};
 
-    try manager.pushScene(Scene.init(&scene1));
-    try manager.pushScene(Scene.init(&scene2));
+    manager.pushScene(Scene.init(&scene1));
+    manager.pushScene(Scene.init(&scene2));
 
     const test_event = event.ZEvent.WindowClose;
     manager.handleEvent(test_event);
@@ -259,9 +327,9 @@ test "SceneManager multiple scenes stack behavior" {
     var scene2 = TestScene{};
     var scene3 = TestScene{};
 
-    try manager.pushScene(Scene.init(&scene1));
-    try manager.pushScene(Scene.init(&scene2));
-    try manager.pushScene(Scene.init(&scene3));
+    manager.pushScene(Scene.init(&scene1));
+    manager.pushScene(Scene.init(&scene2));
+    manager.pushScene(Scene.init(&scene3));
 
     try std.testing.expectEqual(@as(usize, 3), manager.sceneCount());
 

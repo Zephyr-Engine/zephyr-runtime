@@ -13,6 +13,10 @@ var isRunning = true;
 pub const ApplicationProps = struct {
     width: u32,
     height: u32,
+    fb_width: u32,
+    fb_height: u32,
+    content_scale_x: f32,
+    content_scale_y: f32,
 };
 
 pub const Application = struct {
@@ -46,8 +50,8 @@ pub const Application = struct {
         allocator.destroy(self);
     }
 
-    pub fn pushScene(self: *Application, new_scene: scene.Scene) !void {
-        try self.scene_manager.pushScene(new_scene);
+    pub fn pushScene(self: *Application, new_scene: scene.Scene) void {
+        self.scene_manager.pushScene(new_scene);
     }
 
     pub fn popScene(self: *Application) ?scene.Scene {
@@ -55,9 +59,15 @@ pub const Application = struct {
     }
 
     pub fn getProps(self: *Application) ApplicationProps {
+        const fb = self.window.getFramebufferSize();
+        const scale = self.window.getContentScale();
         return ApplicationProps{
             .width = self.window.data.width,
             .height = self.window.data.height,
+            .fb_width = fb.width,
+            .fb_height = fb.height,
+            .content_scale_x = scale.x,
+            .content_scale_y = scale.y,
         };
     }
 
@@ -76,6 +86,7 @@ pub const Application = struct {
             app.time.update(@floatCast(current_time));
 
             app.window.handleInput();
+
             app.scene_manager.update(app.time.delta_time);
 
             app.window.swapBuffers();

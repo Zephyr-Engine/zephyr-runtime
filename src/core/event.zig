@@ -268,9 +268,12 @@ pub const Key = enum(u16) {
 pub const ZEvent = union(enum) {
     WindowClose,
     WindowResize: struct { width: u32, height: u32 },
+    FramebufferResize: struct { width: u32, height: u32 },
+    ContentScaleChange: struct { x: f32, y: f32 },
     KeyPressed: Key,
     KeyReleased: Key,
     KeyRepeated: Key,
+    CharInput: u32, // Unicode codepoint for text input
     MouseScroll: struct { x: f32, y: f32 },
     MouseMove: struct { x: f32, y: f32 },
     MousePressed: MouseButton,
@@ -344,8 +347,24 @@ pub fn windowResizeCallback(window: c.Window, width: c_int, height: c_int) callc
 }
 
 pub fn framebufferSizeCallback(window: c.Window, width: c_int, height: c_int) callconv(.c) void {
-    _ = window;
     gl.glViewport(0, 0, @intCast(width), @intCast(height));
+
+    const windowDataPtr = glfw.glfwGetWindowUserPointer(window).?;
+    const windowData: *WindowData = @ptrCast(@alignCast(windowDataPtr));
+
+    const ev = ZEvent{ .FramebufferResize = .{
+        .width = @intCast(width),
+        .height = @intCast(height),
+    } };
+    windowData.eventCallback(windowData.app_ptr.?, ev);
+}
+
+pub fn contentScaleCallback(window: c.Window, xscale: f32, yscale: f32) callconv(.c) void {
+    const windowDataPtr = glfw.glfwGetWindowUserPointer(window).?;
+    const windowData: *WindowData = @ptrCast(@alignCast(windowDataPtr));
+
+    const ev = ZEvent{ .ContentScaleChange = .{ .x = xscale, .y = yscale } };
+    windowData.eventCallback(windowData.app_ptr.?, ev);
 }
 
 pub fn windowCloseCallback(window: c.Window) callconv(.c) void {
@@ -369,6 +388,14 @@ pub fn cursorScrollCallback(window: c.Window, x: f64, y: f64) callconv(.c) void 
     const windowData: *WindowData = @ptrCast(@alignCast(windowDataPtr));
 
     const ev = ZEvent{ .MouseScroll = .{ .x = @floatCast(x), .y = @floatCast(y) } };
+    windowData.eventCallback(windowData.app_ptr.?, ev);
+}
+
+pub fn charCallback(window: c.Window, codepoint: c_uint) callconv(.c) void {
+    const windowDataPtr = glfw.glfwGetWindowUserPointer(window).?;
+    const windowData: *WindowData = @ptrCast(@alignCast(windowDataPtr));
+
+    const ev = ZEvent{ .CharInput = @intCast(codepoint) };
     windowData.eventCallback(windowData.app_ptr.?, ev);
 }
 

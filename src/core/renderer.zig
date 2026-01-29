@@ -22,4 +22,16 @@ pub const RenderCommand = struct {
         gl.glClearColor(color.x, color.y, color.z, 1);
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT);
     }
+
+    pub fn SetViewport(x: i32, y: i32, width: i32, height: i32) void {
+        gl.glViewport(x, y, width, height);
+    }
+
+    pub fn EnableMultisample() void {
+        gl.glEnable(gl.GL_MULTISAMPLE);
+    }
+
+    pub fn DisableMultisample() void {
+        gl.glDisable(gl.GL_MULTISAMPLE);
+    }
 };
