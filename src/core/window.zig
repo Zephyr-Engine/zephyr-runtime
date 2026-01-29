@@ -31,6 +31,8 @@ pub const WindowParams = struct {
     width: ?u32,
     height: ?u32,
     title: []const u8,
+    /// Number of MSAA samples (0 or null = disabled, typical values: 2, 4, 8)
+    samples: ?u32 = null,
 };
 
 pub fn getDefaultWidth() u32 {
@@ -72,6 +74,12 @@ pub const Window = struct {
         glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MAJOR, 3);
         glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MINOR, 3);
         glfw.glfwWindowHint(glfw.GLFW_OPENGL_PROFILE, glfw.GLFW_OPENGL_CORE_PROFILE);
+
+        if (params.samples) |samples| {
+            if (samples > 0) {
+                glfw.glfwWindowHint(glfw.GLFW_SAMPLES, @intCast(samples));
+            }
+        }
 
         const title = allocator.dupeZ(u8, params.title) catch {
             std.log.err("Failed to duplicate window title", .{});
@@ -115,6 +123,12 @@ pub const Window = struct {
         gl.glViewport(0, 0, @intCast(fb_width), @intCast(fb_height));
 
         gl.glEnable(gl.GL_DEPTH_TEST);
+
+        if (params.samples) |samples| {
+            if (samples > 0) {
+                gl.glEnable(gl.GL_MULTISAMPLE);
+            }
+        }
 
         return win;
     }
