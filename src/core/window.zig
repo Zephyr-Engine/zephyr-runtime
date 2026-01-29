@@ -7,6 +7,19 @@ const c = @import("../c.zig");
 const glfw = c.glfw;
 const gl = c.glad;
 
+/// Standard cursor shapes
+pub const CursorShape = enum {
+    arrow,
+    ibeam,
+    crosshair,
+    hand,
+    hresize,
+    vresize,
+};
+
+/// Opaque cursor handle
+pub const Cursor = opaque {};
+
 pub const WindowData = struct {
     width: u32,
     height: u32,
@@ -156,5 +169,47 @@ pub const Window = struct {
         glfw.glfwTerminate();
         glfw.glfwDestroyWindow(self.window);
         allocator.destroy(self);
+    }
+
+    /// Set the cursor for this window
+    pub fn setCursor(self: *Window, cursor: ?*Cursor) void {
+        glfw.glfwSetCursor(self.window, @ptrCast(cursor));
+    }
+
+    /// Create a standard cursor
+    pub fn createStandardCursor(shape: CursorShape) ?*Cursor {
+        const glfw_shape: c_int = switch (shape) {
+            .arrow => glfw.GLFW_ARROW_CURSOR,
+            .ibeam => glfw.GLFW_IBEAM_CURSOR,
+            .crosshair => glfw.GLFW_CROSSHAIR_CURSOR,
+            .hand => glfw.GLFW_HAND_CURSOR,
+            .hresize => glfw.GLFW_HRESIZE_CURSOR,
+            .vresize => glfw.GLFW_VRESIZE_CURSOR,
+        };
+        return @ptrCast(glfw.glfwCreateStandardCursor(glfw_shape));
+    }
+
+    /// Destroy a cursor
+    pub fn destroyCursor(cursor: ?*Cursor) void {
+        if (cursor) |cur| {
+            glfw.glfwDestroyCursor(@ptrCast(cur));
+        }
+    }
+
+    /// Get the current window context (for use with setCursor when window handle not available)
+    pub fn getCurrentContext() ?*Window {
+        const ctx = glfw.glfwGetCurrentContext();
+        if (ctx == null) return null;
+        // Note: This returns a pointer that allows setCursor but not full Window operations
+        // since we don't have access to the full Window struct from just the GLFW handle
+        return @ptrCast(@alignCast(ctx));
+    }
+
+    /// Set cursor on the current context window (convenience for callbacks)
+    pub fn setCurrentContextCursor(cursor: ?*Cursor) void {
+        const ctx = glfw.glfwGetCurrentContext();
+        if (ctx != null) {
+            glfw.glfwSetCursor(ctx, @ptrCast(cursor));
+        }
     }
 };
