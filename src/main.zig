@@ -1,6 +1,8 @@
 const std = @import("std");
 const zp = @import("zephyr_runtime");
 
-pub fn main() !void {
-    try zp.run();
+pub const std_options = zp.recommended_std_options;
+
+pub fn main() void {
+    zp.run();
 }

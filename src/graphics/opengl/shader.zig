@@ -30,7 +30,7 @@ pub const Shader = struct {
         if (vs_success == 0) {
             var info_log: [512]u8 = undefined;
             gl.glGetShaderInfoLog(vs, 512, null, @ptrCast(&info_log));
-            std.debug.print("Vertex shader compilation failed: {s}\n", .{info_log});
+            std.log.err("Vertex shader compilation failed: {s}\n", .{info_log});
             return ShaderError.VertexShaderCompilationFailed;
         }
 
@@ -47,8 +47,8 @@ pub const Shader = struct {
         gl.glGetShaderiv(fs, gl.GL_COMPILE_STATUS, &fs_success);
         if (fs_success == 0) {
             var info_log: [512]u8 = undefined;
-            gl.glGetShaderInfoLog(vs, 512, null, @ptrCast(&info_log));
-            std.debug.print("Fragment shader compilation failed: {s}\n", .{info_log});
+            gl.glGetShaderInfoLog(fs, 512, null, @ptrCast(&info_log));
+            std.log.err("Fragment shader compilation failed: {s}\n", .{info_log});
             return ShaderError.FragmentShaderCompilationFailed;
         }
 
@@ -67,7 +67,7 @@ pub const Shader = struct {
         if (link_success == 0) {
             var info_log: [512]u8 = undefined;
             gl.glGetProgramInfoLog(program, 512, null, @ptrCast(&info_log));
-            std.debug.print("Shader program linking failed: {s}\n", .{info_log});
+            std.log.err("Shader program linking failed: {s}\n", .{info_log});
             return ShaderError.ProgramLinkingFailed;
         }
 

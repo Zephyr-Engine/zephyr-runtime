@@ -3,35 +3,29 @@ const c = @import("c.zig");
 const glfw = c.glfw;
 const gl = c.glad;
 
+const Window = @import("core/window.zig").Window;
 const Shader = @import("graphics/opengl/shader.zig").Shader;
 const VertexArray = @import("graphics/opengl/vertex_array.zig").VertexArray;
 
-pub fn run() !void {
-    if (glfw.glfwInit() == 0) {
-        std.debug.print("Failed to initialize glfw\n", .{});
+pub const recommended_std_options: std.Options = .{
+    .logFn = @import("core/log.zig").log,
+};
+
+pub fn run() void {
+    std.log.info("Starting up application", .{});
+    var gpa = std.heap.DebugAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const window = Window.init(allocator, .{
+        .title = "Zephyr Engine",
+        .width = null,
+        .height = null,
+    }) catch |err| {
+        std.log.err("Window init failed: {}", .{err});
         return;
-    }
-    defer glfw.glfwTerminate();
-
-    glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfw.glfwWindowHint(glfw.GLFW_OPENGL_PROFILE, glfw.GLFW_OPENGL_CORE_PROFILE);
-
-    const window = glfw.glfwCreateWindow(1920, 1080, "Zephyr", null, null);
-    if (window == null) {
-        std.debug.print("Failed to initialize glfw window\n", .{});
-        return;
-    }
-    defer glfw.glfwDestroyWindow(window);
-
-    glfw.glfwMakeContextCurrent(window);
-    glfw.glfwSwapInterval(1); // V-SYNC
-
-    const loader: gl.GLADloadproc = @ptrCast(&glfw.glfwGetProcAddress);
-    if (gl.gladLoadGLLoader(loader) == 0) {
-        std.debug.print("Failed to load glad\n", .{});
-        return;
-    }
+    };
+    defer window.deinit(allocator);
 
     const vertices = [_]f32{
         0.5, 0.5, 0.0, // top right
@@ -49,14 +43,17 @@ pub fn run() !void {
 
     const vs_src: [*c]const u8 = @embedFile("assets/shaders/vertex.glsl");
     const fs_src: [*c]const u8 = @embedFile("assets/shaders/fragment.glsl");
-    const shader = try Shader.init(vs_src, fs_src);
+    const shader = Shader.init(vs_src, fs_src) catch |err| {
+        std.log.err("Error creating shader: {}\n", .{err});
+        return;
+    };
 
     vao.bind();
     gl.glVertexAttribPointer(0, 3, gl.GL_FLOAT, gl.GL_FALSE, 3 * @sizeOf(f32), @ptrFromInt(0));
     gl.glEnableVertexAttribArray(0);
 
-    while (glfw.glfwWindowShouldClose(window) == 0) {
-        glfw.glfwPollEvents();
+    while (window.shouldCloseWindow()) {
+        Window.HandleInput();
 
         gl.glClearColor(0.4, 0.4, 0.4, 1);
         gl.glClear(gl.GL_COLOR_BUFFER_BIT);
@@ -65,8 +62,9 @@ pub fn run() !void {
         vao.bind();
         gl.glDrawElements(gl.GL_TRIANGLES, 6, gl.GL_UNSIGNED_INT, @ptrFromInt(0));
 
-        glfw.glfwSwapBuffers(window);
+        window.swapBuffers();
     }
 
-    glfw.glfwPollEvents();
+    Window.HandleInput();
+    std.log.info("Shutting down application", .{});
 }
