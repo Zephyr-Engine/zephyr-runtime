@@ -87,7 +87,7 @@ pub const Application = struct {
             const current_time = win.Window.GetTime();
             app.time.update(@floatCast(current_time));
 
-            app.window.handleInput();
+            win.Window.HandleInput();
 
             app.scene_manager.update(app.time.delta_time);
 
@@ -95,6 +95,6 @@ pub const Application = struct {
             Input.Clear();
         }
 
-        app.window.handleInput();
+        win.Window.HandleInput();
     }
 };
