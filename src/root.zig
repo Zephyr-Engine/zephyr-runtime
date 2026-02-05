@@ -39,6 +39,9 @@ pub const recommended_std_options: std.Options = .{
 };
 
 pub const Input = @import("core/input.zig").InputManager;
+const asset = @import("asset/manager.zig");
+pub const AssetManager = asset.AssetManager;
+pub const AssetHandle = asset.AssetHandle;
 
 const math = @import("core/math.zig");
 pub const Vec3 = math.Vec3;

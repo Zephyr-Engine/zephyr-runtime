@@ -185,12 +185,10 @@ pub const Window = struct {
         allocator.destroy(self);
     }
 
-    /// Set the cursor for this window
     pub fn setCursor(self: *Window, cursor: ?*Cursor) void {
         glfw.glfwSetCursor(self.window, @ptrCast(cursor));
     }
 
-    /// Create a standard cursor
     pub fn createStandardCursor(shape: CursorShape) ?*Cursor {
         const glfw_shape: c_int = switch (shape) {
             .arrow => glfw.GLFW_ARROW_CURSOR,
@@ -203,7 +201,6 @@ pub const Window = struct {
         return @ptrCast(glfw.glfwCreateStandardCursor(glfw_shape));
     }
 
-    /// Destroy a cursor
     pub fn destroyCursor(cursor: ?*Cursor) void {
         if (cursor) |cur| {
             glfw.glfwDestroyCursor(@ptrCast(cur));

@@ -24,7 +24,7 @@ pub const Model = struct {
         };
     }
 
-    pub fn draw(self: *Model) void {
+    pub fn draw(self: *const Model) void {
         self.vao.draw();
     }
 };

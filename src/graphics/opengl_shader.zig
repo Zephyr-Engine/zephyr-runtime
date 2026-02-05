@@ -13,6 +13,7 @@ pub const ShaderError = error{
     ProgramCreationFailed,
     ProgramLinkingFailed,
     OpenGLError,
+    MemoryError,
 };
 
 pub const Shader = struct {
@@ -20,7 +21,7 @@ pub const Shader = struct {
     buffer_layout: layout.BufferLayout,
     allocator: std.mem.Allocator,
 
-    pub fn init(allocator: std.mem.Allocator, vs_src: []const u8, fs_src: []const u8) !Shader {
+    pub fn init(allocator: std.mem.Allocator, vs_src: []const u8, fs_src: []const u8) ShaderError!Shader {
         const vs_ptrs = [_][*c]const u8{
             @ptrCast(vs_src.ptr),
         };
@@ -97,7 +98,10 @@ pub const Shader = struct {
             name: [256]u8,
             location: u32,
         };
-        var attrs = try allocator.alloc(AttributeInfo, @intCast(count));
+        var attrs = allocator.alloc(AttributeInfo, @intCast(count)) catch |err| {
+            std.log.err("Failed to allocate shader attribute info: {}", .{err});
+            return ShaderError.MemoryError;
+        };
         defer allocator.free(attrs);
 
         for (0..@intCast(count)) |i| {
@@ -138,11 +142,17 @@ pub const Shader = struct {
         }.lessThan);
 
         var stride: u32 = 0;
-        var bufferElements = try layout.BufferElements.initCapacity(allocator, @intCast(count));
+        var bufferElements = layout.BufferElements.initCapacity(allocator, @intCast(count)) catch |err| {
+            std.log.err("Failed to initialize buffer elements: {}", .{err});
+            return ShaderError.MemoryError;
+        };
         for (attrs) |attr| {
             const element = layout.BufferElement.new(attr.shader_type, stride, false, attr.name, attr.location);
             stride += element.size;
-            try bufferElements.append(allocator, element);
+            bufferElements.append(allocator, element) catch |err| {
+                std.log.err("Failed to append buffer element: {}", .{err});
+                return ShaderError.MemoryError;
+            };
         }
 
         return .{
