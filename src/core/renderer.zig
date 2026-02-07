@@ -7,8 +7,8 @@ const gl = c.glad;
 
 pub const RenderCommand = struct {
     pub fn Draw(camera: *Camera) void {
-        for (AssetManager.GetModels()) |model| {
-            const modelMatrix = math.Mat4.createTranslation(model.position);
+        for (AssetManager.GetModels(), 0..) |model, i| {
+            const modelMatrix = AssetManager.GetWorldMatrix(i);
             model.material.setUniform("r_position", camera.viewProjectionMatrix().mul(modelMatrix));
             model.material.setUniform("r_viewPos", camera.position);
 

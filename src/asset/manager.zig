@@ -1,4 +1,5 @@
 const std = @import("std");
+const math = @import("zlm").as(f32);
 const Model = @import("model.zig").Model;
 const ModelList = std.ArrayList(Model);
 
@@ -38,8 +39,59 @@ pub const AssetManager = struct {
         return self.models.items;
     }
 
+    pub fn GetWorldMatrix(handle: AssetHandle) math.Mat4 {
+        const self = getInstance();
+        const model = &self.models.items[handle];
+        const local = model.transform.localMatrix();
+
+        if (model.transform.parent) |parent_handle| {
+            const parent_world = GetWorldMatrix(parent_handle);
+            return parent_world.mul(local);
+        }
+
+        return local;
+    }
+
+    pub fn SetParent(allocator: std.mem.Allocator, child: AssetHandle, parent: AssetHandle) !void {
+        const self = getInstance();
+        var child_model = &self.models.items[child];
+
+        // Remove from old parent if any
+        if (child_model.transform.parent) |old_parent| {
+            var old_parent_model = &self.models.items[old_parent];
+            removeChildFromList(&old_parent_model.transform.children, child);
+        }
+
+        child_model.transform.parent = parent;
+        var parent_model = &self.models.items[parent];
+        try parent_model.transform.children.append(allocator, child);
+    }
+
+    pub fn RemoveParent(child: AssetHandle) void {
+        const self = getInstance();
+        var child_model = &self.models.items[child];
+
+        if (child_model.transform.parent) |parent_handle| {
+            var parent_model = &self.models.items[parent_handle];
+            removeChildFromList(&parent_model.transform.children, child);
+            child_model.transform.parent = null;
+        }
+    }
+
+    fn removeChildFromList(children: *std.ArrayListUnmanaged(AssetHandle), child: AssetHandle) void {
+        for (children.items, 0..) |item, i| {
+            if (item == child) {
+                _ = children.swapRemove(i);
+                return;
+            }
+        }
+    }
+
     pub fn Deinit(allocator: std.mem.Allocator) void {
         const self = getInstance();
+        for (self.models.items) |*model| {
+            model.deinit(allocator);
+        }
         self.models.deinit(allocator);
     }
 };

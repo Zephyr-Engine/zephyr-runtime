@@ -51,6 +51,8 @@ pub const Mat3 = math.Mat3;
 pub const Mat4 = math.Mat4;
 
 pub const Model = @import("asset/model.zig").Model;
+pub const Transform = @import("asset/transform.zig").Transform;
+pub const Quat = @import("core/math.zig").Quat;
 
 pub const Camera = @import("scene/camera.zig").Camera;
 
@@ -61,4 +63,5 @@ test {
     _ = @import("core/event.zig");
     _ = @import("core/input.zig");
     _ = @import("scene/camera.zig");
+    _ = @import("asset/transform.zig");
 }
