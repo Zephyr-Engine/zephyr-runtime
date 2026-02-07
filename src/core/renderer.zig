@@ -9,7 +9,7 @@ pub const RenderCommand = struct {
     pub fn Draw(camera: *Camera) void {
         for (AssetManager.GetModels(), 0..) |model, i| {
             const modelMatrix = AssetManager.GetWorldMatrix(i);
-            model.material.setUniform("r_position", camera.viewProjectionMatrix().mul(modelMatrix));
+            model.material.setUniform("r_position", modelMatrix.mul(camera.viewProjectionMatrix()));
             model.material.setUniform("r_viewPos", camera.position);
 
             model.material.setUniform("r_model", modelMatrix);
