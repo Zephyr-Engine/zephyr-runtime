@@ -56,7 +56,6 @@ pub const AssetManager = struct {
         const self = getInstance();
         var child_model = &self.models.items[child];
 
-        // Remove from old parent if any
         if (child_model.transform.parent) |old_parent| {
             var old_parent_model = &self.models.items[old_parent];
             removeChildFromList(&old_parent_model.transform.children, child);

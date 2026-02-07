@@ -38,7 +38,9 @@ pub const recommended_std_options: std.Options = .{
     .logFn = @import("core/log.zig").log,
 };
 
-pub const Input = @import("core/input.zig").InputManager;
+const input_mod = @import("core/input.zig");
+pub const Input = input_mod.InputManager;
+pub const InputPosition = input_mod.Position;
 const asset = @import("asset/manager.zig");
 pub const AssetManager = asset.AssetManager;
 pub const AssetHandle = asset.AssetHandle;
