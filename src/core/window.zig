@@ -98,6 +98,11 @@ pub const Window = struct {
         return win;
     }
 
+    pub fn setSize(self: *Window, width: u32, height: u32) void {
+        self.data.width = width;
+        self.data.height = height;
+    }
+
     pub fn SetVsync(value: bool) void {
         glfw.glfwSwapInterval(@intFromBool(value));
     }

@@ -6,6 +6,7 @@ const gl = c.glad;
 const Window = @import("core/window.zig").Window;
 const Shader = @import("graphics/opengl/shader.zig").Shader;
 const VertexArray = @import("graphics/opengl/vertex_array.zig").VertexArray;
+const Application = @import("core/application.zig").Application;
 
 pub const recommended_std_options: std.Options = .{
     .logFn = @import("core/log.zig").log,
@@ -17,15 +18,15 @@ pub fn run() void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const window = Window.init(allocator, .{
+    const app = Application.init(allocator, .{
         .title = "Zephyr Engine",
         .width = null,
         .height = null,
     }) catch |err| {
-        std.log.err("Window init failed: {}", .{err});
+        std.log.err("Application init failed: {}", .{err});
         return;
     };
-    defer window.deinit(allocator);
+    defer app.deinit();
 
     const vertices = [_]f32{
         0.5, 0.5, 0.0, // top right
@@ -52,7 +53,7 @@ pub fn run() void {
     gl.glVertexAttribPointer(0, 3, gl.GL_FLOAT, gl.GL_FALSE, 3 * @sizeOf(f32), @ptrFromInt(0));
     gl.glEnableVertexAttribArray(0);
 
-    while (window.shouldCloseWindow()) {
+    while (app.window.shouldCloseWindow()) {
         Window.HandleInput();
 
         gl.glClearColor(0.4, 0.4, 0.4, 1);
@@ -62,7 +63,7 @@ pub fn run() void {
         vao.bind();
         gl.glDrawElements(gl.GL_TRIANGLES, 6, gl.GL_UNSIGNED_INT, @ptrFromInt(0));
 
-        window.swapBuffers();
+        app.window.swapBuffers();
     }
 
     Window.HandleInput();
