@@ -5,12 +5,12 @@
     .minimum_zig_version = "0.15.2",
     .dependencies = .{
         .glfw_zig = .{
-            .url = "git+https://github.com/tiawl/glfw.zig.git#83074bc9e1dd6b34ae5380bfff816ce0a3d9ffc1",
-            .hash = "glfw_zig-1.0.0-NrvYo8bXGQBjYIfoRj8XBqtJfR5G52TY_7Xr-bv6RBvb",
+            .url = "git+https://github.com/tiawl/glfw.zig.git#9ab1b6f4c855ec5ad7bc2ec77a6565746d29ec44",
+            .hash = "glfw_zig-1.0.0-NrvYo-PXGQDMOO3ilxE5n1_HpDu_auyqRlHbneGb_JwJ",
         },
         .zig_glad = .{
-            .url = "git+https://github.com/jackparsonss/zig.glad.git#9c40257dad73762be788c252dbb47a4a34d0bb8b",
-            .hash = "zig_glad-0.0.3-6OirnirhBgDz6aL0IVJ_YtvIOeyKeXklRLvT1mTH878m",
+            .url = "git+https://github.com/jackparsonss/zig.glad.git#e973c2a302d8217f6f1a65f46f5222892fe26429",
+            .hash = "zig_glad-0.0.4-6OirnjjXBgDv6gERB59NTaXKyaHC9xidaDsn-qSgOZy3",
         },
     },
     .paths = .{
