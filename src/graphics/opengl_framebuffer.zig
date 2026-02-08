@@ -150,6 +150,14 @@ pub const Framebuffer = struct {
         }
     }
 
+    pub fn readPixel(self: Framebuffer, x: i32, y: i32) [4]u8 {
+        var pixel: [4]u8 = .{ 0, 0, 0, 0 };
+        gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, self.id);
+        gl.glReadPixels(x, y, 1, 1, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, @ptrCast(&pixel));
+        gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, 0);
+        return pixel;
+    }
+
     pub fn getColorTexture(self: Framebuffer) u32 {
         return self.color_texture;
     }

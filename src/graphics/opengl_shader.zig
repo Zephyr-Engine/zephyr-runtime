@@ -204,10 +204,11 @@ pub const Shader = struct {
             .float, .comptime_float => {
                 gl.glUniform1f(location, @as(f32, value));
             },
-            .int, .comptime_int => |i| {
-                if (comptime T == comptime_int) {
-                    gl.glUniform1i(location, @as(i32, value));
-                } else if (comptime i.signedness == .signed) {
+            .comptime_int => {
+                gl.glUniform1i(location, @as(i32, value));
+            },
+            .int => |i| {
+                if (comptime i.signedness == .signed) {
                     gl.glUniform1i(location, @as(i32, value));
                 } else {
                     gl.glUniform1ui(location, @as(u32, value));
