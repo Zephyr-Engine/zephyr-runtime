@@ -13,7 +13,7 @@ pub const Quat = struct {
     z: f32,
     w: f32,
 
-    pub const IDENTITY = Quat{ .x = 0, .y = 0, .z = 0, .w = 1 };
+    pub const identity = Quat{ .x = 0, .y = 0, .z = 0, .w = 1 };
 
     pub fn fromAxisAngle(axis: math.Vec3, angle: f32) Quat {
         const half_angle = angle / 2.0;
@@ -73,12 +73,14 @@ pub const Quat = struct {
         const wy = self.w * self.y;
         const wz = self.w * self.z;
 
-        return math.Mat4.new(
-            .{ 1.0 - 2.0 * (y2 + z2), 2.0 * (xy + wz), 2.0 * (xz - wy), 0.0 },
-            .{ 2.0 * (xy - wz), 1.0 - 2.0 * (x2 + z2), 2.0 * (yz + wx), 0.0 },
-            .{ 2.0 * (xz + wy), 2.0 * (yz - wx), 1.0 - 2.0 * (x2 + y2), 0.0 },
-            .{ 0.0, 0.0, 0.0, 1.0 },
-        );
+        return .{
+            .fields = [4][4]f32{
+                [4]f32{ 1.0 - 2.0 * (y2 + z2), 2.0 * (xy + wz), 2.0 * (xz - wy), 0.0 },
+                [4]f32{ 2.0 * (xy - wz), 1.0 - 2.0 * (x2 + z2), 2.0 * (yz + wx), 0.0 },
+                [4]f32{ 2.0 * (xz + wy), 2.0 * (yz - wx), 1.0 - 2.0 * (x2 + y2), 0.0 },
+                [4]f32{ 0.0, 0.0, 0.0, 1.0 },
+            },
+        };
     }
 
     pub fn fromMat4(m: math.Mat4) Quat {

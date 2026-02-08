@@ -25,7 +25,7 @@ pub const Camera = struct {
     ) Camera {
         return .{
             .position = position,
-            .orientation = Quat.IDENTITY,
+            .orientation = Quat.identity,
             .fov = fov,
             .aspect_ratio = aspect_ratio,
             .near_plane = near_plane,
@@ -128,7 +128,7 @@ test "Camera.new creates camera with default values" {
     );
 
     try std.testing.expectEqual(math.Vec3.new(0, 0, 5), camera.position);
-    try std.testing.expectEqual(Quat.IDENTITY, camera.orientation);
+    try std.testing.expectEqual(Quat.identity, camera.orientation);
     try std.testing.expectApproxEqAbs(std.math.pi / 4.0, camera.fov, 0.001);
     try std.testing.expectApproxEqAbs(16.0 / 9.0, camera.aspect_ratio, 0.001);
     try std.testing.expectApproxEqAbs(0.1, camera.near_plane, 0.001);

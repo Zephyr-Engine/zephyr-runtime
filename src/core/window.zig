@@ -115,7 +115,7 @@ pub const Window = struct {
             },
         };
         win.setupCallbacks();
-        win.setVsync(true);
+        SetVsync(true);
 
         var fb_width: c_int = undefined;
         var fb_height: c_int = undefined;
@@ -133,14 +133,12 @@ pub const Window = struct {
         return win;
     }
 
-    pub fn setWireframeMode(self: *Window) void {
-        _ = self;
+    pub fn SetWireframeMode() void {
         gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_LINE);
     }
 
-    pub fn setVsync(self: *Window, value: bool) void {
-        _ = self;
-        glfw.glfwSwapInterval(if (value) 1 else 0);
+    pub fn SetVsync(value: bool) void {
+        glfw.glfwSwapInterval(@intFromBool(value));
     }
 
     pub fn setEventCallback(self: *Window, cb: event.ZEventCallback, app: *Application) void {
@@ -148,12 +146,11 @@ pub const Window = struct {
         self.*.data.app_ptr = app;
     }
 
-    pub fn shouldCloseWindow(self: *Window) bool {
+    pub fn shouldCloseWindow(self: *const Window) bool {
         return glfw.glfwWindowShouldClose(self.window) == 0;
     }
 
-    pub fn handleInput(self: *Window) void {
-        _ = self;
+    pub fn HandleInput() void {
         glfw.glfwPollEvents();
     }
 
@@ -161,21 +158,21 @@ pub const Window = struct {
         return glfw.glfwGetTime();
     }
 
-    pub fn getContentScale(self: *Window) struct { x: f32, y: f32 } {
+    pub fn getContentScale(self: *const Window) struct { x: f32, y: f32 } {
         var xscale: f32 = 1.0;
         var yscale: f32 = 1.0;
         glfw.glfwGetWindowContentScale(self.window, &xscale, &yscale);
         return .{ .x = xscale, .y = yscale };
     }
 
-    pub fn getFramebufferSize(self: *Window) struct { width: u32, height: u32 } {
+    pub fn getFramebufferSize(self: *const Window) struct { width: u32, height: u32 } {
         var w: c_int = 0;
         var h: c_int = 0;
         glfw.glfwGetFramebufferSize(self.window, &w, &h);
         return .{ .width = @intCast(w), .height = @intCast(h) };
     }
 
-    pub fn swapBuffers(self: *Window) void {
+    pub fn swapBuffers(self: *const Window) void {
         glfw.glfwSwapBuffers(self.window);
     }
 
@@ -185,12 +182,10 @@ pub const Window = struct {
         allocator.destroy(self);
     }
 
-    /// Set the cursor for this window
-    pub fn setCursor(self: *Window, cursor: ?*Cursor) void {
+    pub fn setCursor(self: *const Window, cursor: ?*Cursor) void {
         glfw.glfwSetCursor(self.window, @ptrCast(cursor));
     }
 
-    /// Create a standard cursor
     pub fn createStandardCursor(shape: CursorShape) ?*Cursor {
         const glfw_shape: c_int = switch (shape) {
             .arrow => glfw.GLFW_ARROW_CURSOR,
@@ -203,7 +198,6 @@ pub const Window = struct {
         return @ptrCast(glfw.glfwCreateStandardCursor(glfw_shape));
     }
 
-    /// Destroy a cursor
     pub fn destroyCursor(cursor: ?*Cursor) void {
         if (cursor) |cur| {
             glfw.glfwDestroyCursor(@ptrCast(cur));

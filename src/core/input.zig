@@ -1,8 +1,9 @@
 const std = @import("std");
+const build_options = @import("build_options");
 
 const event = @import("event.zig");
 
-const Position = struct {
+pub const Position = struct {
     x: f32,
     y: f32,
 };
@@ -19,6 +20,8 @@ pub const InputManager = struct {
     released_buttons: [8]bool,
     held_buttons: [8]bool,
 
+    enabled: if (build_options.editor) bool else void,
+
     var instance: ?InputManager = null;
     var once = std.once(init);
 
@@ -33,6 +36,7 @@ pub const InputManager = struct {
             .pressed_buttons = [_]bool{false} ** 8,
             .released_buttons = [_]bool{false} ** 8,
             .held_buttons = [_]bool{false} ** 8,
+            .enabled = if (build_options.editor) true else {},
         };
     }
 
@@ -49,6 +53,13 @@ pub const InputManager = struct {
         @memset(&self.released_buttons, false);
         self.mouse_scroll = .{ .x = 0.0, .y = 0.0 };
         self.mouse_delta = .{ .x = 0.0, .y = 0.0 };
+    }
+
+    pub fn setEnabled(enabled: bool) void {
+        if (build_options.editor) {
+            const self = getInstance();
+            self.enabled = enabled;
+        }
     }
 
     pub fn Update(ev: event.ZEvent) void {
@@ -93,59 +104,94 @@ pub const InputManager = struct {
         }
     }
 
+    pub fn GetMousePos() Position {
+        const self = getInstance();
+        return self.mouse_pos;
+    }
+
     pub fn IsKeyPressed(key: event.Key) bool {
         const self = getInstance();
+        if (build_options.editor) {
+            if (!self.enabled) return false;
+        }
         const k = @intFromEnum(key);
         return self.pressed_keys[k];
     }
 
     pub fn IsKeyReleased(key: event.Key) bool {
         const self = getInstance();
+        if (build_options.editor) {
+            if (!self.enabled) return false;
+        }
         const k = @intFromEnum(key);
         return self.released_keys[k];
     }
 
     pub fn IsKeyHeld(key: event.Key) bool {
         const self = getInstance();
+        if (build_options.editor) {
+            if (!self.enabled) return false;
+        }
         const k = @intFromEnum(key);
         return self.held_keys[k];
     }
 
     pub fn IsButtonPressed(button: event.MouseButton) bool {
         const self = getInstance();
+        if (build_options.editor) {
+            if (!self.enabled) return false;
+        }
         const b = @intFromEnum(button);
         return self.pressed_buttons[b];
     }
 
     pub fn IsButtonReleased(button: event.MouseButton) bool {
         const self = getInstance();
+        if (build_options.editor) {
+            if (!self.enabled) return false;
+        }
         const b = @intFromEnum(button);
         return self.released_buttons[b];
     }
 
     pub fn IsButtonHeld(button: event.MouseButton) bool {
         const self = getInstance();
+        if (build_options.editor) {
+            if (!self.enabled) return false;
+        }
         const b = @intFromEnum(button);
         return self.held_buttons[b];
     }
 
     pub fn IsScrollingY() bool {
         const self = getInstance();
+        if (build_options.editor) {
+            if (!self.enabled) return false;
+        }
         return self.mouse_scroll.y != 0;
     }
 
     pub fn IsScrollingX() bool {
         const self = getInstance();
+        if (build_options.editor) {
+            if (!self.enabled) return false;
+        }
         return self.mouse_scroll.x != 0;
     }
 
     pub fn GetMouseMoveDelta() Position {
         const self = getInstance();
+        if (build_options.editor) {
+            if (!self.enabled) return .{ .x = 0.0, .y = 0.0 };
+        }
         return self.mouse_delta;
     }
 
     pub fn GetMouseScroll() Position {
         const self = getInstance();
+        if (build_options.editor) {
+            if (!self.enabled) return .{ .x = 0.0, .y = 0.0 };
+        }
         return self.mouse_scroll;
     }
 };

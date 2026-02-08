@@ -38,7 +38,12 @@ pub const recommended_std_options: std.Options = .{
     .logFn = @import("core/log.zig").log,
 };
 
-pub const Input = @import("core/input.zig").InputManager;
+const input_mod = @import("core/input.zig");
+pub const Input = input_mod.InputManager;
+pub const InputPosition = input_mod.Position;
+const asset = @import("asset/manager.zig");
+pub const AssetManager = asset.AssetManager;
+pub const AssetHandle = asset.AssetHandle;
 
 const math = @import("core/math.zig");
 pub const Vec3 = math.Vec3;
@@ -48,6 +53,8 @@ pub const Mat3 = math.Mat3;
 pub const Mat4 = math.Mat4;
 
 pub const Model = @import("asset/model.zig").Model;
+pub const Transform = @import("asset/transform.zig").Transform;
+pub const Quat = @import("core/math.zig").Quat;
 
 pub const Camera = @import("scene/camera.zig").Camera;
 
@@ -58,4 +65,5 @@ test {
     _ = @import("core/event.zig");
     _ = @import("core/input.zig");
     _ = @import("scene/camera.zig");
+    _ = @import("asset/transform.zig");
 }

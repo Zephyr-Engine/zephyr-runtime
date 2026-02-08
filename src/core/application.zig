@@ -7,6 +7,7 @@ const Time = @import("time.zig").Time;
 const Input = @import("input.zig").InputManager;
 const va = @import("../graphics/opengl_vertex_array.zig");
 const Shader = @import("../graphics/opengl_shader.zig").Shader;
+const AssetManager = @import("../asset/manager.zig").AssetManager;
 
 var isRunning = true;
 
@@ -45,6 +46,7 @@ pub const Application = struct {
     }
 
     pub fn deinit(self: *Application, allocator: std.mem.Allocator) void {
+        AssetManager.Deinit(allocator);
         self.scene_manager.deinit();
         self.window.deinit(allocator);
         allocator.destroy(self);
@@ -85,7 +87,7 @@ pub const Application = struct {
             const current_time = win.Window.GetTime();
             app.time.update(@floatCast(current_time));
 
-            app.window.handleInput();
+            win.Window.HandleInput();
 
             app.scene_manager.update(app.time.delta_time);
 
@@ -93,6 +95,6 @@ pub const Application = struct {
             Input.Clear();
         }
 
-        app.window.handleInput();
+        win.Window.HandleInput();
     }
 };

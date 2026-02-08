@@ -1,5 +1,5 @@
 const std = @import("std");
-const Vec3 = @import("../root.zig").Vec3;
+const Transform = @import("transform.zig").Transform;
 
 const VertexArray = @import("../graphics/opengl_vertex_array.zig").VertexArray;
 const MaterialInstance = @import("material.zig").MaterialInstance;
@@ -8,9 +8,9 @@ const obj = @import("object.zig");
 pub const Model = struct {
     vao: VertexArray,
     material: *const MaterialInstance,
-    position: Vec3,
+    transform: Transform,
 
-    pub fn init(allocator: std.mem.Allocator, mesh_data: []const u8, material: *const MaterialInstance, position: Vec3) !Model {
+    pub fn init(allocator: std.mem.Allocator, mesh_data: []const u8, material: *const MaterialInstance, transform: Transform) !Model {
         var mesh = try obj.parse(allocator, mesh_data);
         const vao = try VertexArray.init(mesh.vertices, mesh.indices);
         mesh.deinit();
@@ -20,11 +20,15 @@ pub const Model = struct {
         return .{
             .vao = vao,
             .material = material,
-            .position = position,
+            .transform = transform,
         };
     }
 
-    pub fn draw(self: *Model) void {
+    pub fn deinit(self: *Model, allocator: std.mem.Allocator) void {
+        self.transform.deinit(allocator);
+    }
+
+    pub fn draw(self: *const Model) void {
         self.vao.draw();
     }
 };

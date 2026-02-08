@@ -3,6 +3,11 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const editor = b.option(bool, "editor", "Include editor support (input toggle)") orelse true;
+
+    const options = b.addOptions();
+    options.addOption(bool, "editor", editor);
+
     const glfw_dep = b.dependency("glfw_zig", .{
         .target = target,
         .optimize = optimize,
@@ -26,6 +31,7 @@ pub fn build(b: *std.Build) void {
     runtime_mod.linkLibrary(glfw_dep.artifact("glfw"));
     runtime_mod.linkLibrary(glad_dep.artifact("glad"));
     runtime_mod.addImport("zlm", zlm.module("zlm"));
+    runtime_mod.addOptions("build_options", options);
 
     // Add a check step to populate LSP data
     const check = b.step("check", "Check if the library compiles");
@@ -36,6 +42,7 @@ pub fn build(b: *std.Build) void {
     });
     lib_check.linkLibrary(glfw_dep.artifact("glfw"));
     lib_check.linkLibrary(glad_dep.artifact("glad"));
+    lib_check.addOptions("build_options", options);
 
     const check_compile = b.addObject(.{
         .name = "zephyr_runtime_check",
@@ -53,6 +60,7 @@ pub fn build(b: *std.Build) void {
     test_mod.linkLibrary(glfw_dep.artifact("glfw"));
     test_mod.linkLibrary(glad_dep.artifact("glad"));
     test_mod.addImport("zlm", zlm.module("zlm"));
+    test_mod.addOptions("build_options", options);
 
     const tests = b.addTest(.{
         .root_module = test_mod,
