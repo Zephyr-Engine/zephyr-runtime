@@ -5,10 +5,10 @@ const application = @import("core/application.zig");
 pub const Application = application.Application;
 pub const ApplicationProps = application.ApplicationProps;
 
-const window_mod = @import("core/window.zig");
-pub const Window = window_mod.Window;
-pub const Cursor = window_mod.Cursor;
-pub const CursorShape = window_mod.CursorShape;
+const window = @import("core/window.zig");
+pub const Window = window.Window;
+pub const Cursor = window.Cursor;
+pub const CursorShape = window.CursorShape;
 
 const scene = @import("core/scene.zig");
 pub const Scene = scene.Scene;

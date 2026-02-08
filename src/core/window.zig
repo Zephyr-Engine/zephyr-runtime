@@ -7,7 +7,13 @@ const c = @import("../c.zig");
 const glfw = c.glfw;
 const gl = c.glad;
 
-/// Standard cursor shapes
+pub const WindowError = error{
+    InitializeFailed,
+    ContextLoadFailed,
+    MemoryError,
+    OutOfMemory,
+};
+
 pub const CursorShape = enum {
     arrow,
     ibeam,
@@ -17,14 +23,11 @@ pub const CursorShape = enum {
     vresize,
 };
 
-/// Opaque cursor handle
 pub const Cursor = opaque {};
 
 pub const WindowData = struct {
     width: u32,
     height: u32,
-    eventCallback: event.ZEventCallback,
-    app_ptr: ?*Application,
 };
 
 pub const WindowParams = struct {
@@ -53,24 +56,13 @@ pub const Window = struct {
     window: c.Window,
     data: WindowData,
 
-    fn setupCallbacks(self: *Window) void {
-        glfw.glfwSetWindowUserPointer(self.window, &self.data);
-        _ = glfw.glfwSetMouseButtonCallback(self.window, event.mouseButtonCallback);
-        _ = glfw.glfwSetKeyCallback(self.window, event.keyButtonCallback);
-        _ = glfw.glfwSetCharCallback(self.window, event.charCallback);
-        _ = glfw.glfwSetWindowSizeCallback(self.window, event.windowResizeCallback);
-        _ = glfw.glfwSetFramebufferSizeCallback(self.window, event.framebufferSizeCallback);
-        _ = glfw.glfwSetWindowContentScaleCallback(self.window, event.contentScaleCallback);
-        _ = glfw.glfwSetWindowCloseCallback(self.window, event.windowCloseCallback);
-        _ = glfw.glfwSetCursorPosCallback(self.window, event.cursorPosCallback);
-        _ = glfw.glfwSetScrollCallback(self.window, event.cursorScrollCallback);
-    }
-
-    pub fn init(allocator: std.mem.Allocator, params: WindowParams) !?*Window {
+    pub fn init(allocator: std.mem.Allocator, params: WindowParams) WindowError!*Window {
         if (glfw.glfwInit() == 0) {
             std.log.err("Failed to initialize glfw", .{});
-            return null;
+            return WindowError.InitializeFailed;
         }
+        errdefer glfw.glfwTerminate();
+
         glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MAJOR, 3);
         glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MINOR, 3);
         glfw.glfwWindowHint(glfw.GLFW_OPENGL_PROFILE, glfw.GLFW_OPENGL_CORE_PROFILE);
@@ -81,11 +73,7 @@ pub const Window = struct {
             }
         }
 
-        const title = allocator.dupeZ(u8, params.title) catch {
-            std.log.err("Failed to duplicate window title", .{});
-            glfw.glfwTerminate();
-            return null;
-        };
+        const title = try allocator.dupeZ(u8, params.title);
         defer allocator.free(title);
 
         const width = if (params.width) |w| w else getDefaultWidth();
@@ -94,27 +82,29 @@ pub const Window = struct {
         const window = glfw.glfwCreateWindow(@intCast(width), @intCast(height), title, null, null);
         if (window == null) {
             std.log.err("Failed to initialize glfw window", .{});
-            return null;
+            return WindowError.InitializeFailed;
         }
+        errdefer glfw.glfwDestroyWindow(window);
 
         glfw.glfwMakeContextCurrent(window);
+
         const loader: gl.GLADloadproc = @ptrCast(&glfw.glfwGetProcAddress);
         if (gl.gladLoadGLLoader(loader) == 0) {
-            std.log.err("Failed to load OpenGL", .{});
-            return null;
+            std.log.err("Failed to load glad", .{});
+            return WindowError.ContextLoadFailed;
         }
 
-        const win = try allocator.create(Window);
+        const win = allocator.create(Window) catch |err| {
+            std.log.err("Failed to allocate Window: {}", .{err});
+            return WindowError.MemoryError;
+        };
         win.* = Window{
             .window = window,
             .data = WindowData{
                 .width = width,
                 .height = height,
-                .eventCallback = undefined,
-                .app_ptr = null,
             },
         };
-        win.setupCallbacks();
         SetVsync(true);
 
         var fb_width: c_int = undefined;
@@ -133,17 +123,30 @@ pub const Window = struct {
         return win;
     }
 
+    pub fn setWindowData(self: *const Window, data: *Application) void {
+        glfw.glfwSetWindowUserPointer(self.window, data);
+        _ = glfw.glfwSetMouseButtonCallback(self.window, event.mouseButtonCallback);
+        _ = glfw.glfwSetKeyCallback(self.window, event.keyButtonCallback);
+        _ = glfw.glfwSetCharCallback(self.window, event.charCallback);
+        _ = glfw.glfwSetWindowSizeCallback(self.window, event.windowResizeCallback);
+        _ = glfw.glfwSetFramebufferSizeCallback(self.window, event.framebufferSizeCallback);
+        _ = glfw.glfwSetWindowContentScaleCallback(self.window, event.contentScaleCallback);
+        _ = glfw.glfwSetWindowCloseCallback(self.window, event.windowCloseCallback);
+        _ = glfw.glfwSetCursorPosCallback(self.window, event.cursorPosCallback);
+        _ = glfw.glfwSetScrollCallback(self.window, event.cursorScrollCallback);
+    }
+
+    pub fn setSize(self: *Window, width: u32, height: u32) void {
+        self.data.width = width;
+        self.data.height = height;
+    }
+
     pub fn SetWireframeMode() void {
         gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_LINE);
     }
 
     pub fn SetVsync(value: bool) void {
         glfw.glfwSwapInterval(@intFromBool(value));
-    }
-
-    pub fn setEventCallback(self: *Window, cb: event.ZEventCallback, app: *Application) void {
-        self.*.data.eventCallback = cb;
-        self.*.data.app_ptr = app;
     }
 
     pub fn shouldCloseWindow(self: *const Window) bool {
@@ -176,12 +179,6 @@ pub const Window = struct {
         glfw.glfwSwapBuffers(self.window);
     }
 
-    pub fn deinit(self: *Window, allocator: std.mem.Allocator) void {
-        glfw.glfwTerminate();
-        glfw.glfwDestroyWindow(self.window);
-        allocator.destroy(self);
-    }
-
     pub fn setCursor(self: *const Window, cursor: ?*Cursor) void {
         glfw.glfwSetCursor(self.window, @ptrCast(cursor));
     }
@@ -204,20 +201,22 @@ pub const Window = struct {
         }
     }
 
-    /// Get the current window context (for use with setCursor when window handle not available)
     pub fn getCurrentContext() ?*Window {
         const ctx = glfw.glfwGetCurrentContext();
         if (ctx == null) return null;
-        // Note: This returns a pointer that allows setCursor but not full Window operations
-        // since we don't have access to the full Window struct from just the GLFW handle
         return @ptrCast(@alignCast(ctx));
     }
 
-    /// Set cursor on the current context window (convenience for callbacks)
     pub fn setCurrentContextCursor(cursor: ?*Cursor) void {
         const ctx = glfw.glfwGetCurrentContext();
         if (ctx != null) {
             glfw.glfwSetCursor(ctx, @ptrCast(cursor));
         }
+    }
+
+    pub fn deinit(self: *Window, allocator: std.mem.Allocator) void {
+        glfw.glfwTerminate();
+        glfw.glfwDestroyWindow(self.window);
+        allocator.destroy(self);
     }
 };
