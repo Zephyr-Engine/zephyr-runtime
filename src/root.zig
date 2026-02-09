@@ -25,6 +25,7 @@ pub const Material = material.Material;
 pub const MaterialInstance = material.MaterialInstance;
 pub const MaterialLighting = material.Lighting;
 pub const Light = @import("asset/light.zig").Light;
+pub const LightKind = @import("asset/light.zig").LightKind;
 
 pub const Shader = @import("graphics/opengl_shader.zig").Shader;
 pub const VertexArray = @import("graphics/opengl_vertex_array.zig").VertexArray;
@@ -44,6 +45,7 @@ pub const InputPosition = input_mod.Position;
 const asset = @import("asset/manager.zig");
 pub const AssetManager = asset.AssetManager;
 pub const AssetHandle = asset.AssetHandle;
+pub const LightHandle = asset.LightHandle;
 
 const math = @import("core/math.zig");
 pub const Vec3 = math.Vec3;

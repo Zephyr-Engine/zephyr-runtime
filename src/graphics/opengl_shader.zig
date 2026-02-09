@@ -22,9 +22,42 @@ pub const Shader = struct {
     allocator: std.mem.Allocator,
     uniforms: Map,
 
+    const includes = std.StaticStringMap([]const u8).initComptime(.{
+        .{ "lighting", @embedFile("shaders/lighting.glsl") },
+    });
+
+    fn preprocess(allocator: std.mem.Allocator, src: []const u8) ShaderError!?[]u8 {
+        const needle = "#include \"";
+        const start = std.mem.indexOf(u8, src, needle) orelse return null;
+        const name_start = start + needle.len;
+        const name_end = std.mem.indexOfScalarPos(u8, src, name_start, '"') orelse return null;
+        const name = src[name_start..name_end];
+
+        const replacement = includes.get(name) orelse {
+            std.log.err("Unknown shader include: {s}", .{name});
+            return null;
+        };
+
+        const line_end = std.mem.indexOfScalarPos(u8, src, name_end, '\n') orelse src.len;
+
+        const result = try allocator.alloc(u8, start + replacement.len + (src.len - line_end));
+        @memcpy(result[0..start], src[0..start]);
+        @memcpy(result[start .. start + replacement.len], replacement);
+        @memcpy(result[start + replacement.len ..], src[line_end..]);
+        return result;
+    }
+
     pub fn init(allocator: std.mem.Allocator, vs_src: []const u8, fs_src: []const u8) ShaderError!Shader {
+        const vs_processed = try preprocess(allocator, vs_src);
+        defer if (vs_processed) |p| allocator.free(p);
+        const vs_final = vs_processed orelse vs_src;
+
+        const fs_processed = try preprocess(allocator, fs_src);
+        defer if (fs_processed) |p| allocator.free(p);
+        const fs_final = fs_processed orelse fs_src;
+
         const vs_ptrs = [_][*c]const u8{
-            @ptrCast(vs_src.ptr),
+            @ptrCast(vs_final.ptr),
         };
 
         const vs: u32 = gl.glCreateShader(gl.GL_VERTEX_SHADER);
@@ -46,7 +79,7 @@ pub const Shader = struct {
         }
 
         const fs_ptrs = [_][*c]const u8{
-            @ptrCast(fs_src.ptr),
+            @ptrCast(fs_final.ptr),
         };
 
         const fs: u32 = gl.glCreateShader(gl.GL_FRAGMENT_SHADER);

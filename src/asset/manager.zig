@@ -1,12 +1,17 @@
 const std = @import("std");
 const math = @import("zlm").as(f32);
 const Model = @import("model.zig").Model;
+const Light = @import("light.zig").Light;
 const ModelList = std.ArrayList(Model);
+const LightList = std.ArrayList(Light);
 
 pub const AssetHandle = usize;
 
+pub const LightHandle = usize;
+
 pub const AssetManager = struct {
     models: ModelList,
+    lights: LightList,
 
     var instance: ?AssetManager = null;
     var once = std.once(init);
@@ -14,6 +19,7 @@ pub const AssetManager = struct {
     fn init() void {
         instance = AssetManager{
             .models = .empty,
+            .lights = .empty,
         };
     }
 
@@ -86,11 +92,34 @@ pub const AssetManager = struct {
         }
     }
 
+    pub fn PushLight(allocator: std.mem.Allocator, light: Light) !LightHandle {
+        const self = getInstance();
+        const handle = self.lights.items.len;
+        try self.lights.append(allocator, light);
+        return handle;
+    }
+
+    pub fn GetLight(handle: LightHandle) *Light {
+        const self = getInstance();
+        return &self.lights.items[handle];
+    }
+
+    pub fn GetLights() []Light {
+        const self = getInstance();
+        return self.lights.items;
+    }
+
+    pub fn LightCount() usize {
+        const self = getInstance();
+        return self.lights.items.len;
+    }
+
     pub fn Deinit(allocator: std.mem.Allocator) void {
         const self = getInstance();
         for (self.models.items) |*model| {
             model.deinit(allocator);
         }
         self.models.deinit(allocator);
+        self.lights.deinit(allocator);
     }
 };

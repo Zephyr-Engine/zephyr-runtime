@@ -1,7 +1,7 @@
 const std = @import("std");
 const AssetManager = @import("../asset/manager.zig").AssetManager;
 const Camera = @import("../scene/camera.zig").Camera;
-const Model = @import("../asset/model.zig").Model;
+const Light = @import("../asset/light.zig").Light;
 const Shader = @import("../graphics/opengl_shader.zig").Shader;
 const math = @import("zlm").as(f32);
 const c = @import("../c.zig");
@@ -19,8 +19,40 @@ pub const RenderCommand = struct {
             model.material.setUniform("material.diffuse", model.material.lighting.diffuse);
             model.material.setUniform("material.specular", model.material.lighting.specular);
             model.material.setUniform("material.shininess", model.material.lighting.shininess);
+
+            uploadLights(model.material.material.shader);
+
             model.draw();
         }
+    }
+
+    fn uploadLights(shader: *const Shader) void {
+        const lights = AssetManager.GetLights();
+        const count: i32 = @intCast(@min(lights.len, 16));
+        shader.setUniform("numLights", count);
+
+        for (lights[0..@intCast(count)], 0..) |light, i| {
+            var buf: [64]u8 = undefined;
+            const prefix = std.fmt.bufPrint(&buf, "lights[{d}].", .{i}) catch continue;
+            const p = prefix.len;
+
+            setField(shader, &buf, p, "kind", @as(i32, @intFromEnum(light.kind)));
+            setField(shader, &buf, p, "position", light.position);
+            setField(shader, &buf, p, "direction", light.direction);
+            setField(shader, &buf, p, "ambient", light.ambient);
+            setField(shader, &buf, p, "diffuse", light.diffuse);
+            setField(shader, &buf, p, "specular", light.specular);
+            setField(shader, &buf, p, "constant", light.constant);
+            setField(shader, &buf, p, "linear", light.linear);
+            setField(shader, &buf, p, "quadratic", light.quadratic);
+            setField(shader, &buf, p, "cutOff", light.cut_off);
+            setField(shader, &buf, p, "outerCutOff", light.outer_cut_off);
+        }
+    }
+
+    fn setField(shader: *const Shader, buf: *[64]u8, prefix_len: usize, field: []const u8, value: anytype) void {
+        @memcpy(buf[prefix_len .. prefix_len + field.len], field);
+        shader.setUniform(buf[0 .. prefix_len + field.len], value);
     }
 
     pub fn Clear(color: math.Vec3) void {
