@@ -40,24 +40,25 @@ pub const RenderCommand = struct {
         gl.glDisable(gl.GL_MULTISAMPLE);
     }
 
-    pub fn DrawPicking(camera: *Camera, shader: *Shader) void {
-        shader.bind();
-        const vp = camera.viewProjectionMatrix();
-
-        for (AssetManager.GetModels(), 0..) |model, i| {
-            const model_mat = AssetManager.GetWorldMatrix(i);
-            const mvp = model_mat.mul(vp);
-            shader.setUniform("u_mvp", mvp);
-            shader.setUniform("u_objectId", @as(i32, @intCast(i)));
-            model.vao.draw();
+    pub fn DrawModel(camera: *Camera, model_index: usize, shader: *Shader) void {
+        const models = AssetManager.GetModels();
+        if (model_index >= models.len) {
+            return;
         }
+        const model = models[model_index];
+
+        const model_mat = AssetManager.GetWorldMatrix(model_index);
+        const vp = camera.viewProjectionMatrix();
+        const mvp = model_mat.mul(vp);
+        shader.setUniform("u_mvp", mvp);
+        model.vao.draw();
     }
 
-    pub fn DrawOutline(camera: *Camera, model_index: usize, shader: *Shader, outline_color: math.Vec3, scale_factor: f32) void {
-        shader.bind();
-
+    pub fn DrawStencilOutline(camera: *Camera, model_index: usize, shader: *Shader, scale_factor: f32) void {
         const models = AssetManager.GetModels();
-        if (model_index >= models.len) return;
+        if (model_index >= models.len) {
+            return;
+        }
         const model = models[model_index];
 
         const model_mat = AssetManager.GetWorldMatrix(model_index);
@@ -77,7 +78,6 @@ pub const RenderCommand = struct {
 
         const mvp_normal = model_mat.mul(vp);
         shader.setUniform("u_mvp", mvp_normal);
-        shader.setUniform("u_outlineColor", outline_color);
         model.vao.draw();
 
         // --- Pass 2: Render scaled-up model where stencil != 1 ---
@@ -91,7 +91,6 @@ pub const RenderCommand = struct {
         const scaled_model_mat = model_mat.mul(scale_mat);
         const mvp_scaled = scaled_model_mat.mul(vp);
         shader.setUniform("u_mvp", mvp_scaled);
-        shader.setUniform("u_outlineColor", outline_color);
         model.vao.draw();
 
         // --- Restore GL state ---

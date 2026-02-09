@@ -58,6 +58,8 @@ pub const Quat = @import("core/math.zig").Quat;
 
 pub const Camera = @import("scene/camera.zig").Camera;
 
+pub const SceneSnapshot = @import("core/scene_state.zig").SceneSnapshot;
+
 test {
     @import("std").testing.refAllDecls(@This());
     _ = @import("core/time.zig");
@@ -66,4 +68,5 @@ test {
     _ = @import("core/input.zig");
     _ = @import("scene/camera.zig");
     _ = @import("asset/transform.zig");
+    _ = @import("core/scene_state.zig");
 }
