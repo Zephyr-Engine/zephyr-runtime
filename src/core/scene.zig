@@ -14,7 +14,6 @@ pub fn isScene(comptime T: type) bool {
 }
 
 fn validateSceneSignatures(comptime T: type) void {
-    // Get function types
     const onStartup_type = @TypeOf(@field(T, "onStartup"));
     const onUpdate_type = @TypeOf(@field(T, "onUpdate"));
     const onEvent_type = @TypeOf(@field(T, "onEvent"));
@@ -25,8 +24,6 @@ fn validateSceneSignatures(comptime T: type) void {
     const onEvent_info = @typeInfo(onEvent_type);
     const onCleanup_info = @typeInfo(onCleanup_type);
 
-    // Validate onStartup signature: fn(*T, std.mem.Allocator) !void
-    // Note: We accept both !void and void, but !void errors will be caught at runtime
     if (onStartup_info != .@"fn") {
         @compileError("onStartup must be a function");
     }
@@ -35,7 +32,6 @@ fn validateSceneSignatures(comptime T: type) void {
         @compileError("onStartup must have signature: fn(*" ++ @typeName(T) ++ ", std.mem.Allocator) !void or void");
     }
 
-    // Validate onUpdate signature: fn(*T, f32) void
     if (onUpdate_info != .@"fn") {
         @compileError("onUpdate must be a function");
     }
@@ -47,7 +43,6 @@ fn validateSceneSignatures(comptime T: type) void {
         @compileError("onUpdate must return void, not " ++ @typeName(update_fn.return_type.?));
     }
 
-    // Validate onEvent signature: fn(*T, event.ZEvent) void
     if (onEvent_info != .@"fn") {
         @compileError("onEvent must be a function");
     }
@@ -59,7 +54,6 @@ fn validateSceneSignatures(comptime T: type) void {
         @compileError("onEvent must return void, not " ++ @typeName(event_fn.return_type.?));
     }
 
-    // Validate onCleanup signature: fn(*T, std.mem.Allocator) void
     if (onCleanup_info != .@"fn") {
         @compileError("onCleanup must be a function");
     }
@@ -91,7 +85,6 @@ pub const Scene = struct {
                 "Required methods: onStartup, onUpdate, onEvent, onCleanup");
         }
 
-        // Compile-time validation of function signatures
         comptime validateSceneSignatures(T);
 
         const gen = struct {

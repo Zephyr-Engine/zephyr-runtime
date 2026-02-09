@@ -13,13 +13,14 @@ pub const ShaderError = error{
     ProgramCreationFailed,
     ProgramLinkingFailed,
     OpenGLError,
-    MemoryError,
+    OutOfMemory,
 };
 
 pub const Shader = struct {
     id: ShaderHandle,
     buffer_layout: layout.BufferLayout,
     allocator: std.mem.Allocator,
+    uniforms: Map,
 
     pub fn init(allocator: std.mem.Allocator, vs_src: []const u8, fs_src: []const u8) ShaderError!Shader {
         const vs_ptrs = [_][*c]const u8{
@@ -98,10 +99,7 @@ pub const Shader = struct {
             name: [256]u8,
             location: u32,
         };
-        var attrs = allocator.alloc(AttributeInfo, @intCast(count)) catch |err| {
-            std.log.err("Failed to allocate shader attribute info: {}", .{err});
-            return ShaderError.MemoryError;
-        };
+        var attrs = try allocator.alloc(AttributeInfo, @intCast(count));
         defer allocator.free(attrs);
 
         for (0..@intCast(count)) |i| {
@@ -142,27 +140,27 @@ pub const Shader = struct {
         }.lessThan);
 
         var stride: u32 = 0;
-        var bufferElements = layout.BufferElements.initCapacity(allocator, @intCast(count)) catch |err| {
-            std.log.err("Failed to initialize buffer elements: {}", .{err});
-            return ShaderError.MemoryError;
-        };
+        var bufferElements = try layout.BufferElements.initCapacity(allocator, @intCast(count));
         for (attrs) |attr| {
             const element = layout.BufferElement.new(attr.shader_type, stride, false, attr.name, attr.location);
             stride += element.size;
-            bufferElements.append(allocator, element) catch |err| {
-                std.log.err("Failed to append buffer element: {}", .{err});
-                return ShaderError.MemoryError;
-            };
+            try bufferElements.append(allocator, element);
         }
 
         return .{
             .id = program,
             .buffer_layout = layout.BufferLayout.new(bufferElements, stride),
             .allocator = allocator,
+            .uniforms = try getUniformLocations(program, allocator),
         };
     }
 
     pub fn deinit(self: *Shader) void {
+        var it = self.uniforms.keyIterator();
+        while (it.next()) |key| {
+            self.allocator.free(key.*);
+        }
+        self.uniforms.deinit();
         self.buffer_layout.elements.deinit(self.allocator);
     }
 
@@ -174,9 +172,10 @@ pub const Shader = struct {
         name: *const []u8,
         location: i32,
     };
-    pub fn getUniformLocations(self: Shader, allocator: std.mem.Allocator) !Map {
+
+    fn getUniformLocations(self: ShaderHandle, allocator: std.mem.Allocator) ShaderError!Map {
         var count: i32 = 0;
-        gl.glGetProgramiv(self.id, gl.GL_ACTIVE_UNIFORMS, &count);
+        gl.glGetProgramiv(self, gl.GL_ACTIVE_UNIFORMS, &count);
 
         var map = Map.init(allocator);
         try map.ensureTotalCapacity(@intCast(count));
@@ -186,8 +185,8 @@ pub const Shader = struct {
             var size: i32 = 0;
             var ty: u32 = 0;
             var name: [256]u8 = undefined;
-            gl.glGetActiveUniform(self.id, @intCast(i), 257, &length, &size, &ty, @ptrCast(&name));
-            const loc = gl.glGetUniformLocation(self.id, @ptrCast(&name));
+            gl.glGetActiveUniform(self, @intCast(i), 257, &length, &size, &ty, @ptrCast(&name));
+            const loc = gl.glGetUniformLocation(self, @ptrCast(&name));
 
             const name_slice = name[0..@intCast(length)];
             const owned_name = try allocator.dupe(u8, name_slice);
@@ -197,8 +196,12 @@ pub const Shader = struct {
         return map;
     }
 
-    pub fn setUniform(self: Shader, location: i32, value: anytype) void {
-        _ = self;
+    pub fn setUniform(self: *const Shader, name: []const u8, value: anytype) void {
+        const location = self.uniforms.get(name) orelse {
+            std.log.err("Could not find uniform with name: {s}", .{name});
+            return;
+        };
+
         const T = comptime @TypeOf(value);
         switch (comptime @typeInfo(T)) {
             .float, .comptime_float => {

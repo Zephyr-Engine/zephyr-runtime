@@ -1,5 +1,4 @@
 const std = @import("std");
-const Map = std.StringHashMap(i32);
 
 const math = @import("../core/math.zig");
 const Shader = @import("../graphics/opengl_shader.zig").Shader;
@@ -13,23 +12,13 @@ pub const Lighting = struct {
 
 pub const Material = struct {
     shader: *Shader,
-    uniforms: Map,
     allocator: std.mem.Allocator,
 
-    pub fn init(allocator: std.mem.Allocator, shader: *Shader) !Material {
+    pub fn init(allocator: std.mem.Allocator, shader: *Shader) Material {
         return .{
             .shader = shader,
-            .uniforms = try shader.getUniformLocations(allocator),
             .allocator = allocator,
         };
-    }
-
-    pub fn deinit(self: *Material) void {
-        var it = self.uniforms.keyIterator();
-        while (it.next()) |key| {
-            self.allocator.free(key.*);
-        }
-        self.uniforms.deinit();
     }
 
     pub fn instaniate(self: *const Material, lighting: Lighting) MaterialInstance {
@@ -47,12 +36,7 @@ pub const MaterialInstance = struct {
     lighting: Lighting,
 
     pub fn setUniform(self: *const MaterialInstance, name: []const u8, value: anytype) void {
-        const location = self.material.uniforms.get(name);
-        if (location) |loc| {
-            self.material.shader.bind();
-            self.material.shader.setUniform(loc, value);
-        } else {
-            std.log.err("Could not find uniform with name: {s}", .{name});
-        }
+        self.material.shader.bind();
+        self.material.shader.setUniform(name, value);
     }
 };

@@ -40,25 +40,21 @@ pub const RenderCommand = struct {
         gl.glDisable(gl.GL_MULTISAMPLE);
     }
 
-    pub fn DrawPicking(camera: *Camera, shader: *Shader, uniforms: *std.StringHashMap(i32)) void {
+    pub fn DrawPicking(camera: *Camera, shader: *Shader) void {
         shader.bind();
-        const mvp_loc = uniforms.get("u_mvp") orelse return;
-        const id_loc = uniforms.get("u_objectId") orelse return;
         const vp = camera.viewProjectionMatrix();
 
         for (AssetManager.GetModels(), 0..) |model, i| {
             const model_mat = AssetManager.GetWorldMatrix(i);
             const mvp = model_mat.mul(vp);
-            shader.setUniform(mvp_loc, mvp);
-            shader.setUniform(id_loc, @as(i32, @intCast(i)));
+            shader.setUniform("u_mvp", mvp);
+            shader.setUniform("u_objectId", @as(i32, @intCast(i)));
             model.vao.draw();
         }
     }
 
-    pub fn DrawOutline(camera: *Camera, model_index: usize, shader: *Shader, uniforms: *std.StringHashMap(i32), outline_color: math.Vec3, scale_factor: f32) void {
+    pub fn DrawOutline(camera: *Camera, model_index: usize, shader: *Shader, outline_color: math.Vec3, scale_factor: f32) void {
         shader.bind();
-        const mvp_loc = uniforms.get("u_mvp") orelse return;
-        const color_loc = uniforms.get("u_outlineColor") orelse return;
 
         const models = AssetManager.GetModels();
         if (model_index >= models.len) return;
@@ -80,8 +76,8 @@ pub const RenderCommand = struct {
         gl.glDepthMask(gl.GL_FALSE);
 
         const mvp_normal = model_mat.mul(vp);
-        shader.setUniform(mvp_loc, mvp_normal);
-        shader.setUniform(color_loc, outline_color);
+        shader.setUniform("u_mvp", mvp_normal);
+        shader.setUniform("u_outlineColor", outline_color);
         model.vao.draw();
 
         // --- Pass 2: Render scaled-up model where stencil != 1 ---
@@ -94,8 +90,8 @@ pub const RenderCommand = struct {
         const scale_mat = math.Mat4.createScale(scale_factor, scale_factor, scale_factor);
         const scaled_model_mat = model_mat.mul(scale_mat);
         const mvp_scaled = scaled_model_mat.mul(vp);
-        shader.setUniform(mvp_loc, mvp_scaled);
-        shader.setUniform(color_loc, outline_color);
+        shader.setUniform("u_mvp", mvp_scaled);
+        shader.setUniform("u_outlineColor", outline_color);
         model.vao.draw();
 
         // --- Restore GL state ---

@@ -1,6 +1,5 @@
 const std = @import("std");
 
-const Application = @import("application.zig").Application;
 const input = @import("input.zig");
 const event = @import("event.zig");
 const c = @import("../c.zig");
@@ -55,6 +54,8 @@ pub fn getDefaultHeight() u32 {
 pub const Window = struct {
     window: c.Window,
     data: WindowData,
+    event_fn: *const fn (*anyopaque, event.ZEvent) void = undefined,
+    event_ctx: *anyopaque = undefined,
 
     pub fn init(allocator: std.mem.Allocator, params: WindowParams) WindowError!*Window {
         if (glfw.glfwInit() == 0) {
@@ -123,8 +124,16 @@ pub const Window = struct {
         return win;
     }
 
-    pub fn setWindowData(self: *const Window, data: *Application) void {
-        glfw.glfwSetWindowUserPointer(self.window, data);
+    pub fn setEventCallback(self: *Window, context: anytype, comptime callback: fn (@TypeOf(context), event.ZEvent) void) void {
+        const Ctx = @TypeOf(context);
+        self.event_fn = struct {
+            fn dispatch(ctx: *anyopaque, ev: event.ZEvent) void {
+                callback(@as(Ctx, @ptrCast(@alignCast(ctx))), ev);
+            }
+        }.dispatch;
+        self.event_ctx = @ptrCast(context);
+
+        glfw.glfwSetWindowUserPointer(self.window, @ptrCast(self));
         _ = glfw.glfwSetMouseButtonCallback(self.window, event.mouseButtonCallback);
         _ = glfw.glfwSetKeyCallback(self.window, event.keyButtonCallback);
         _ = glfw.glfwSetCharCallback(self.window, event.charCallback);
@@ -134,6 +143,10 @@ pub const Window = struct {
         _ = glfw.glfwSetWindowCloseCallback(self.window, event.windowCloseCallback);
         _ = glfw.glfwSetCursorPosCallback(self.window, event.cursorPosCallback);
         _ = glfw.glfwSetScrollCallback(self.window, event.cursorScrollCallback);
+    }
+
+    pub fn dispatchEvent(self: *Window, ev: event.ZEvent) void {
+        self.event_fn(self.event_ctx, ev);
     }
 
     pub fn setSize(self: *Window, width: u32, height: u32) void {

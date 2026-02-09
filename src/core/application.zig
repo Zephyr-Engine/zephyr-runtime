@@ -47,7 +47,7 @@ pub const Application = struct {
             .allocator = allocator,
             .time = Time.init(),
         };
-        window.setWindowData(app);
+        window.setEventCallback(app, eventCallback);
 
         return app;
     }
