@@ -25,22 +25,9 @@ pub const Application = struct {
             .allocator = allocator,
             .window = window,
         };
-        app.setupCallbacks();
+        window.setEventCallback(app, eventCallback);
 
         return app;
-    }
-
-    fn setupCallbacks(self: *Application) void {
-        glfw.glfwSetWindowUserPointer(self.window.window, self);
-        _ = glfw.glfwSetMouseButtonCallback(self.window.window, event.mouseButtonCallback);
-        _ = glfw.glfwSetKeyCallback(self.window.window, event.keyButtonCallback);
-        _ = glfw.glfwSetCharCallback(self.window.window, event.charCallback);
-        _ = glfw.glfwSetWindowSizeCallback(self.window.window, event.windowResizeCallback);
-        _ = glfw.glfwSetFramebufferSizeCallback(self.window.window, event.framebufferSizeCallback);
-        _ = glfw.glfwSetWindowContentScaleCallback(self.window.window, event.contentScaleCallback);
-        _ = glfw.glfwSetWindowCloseCallback(self.window.window, event.windowCloseCallback);
-        _ = glfw.glfwSetCursorPosCallback(self.window.window, event.cursorPosCallback);
-        _ = glfw.glfwSetScrollCallback(self.window.window, event.cursorScrollCallback);
     }
 
     pub fn eventCallback(self: *const Application, ev: event.ZEvent) void {

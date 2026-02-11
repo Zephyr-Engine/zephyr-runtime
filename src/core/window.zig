@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const event = @import("event.zig");
 const c = @import("../c.zig");
 const glfw = c.glfw;
 const gl = c.glad;
@@ -40,6 +41,8 @@ fn getDefaultHeight() u32 {
 pub const Window = struct {
     window: c.Window,
     data: WindowData,
+    event_fn: *const fn (*anyopaque, event.ZEvent) void = undefined,
+    event_ctx: *anyopaque = undefined,
 
     pub fn init(allocator: std.mem.Allocator, params: WindowParams) WindowError!*Window {
         if (glfw.glfwInit() == 0) {
@@ -96,6 +99,31 @@ pub const Window = struct {
         gl.glViewport(0, 0, fb_width, fb_height);
 
         return win;
+    }
+
+    pub fn setEventCallback(self: *Window, context: anytype, comptime callback: fn (@TypeOf(context), event.ZEvent) void) void {
+        const Ctx = @TypeOf(context);
+        self.event_fn = struct {
+            fn dispatch(ctx: *anyopaque, ev: event.ZEvent) void {
+                callback(@as(Ctx, @ptrCast(@alignCast(ctx))), ev);
+            }
+        }.dispatch;
+        self.event_ctx = @ptrCast(context);
+
+        glfw.glfwSetWindowUserPointer(self.window, @ptrCast(self));
+        _ = glfw.glfwSetMouseButtonCallback(self.window, event.mouseButtonCallback);
+        _ = glfw.glfwSetKeyCallback(self.window, event.keyButtonCallback);
+        _ = glfw.glfwSetCharCallback(self.window, event.charCallback);
+        _ = glfw.glfwSetWindowSizeCallback(self.window, event.windowResizeCallback);
+        _ = glfw.glfwSetFramebufferSizeCallback(self.window, event.framebufferSizeCallback);
+        _ = glfw.glfwSetWindowContentScaleCallback(self.window, event.contentScaleCallback);
+        _ = glfw.glfwSetWindowCloseCallback(self.window, event.windowCloseCallback);
+        _ = glfw.glfwSetCursorPosCallback(self.window, event.cursorPosCallback);
+        _ = glfw.glfwSetScrollCallback(self.window, event.cursorScrollCallback);
+    }
+
+    pub fn dispatchEvent(self: *Window, ev: event.ZEvent) void {
+        self.event_fn(self.event_ctx, ev);
     }
 
     pub fn setSize(self: *Window, width: u32, height: u32) void {

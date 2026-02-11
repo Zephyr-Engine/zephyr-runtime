@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Application = @import("application.zig").Application;
+const Window = @import("window.zig").Window;
 const c = @import("../c.zig");
 const glfw = c.glfw;
 const gl = c.glad;
@@ -274,17 +274,16 @@ pub const ZEvent = union(enum) {
     KeyPressed: Key,
     KeyReleased: Key,
     KeyRepeated: Key,
-    CharInput: u32,
+    CharInput: u32, // Unicode codepoint for text input
     MouseScroll: struct { x: f32, y: f32 },
     MouseMove: struct { x: f32, y: f32 },
     MousePressed: MouseButton,
     MouseReleased: MouseButton,
 };
 
-inline fn getAppFromWindow(window: c.Window) *const Application {
-    const windowDataPtr = glfw.glfwGetWindowUserPointer(window).?;
-    const app: *const Application = @ptrCast(@alignCast(windowDataPtr));
-    return app;
+inline fn getWindowFromGLFW(window: c.Window) *Window {
+    const ptr = glfw.glfwGetWindowUserPointer(window).?;
+    return @ptrCast(@alignCast(ptr));
 }
 
 pub fn mouseButtonCallback(window: c.Window, btn: c_int, action: c_int, mods: c_int) callconv(.c) void {
@@ -300,7 +299,7 @@ pub fn mouseButtonCallback(window: c.Window, btn: c_int, action: c_int, mods: c_
         return;
     }
 
-    const app = getAppFromWindow(window);
+    const win = getWindowFromGLFW(window);
 
     const button: MouseButton = @enumFromInt(@as(u8, @intCast(btn)));
     const ev: ZEvent = if (isPress)
@@ -308,14 +307,14 @@ pub fn mouseButtonCallback(window: c.Window, btn: c_int, action: c_int, mods: c_
     else
         ZEvent{ .MouseReleased = button };
 
-    app.eventCallback(ev);
+    win.dispatchEvent(ev);
 }
 
 pub fn keyButtonCallback(window: c.Window, key: c_int, scancode: c_int, action: c_int, mods: c_int) callconv(.c) void {
     _ = mods;
     _ = scancode;
 
-    const app = getAppFromWindow(window);
+    const win = getWindowFromGLFW(window);
     const mappedKey = Key.fromGLFW(key);
     if (mappedKey == .Unknown) {
         std.log.debug("Found unkown key code: {}", .{key});
@@ -331,62 +330,62 @@ pub fn keyButtonCallback(window: c.Window, key: c_int, scancode: c_int, action: 
         ev = ZEvent{ .KeyReleased = mappedKey };
     }
 
-    app.eventCallback(ev);
+    win.dispatchEvent(ev);
 }
 
 pub fn windowResizeCallback(window: c.Window, width: c_int, height: c_int) callconv(.c) void {
-    const app = getAppFromWindow(window);
-    app.window.setSize(@intCast(width), @intCast(height));
+    const win = getWindowFromGLFW(window);
+    win.setSize(@intCast(width), @intCast(height));
 
     const ev = ZEvent{ .WindowResize = .{
         .height = @intCast(height),
         .width = @intCast(width),
     } };
-    app.eventCallback(ev);
+    win.dispatchEvent(ev);
 }
 
 pub fn framebufferSizeCallback(window: c.Window, width: c_int, height: c_int) callconv(.c) void {
     gl.glViewport(0, 0, @intCast(width), @intCast(height));
-    const app = getAppFromWindow(window);
+    const win = getWindowFromGLFW(window);
 
     const ev = ZEvent{ .FramebufferResize = .{
         .width = @intCast(width),
         .height = @intCast(height),
     } };
-    app.eventCallback(ev);
+    win.dispatchEvent(ev);
 }
 
 pub fn contentScaleCallback(window: c.Window, xscale: f32, yscale: f32) callconv(.c) void {
-    const app = getAppFromWindow(window);
+    const win = getWindowFromGLFW(window);
 
     const ev = ZEvent{ .ContentScaleChange = .{ .x = xscale, .y = yscale } };
-    app.eventCallback(ev);
+    win.dispatchEvent(ev);
 }
 
 pub fn windowCloseCallback(window: c.Window) callconv(.c) void {
-    const app = getAppFromWindow(window);
+    const win = getWindowFromGLFW(window);
 
     const ev: ZEvent = .WindowClose;
-    app.eventCallback(ev);
+    win.dispatchEvent(ev);
 }
 
 pub fn cursorPosCallback(window: c.Window, x: f64, y: f64) callconv(.c) void {
-    const app = getAppFromWindow(window);
+    const win = getWindowFromGLFW(window);
 
     const ev = ZEvent{ .MouseMove = .{ .x = @floatCast(x), .y = @floatCast(y) } };
-    app.eventCallback(ev);
+    win.dispatchEvent(ev);
 }
 
 pub fn cursorScrollCallback(window: c.Window, x: f64, y: f64) callconv(.c) void {
-    const app = getAppFromWindow(window);
+    const win = getWindowFromGLFW(window);
 
     const ev = ZEvent{ .MouseScroll = .{ .x = @floatCast(x), .y = @floatCast(y) } };
-    app.eventCallback(ev);
+    win.dispatchEvent(ev);
 }
 
 pub fn charCallback(window: c.Window, codepoint: c_uint) callconv(.c) void {
-    const app = getAppFromWindow(window);
+    const win = getWindowFromGLFW(window);
 
     const ev = ZEvent{ .CharInput = @intCast(codepoint) };
-    app.eventCallback(ev);
+    win.dispatchEvent(ev);
 }
