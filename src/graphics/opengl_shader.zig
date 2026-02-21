@@ -59,6 +59,7 @@ pub const Shader = struct {
         const vs_ptrs = [_][*c]const u8{
             @ptrCast(vs_final.ptr),
         };
+        const vs_lens = [_]c_int{@intCast(vs_final.len)};
 
         const vs: u32 = gl.glCreateShader(gl.GL_VERTEX_SHADER);
         if (vs == 0) {
@@ -66,7 +67,7 @@ pub const Shader = struct {
         }
         errdefer gl.glDeleteShader(vs);
 
-        gl.glShaderSource(vs, 1, &vs_ptrs, null);
+        gl.glShaderSource(vs, 1, &vs_ptrs, &vs_lens);
         gl.glCompileShader(vs);
 
         var vs_success: i32 = 0;
@@ -81,6 +82,7 @@ pub const Shader = struct {
         const fs_ptrs = [_][*c]const u8{
             @ptrCast(fs_final.ptr),
         };
+        const fs_lens = [_]c_int{@intCast(fs_final.len)};
 
         const fs: u32 = gl.glCreateShader(gl.GL_FRAGMENT_SHADER);
         if (fs == 0) {
@@ -88,7 +90,7 @@ pub const Shader = struct {
         }
         errdefer gl.glDeleteShader(fs);
 
-        gl.glShaderSource(fs, 1, &fs_ptrs, null);
+        gl.glShaderSource(fs, 1, &fs_ptrs, &fs_lens);
         gl.glCompileShader(fs);
 
         var fs_success: i32 = 0;
@@ -135,6 +137,7 @@ pub const Shader = struct {
         var attrs = try allocator.alloc(AttributeInfo, @intCast(count));
         defer allocator.free(attrs);
 
+        std.debug.print("Active attributes: {d}\n", .{count});
         for (0..@intCast(count)) |i| {
             var length: i32 = 0;
             var size: i32 = 0;
@@ -159,6 +162,7 @@ pub const Shader = struct {
             };
 
             const loc: i32 = gl.glGetAttribLocation(program, @ptrCast(&name));
+            std.debug.print("  Attr {d}: name={s}, type={any}, loc={d}\n", .{ i, name[0..@intCast(length)], shader_type, loc });
             attrs[i] = .{
                 .shader_type = shader_type,
                 .name = name,
@@ -174,11 +178,14 @@ pub const Shader = struct {
 
         var stride: u32 = 0;
         var bufferElements = try layout.BufferElements.initCapacity(allocator, @intCast(count));
+        std.debug.print("Buffer layout:\n", .{});
         for (attrs) |attr| {
             const element = layout.BufferElement.new(attr.shader_type, stride, false, attr.name, attr.location);
+            std.debug.print("  loc={d}, offset={d}, size={d}, type={any}\n", .{ element.location, element.offset, element.size, element.ty });
             stride += element.size;
             try bufferElements.append(allocator, element);
         }
+        std.debug.print("Total stride: {d}\n", .{stride});
 
         return .{
             .id = program,
