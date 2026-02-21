@@ -188,7 +188,6 @@ pub const SceneManager = struct {
 
     pub fn update(self: *SceneManager, delta_time: f32) void {
         if (self.currentScene()) |scene| {
-            // Wrap onUpdate in error handling in case it panics or has issues
             scene.onUpdate(delta_time);
         }
     }
@@ -198,7 +197,6 @@ pub const SceneManager = struct {
         while (i > 0) {
             i -= 1;
             const scene = self.scenes.items[i];
-            // Wrap onEvent in error handling in case it has issues
             scene.onEvent(e);
         }
     }

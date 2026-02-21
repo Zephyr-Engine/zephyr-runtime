@@ -5,17 +5,41 @@ const Light = @import("light.zig").Light;
 const Texture = @import("../graphics/opengl_texture.zig").Texture;
 const Material = @import("material.zig").Material;
 const MaterialInstance = @import("material.zig").MaterialInstance;
+const Lighting = @import("material.zig").Lighting;
 const Shader = @import("../graphics/opengl_shader.zig").Shader;
+const VertexArray = @import("../graphics/opengl_vertex_array.zig").VertexArray;
+const Transform = @import("transform.zig").Transform;
+const gltf = @import("gltf.zig");
+const Camera = @import("../scene/camera.zig").Camera;
 const ModelList = std.ArrayList(Model);
 const LightList = std.ArrayList(Light);
+const CameraList = std.ArrayList(Camera);
 
 pub const AssetHandle = usize;
 
 pub const LightHandle = usize;
 
+pub const CameraHandle = usize;
+
+pub const GltfPbrDesc = struct {
+    gltf_json: []const u8,
+    bin_data: []const u8,
+    base_color: []const u8,
+    metallic_roughness: []const u8,
+    normal: []const u8,
+    transform: Transform = Transform.default,
+};
+
+pub const ObjDesc = struct {
+    obj: []const u8,
+    instance: *const MaterialInstance,
+    transform: Transform = Transform.default,
+};
+
 pub const AssetManager = struct {
     models: ModelList,
     lights: LightList,
+    cameras: CameraList,
     shaders: std.ArrayList(*Shader),
     textures: std.ArrayList(*Texture),
     materials: std.ArrayList(*Material),
@@ -29,6 +53,7 @@ pub const AssetManager = struct {
         instance = AssetManager{
             .models = .empty,
             .lights = .empty,
+            .cameras = .empty,
             .shaders = .empty,
             .textures = .empty,
             .materials = .empty,
@@ -41,7 +66,7 @@ pub const AssetManager = struct {
         return &instance.?;
     }
 
-    pub fn PushModel(allocator: std.mem.Allocator, model: Model) !AssetHandle {
+    fn pushModel(allocator: std.mem.Allocator, model: Model) !AssetHandle {
         const self = getInstance();
         const handle = self.models.items.len;
         try self.models.append(allocator, model);
@@ -105,7 +130,7 @@ pub const AssetManager = struct {
         }
     }
 
-    pub fn PushShader(allocator: std.mem.Allocator, shader: Shader) !*Shader {
+    fn pushShader(allocator: std.mem.Allocator, shader: Shader) !*Shader {
         const self = getInstance();
         const ptr = try allocator.create(Shader);
         ptr.* = shader;
@@ -113,7 +138,7 @@ pub const AssetManager = struct {
         return ptr;
     }
 
-    pub fn PushTexture(allocator: std.mem.Allocator, tex: Texture) !*Texture {
+    fn pushTexture(allocator: std.mem.Allocator, tex: Texture) !*Texture {
         const self = getInstance();
         const ptr = try allocator.create(Texture);
         ptr.* = tex;
@@ -121,7 +146,7 @@ pub const AssetManager = struct {
         return ptr;
     }
 
-    pub fn PushMaterial(allocator: std.mem.Allocator, mat: Material) !*Material {
+    fn pushMaterial(allocator: std.mem.Allocator, mat: Material) !*Material {
         const self = getInstance();
         const ptr = try allocator.create(Material);
         ptr.* = mat;
@@ -129,12 +154,73 @@ pub const AssetManager = struct {
         return ptr;
     }
 
-    pub fn PushMaterialInstance(allocator: std.mem.Allocator, inst: MaterialInstance) !*MaterialInstance {
+    fn pushMaterialInstance(allocator: std.mem.Allocator, inst: MaterialInstance) !*MaterialInstance {
         const self = getInstance();
         const ptr = try allocator.create(MaterialInstance);
         ptr.* = inst;
         try self.material_instances.append(allocator, ptr);
         return ptr;
+    }
+
+    pub fn LoadShader(allocator: std.mem.Allocator, vs_src: []const u8, fs_src: []const u8) !*Shader {
+        const shader = try Shader.init(allocator, vs_src, fs_src);
+        return try pushShader(allocator, shader);
+    }
+
+    pub fn LoadTexture(allocator: std.mem.Allocator, image_data: []const u8, channels: c_int) !*Texture {
+        var tex = try Texture.fromData(image_data, channels);
+        tex.generateMipmaps();
+        tex.setWrapRepeat();
+        return try pushTexture(allocator, tex);
+    }
+
+    pub fn LoadMaterial(allocator: std.mem.Allocator, shader: *Shader) !*Material {
+        return try pushMaterial(allocator, Material.init(allocator, shader));
+    }
+
+    pub fn LoadMaterialInstance(allocator: std.mem.Allocator, mat: *Material, lighting: Lighting) !*MaterialInstance {
+        return try pushMaterialInstance(allocator, mat.instaniate(lighting));
+    }
+
+    pub fn LoadModel(allocator: std.mem.Allocator, desc: ObjDesc) !AssetHandle {
+        const model = try Model.init(allocator, desc.obj, desc.instance, desc.transform);
+        return try pushModel(allocator, model);
+    }
+
+    pub fn LoadGltfPbr(allocator: std.mem.Allocator, desc: GltfPbrDesc) !AssetHandle {
+        const shader = try getOrCreateBuiltinPbrShader(allocator);
+
+        const base_color_tex = try LoadTexture(allocator, desc.base_color, 4);
+        const metal_rough_tex = try LoadTexture(allocator, desc.metallic_roughness, 4);
+        const normal_tex = try LoadTexture(allocator, desc.normal, 4);
+
+        const mat = try pushMaterial(allocator, Material.init(allocator, shader));
+
+        var inst = mat.instaniate(.{
+            .ambient = .{ .x = 0.2, .y = 0.2, .z = 0.2 },
+            .diffuse = .{ .x = 0.8, .y = 0.8, .z = 0.8 },
+            .specular = .{ .x = 0.5, .y = 0.5, .z = 0.5 },
+            .shininess = 64.0,
+        });
+        inst.base_color_texture = base_color_tex;
+        inst.metallic_roughness_texture = metal_rough_tex;
+        inst.normal_texture = normal_tex;
+
+        const mat_inst = try pushMaterialInstance(allocator, inst);
+
+        var result = try gltf.parse(allocator, desc.gltf_json, desc.bin_data);
+        const vao = try VertexArray.init(result.mesh.vertices, result.mesh.indices);
+        result.mesh.deinit();
+
+        try vao.setLayout(shader.buffer_layout);
+
+        const model = Model{
+            .vao = vao,
+            .material = mat_inst,
+            .transform = desc.transform,
+        };
+
+        return try pushModel(allocator, model);
     }
 
     pub fn getOrCreateBuiltinPbrShader(allocator: std.mem.Allocator) !*Shader {
@@ -172,6 +258,26 @@ pub const AssetManager = struct {
         return self.lights.items.len;
     }
 
+    pub fn PushCamera(allocator: std.mem.Allocator, camera: Camera) !CameraHandle {
+        const self = getInstance();
+        const handle = self.cameras.items.len;
+        try self.cameras.append(allocator, camera);
+        return handle;
+    }
+
+    pub fn GetCamera(handle: CameraHandle) *Camera {
+        const self = getInstance();
+        return &self.cameras.items[handle];
+    }
+
+    pub fn GetActiveCamera() ?*Camera {
+        const self = getInstance();
+        for (self.cameras.items) |*camera| {
+            if (camera.is_active) return camera;
+        }
+        return null;
+    }
+
     pub fn Deinit(allocator: std.mem.Allocator) void {
         const self = getInstance();
         for (self.models.items) |*model| {
@@ -179,6 +285,7 @@ pub const AssetManager = struct {
         }
         self.models.deinit(allocator);
         self.lights.deinit(allocator);
+        self.cameras.deinit(allocator);
 
         for (self.textures.items) |tex| {
             var t = tex.*;

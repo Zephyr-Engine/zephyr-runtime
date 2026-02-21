@@ -46,6 +46,7 @@ const asset = @import("asset/manager.zig");
 pub const AssetManager = asset.AssetManager;
 pub const AssetHandle = asset.AssetHandle;
 pub const LightHandle = asset.LightHandle;
+pub const CameraHandle = asset.CameraHandle;
 
 const math = @import("core/math.zig");
 pub const Vec3 = math.Vec3;
@@ -58,9 +59,8 @@ pub const Model = @import("asset/model.zig").Model;
 pub const gltf = @import("asset/gltf.zig");
 pub const Transform = @import("asset/transform.zig").Transform;
 
-const loader = @import("asset/loader.zig");
-pub const AssetLoader = loader.AssetLoader;
-pub const GltfPbrDesc = loader.GltfPbrDesc;
+pub const GltfPbrDesc = asset.GltfPbrDesc;
+pub const ObjDesc = asset.ObjDesc;
 pub const Quat = @import("core/math.zig").Quat;
 
 pub const Camera = @import("scene/camera.zig").Camera;

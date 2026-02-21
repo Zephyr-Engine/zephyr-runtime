@@ -8,7 +8,9 @@ const event = @import("event.zig");
 const scene = @import("scene.zig");
 const Time = @import("time.zig").Time;
 const Input = @import("input.zig").InputManager;
+const Camera = @import("../scene/camera.zig").Camera;
 const va = @import("../graphics/opengl_vertex_array.zig");
+const RenderCommand = @import("renderer.zig").RenderCommand;
 const Shader = @import("../graphics/opengl_shader.zig").Shader;
 const AssetManager = @import("../asset/manager.zig").AssetManager;
 
@@ -48,6 +50,19 @@ pub const Application = struct {
             .time = Time.init(),
         };
         window.setEventCallback(app, eventCallback);
+
+        const width: f32 = @floatFromInt(window.data.width);
+        const height: f32 = @floatFromInt(window.data.height);
+        const aspect = width / height;
+
+        _ = try AssetManager.PushCamera(allocator, Camera.new(
+            .{ .x = 0, .y = 0, .z = 5 },
+            std.math.pi / 4.0,
+            aspect,
+            0.1,
+            100.0,
+            true,
+        ));
 
         return app;
     }
@@ -97,6 +112,8 @@ pub const Application = struct {
             win.Window.HandleInput();
 
             app.scene_manager.update(app.time.delta_time);
+
+            RenderCommand.Draw(AssetManager.GetActiveCamera().?);
 
             app.window.swapBuffers();
             Input.Clear();
