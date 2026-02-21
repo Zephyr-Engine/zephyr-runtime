@@ -57,6 +57,10 @@ pub const Mat4 = math.Mat4;
 pub const Model = @import("asset/model.zig").Model;
 pub const gltf = @import("asset/gltf.zig");
 pub const Transform = @import("asset/transform.zig").Transform;
+
+const loader = @import("asset/loader.zig");
+pub const AssetLoader = loader.AssetLoader;
+pub const GltfPbrDesc = loader.GltfPbrDesc;
 pub const Quat = @import("core/math.zig").Quat;
 
 pub const Camera = @import("scene/camera.zig").Camera;

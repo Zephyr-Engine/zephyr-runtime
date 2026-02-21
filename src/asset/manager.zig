@@ -2,6 +2,10 @@ const std = @import("std");
 const math = @import("zlm").as(f32);
 const Model = @import("model.zig").Model;
 const Light = @import("light.zig").Light;
+const Texture = @import("../graphics/opengl_texture.zig").Texture;
+const Material = @import("material.zig").Material;
+const MaterialInstance = @import("material.zig").MaterialInstance;
+const Shader = @import("../graphics/opengl_shader.zig").Shader;
 const ModelList = std.ArrayList(Model);
 const LightList = std.ArrayList(Light);
 
@@ -12,6 +16,11 @@ pub const LightHandle = usize;
 pub const AssetManager = struct {
     models: ModelList,
     lights: LightList,
+    shaders: std.ArrayList(*Shader),
+    textures: std.ArrayList(*Texture),
+    materials: std.ArrayList(*Material),
+    material_instances: std.ArrayList(*MaterialInstance),
+    builtin_pbr_shader: ?*Shader = null,
 
     var instance: ?AssetManager = null;
     var once = std.once(init);
@@ -20,6 +29,10 @@ pub const AssetManager = struct {
         instance = AssetManager{
             .models = .empty,
             .lights = .empty,
+            .shaders = .empty,
+            .textures = .empty,
+            .materials = .empty,
+            .material_instances = .empty,
         };
     }
 
@@ -92,6 +105,51 @@ pub const AssetManager = struct {
         }
     }
 
+    pub fn PushShader(allocator: std.mem.Allocator, shader: Shader) !*Shader {
+        const self = getInstance();
+        const ptr = try allocator.create(Shader);
+        ptr.* = shader;
+        try self.shaders.append(allocator, ptr);
+        return ptr;
+    }
+
+    pub fn PushTexture(allocator: std.mem.Allocator, tex: Texture) !*Texture {
+        const self = getInstance();
+        const ptr = try allocator.create(Texture);
+        ptr.* = tex;
+        try self.textures.append(allocator, ptr);
+        return ptr;
+    }
+
+    pub fn PushMaterial(allocator: std.mem.Allocator, mat: Material) !*Material {
+        const self = getInstance();
+        const ptr = try allocator.create(Material);
+        ptr.* = mat;
+        try self.materials.append(allocator, ptr);
+        return ptr;
+    }
+
+    pub fn PushMaterialInstance(allocator: std.mem.Allocator, inst: MaterialInstance) !*MaterialInstance {
+        const self = getInstance();
+        const ptr = try allocator.create(MaterialInstance);
+        ptr.* = inst;
+        try self.material_instances.append(allocator, ptr);
+        return ptr;
+    }
+
+    pub fn getOrCreateBuiltinPbrShader(allocator: std.mem.Allocator) !*Shader {
+        const self = getInstance();
+        if (self.builtin_pbr_shader) |shader| return shader;
+
+        const pbr_vs = @embedFile("../graphics/shaders/pbr_vertex.glsl");
+        const pbr_fs = @embedFile("../graphics/shaders/pbr_fragment.glsl");
+
+        const shader = try allocator.create(Shader);
+        shader.* = try Shader.init(allocator, pbr_vs, pbr_fs);
+        self.builtin_pbr_shader = shader;
+        return shader;
+    }
+
     pub fn PushLight(allocator: std.mem.Allocator, light: Light) !LightHandle {
         const self = getInstance();
         const handle = self.lights.items.len;
@@ -121,5 +179,35 @@ pub const AssetManager = struct {
         }
         self.models.deinit(allocator);
         self.lights.deinit(allocator);
+
+        for (self.textures.items) |tex| {
+            var t = tex.*;
+            t.deinit();
+            allocator.destroy(tex);
+        }
+        self.textures.deinit(allocator);
+
+        for (self.material_instances.items) |inst| {
+            allocator.destroy(inst);
+        }
+        self.material_instances.deinit(allocator);
+
+        for (self.materials.items) |mat| {
+            allocator.destroy(mat);
+        }
+        self.materials.deinit(allocator);
+
+        for (self.shaders.items) |shader| {
+            var s = shader.*;
+            s.deinit();
+            allocator.destroy(shader);
+        }
+        self.shaders.deinit(allocator);
+
+        if (self.builtin_pbr_shader) |shader| {
+            var s = shader.*;
+            s.deinit();
+            allocator.destroy(shader);
+        }
     }
 };
