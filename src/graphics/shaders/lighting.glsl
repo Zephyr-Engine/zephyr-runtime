@@ -76,6 +76,99 @@ vec3 calcSpot(Light light, vec3 normal, vec3 viewDir, vec3 fragPos, vec3 matAmbi
     return ambient + diffuse + specular;
 }
 
+// ── PBR (Cook-Torrance) helpers ──────────────────────────────────────
+
+const float PI = 3.14159265359;
+
+// Fresnel-Schlick approximation
+vec3 fresnelSchlick(float cosTheta, vec3 F0) {
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+// GGX normal distribution function
+float distributionGGX(vec3 N, vec3 H, float roughness) {
+    float a  = roughness * roughness;
+    float a2 = a * a;
+    float NdotH  = max(dot(N, H), 0.0);
+    float NdotH2 = NdotH * NdotH;
+    float denom  = NdotH2 * (a2 - 1.0) + 1.0;
+    return a2 / (PI * denom * denom);
+}
+
+// Schlick-GGX geometry (single direction)
+float geometrySchlickGGX(float NdotV, float roughness) {
+    float r = roughness + 1.0;
+    float k = (r * r) / 8.0;
+    return NdotV / (NdotV * (1.0 - k) + k);
+}
+
+// Smith's method (both view and light directions)
+float geometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
+    float NdotV = max(dot(N, V), 0.0);
+    float NdotL = max(dot(N, L), 0.0);
+    return geometrySchlickGGX(NdotV, roughness) * geometrySchlickGGX(NdotL, roughness);
+}
+
+// Evaluate a single light using Cook-Torrance BRDF
+vec3 calcPBRLight(Light light, vec3 N, vec3 V, vec3 fragPos, vec3 baseColor, float metallic, float roughness) {
+    vec3 F0 = mix(vec3(0.04), baseColor, metallic);
+
+    // Light direction & radiance
+    vec3 L;
+    float attenuation = 1.0;
+    float spotIntensity = 1.0;
+
+    if (light.kind == LIGHT_DIRECTIONAL) {
+        L = normalize(-light.direction);
+    } else {
+        L = normalize(light.position - fragPos);
+        float distance = length(light.position - fragPos);
+        attenuation = 1.0 / (light.constant + light.linear * distance + light.quadratic * distance * distance);
+
+        if (light.kind == LIGHT_SPOT) {
+            float theta   = dot(L, normalize(-light.direction));
+            float epsilon = light.cutOff - light.outerCutOff;
+            spotIntensity = clamp((theta - light.outerCutOff) / epsilon, 0.0, 1.0);
+        }
+    }
+
+    vec3 radiance = light.diffuse * attenuation * spotIntensity;
+
+    vec3 H = normalize(V + L);
+    float NdotL = max(dot(N, L), 0.0);
+
+    // Cook-Torrance specular BRDF
+    float D = distributionGGX(N, H, roughness);
+    float G = geometrySmith(N, V, L, roughness);
+    vec3  F = fresnelSchlick(max(dot(H, V), 0.0), F0);
+
+    vec3 numerator   = D * G * F;
+    float denominator = 4.0 * max(dot(N, V), 0.0) * NdotL + 0.0001;
+    vec3 specular    = numerator / denominator;
+
+    // Energy-conserving diffuse
+    vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
+    vec3 diffuse = kD * baseColor / PI;
+
+    return (diffuse + specular) * radiance * NdotL;
+}
+
+// Full PBR lighting: iterate all lights + hemisphere ambient
+vec3 calcPBRLighting(vec3 normal, vec3 viewDir, vec3 fragPos, vec3 baseColor, float metallic, float roughness) {
+    vec3 color = vec3(0.0);
+
+    for (int i = 0; i < numLights && i < MAX_LIGHTS; i++) {
+        color += calcPBRLight(lights[i], normal, viewDir, fragPos, baseColor, metallic, roughness);
+    }
+
+    // Hemisphere ambient (approximates indirect lighting without IBL)
+    color += baseColor * 0.15;
+
+    return color;
+}
+
+// ── Phong aggregate ──────────────────────────────────────────────────
+
 vec3 calcLighting(vec3 normal, vec3 viewDir, vec3 fragPos, vec3 matAmbient, vec3 matDiffuse, vec3 matSpecular, float matShininess) {
     vec3 color = vec3(0.0);
 

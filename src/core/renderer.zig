@@ -20,6 +20,13 @@ pub const RenderCommand = struct {
             model.material.setUniform("material.specular", model.material.lighting.specular);
             model.material.setUniform("material.shininess", model.material.lighting.shininess);
 
+            if (model.material.hasTextures()) {
+                model.material.setUniform("u_useTextures", @as(i32, 1));
+                model.material.setUniform("u_baseColorTex", @as(i32, 0));
+                model.material.setUniform("u_metalRoughTex", @as(i32, 1));
+                model.material.bindTextures();
+            }
+
             uploadLights(model.material.material.shader);
 
             model.draw();

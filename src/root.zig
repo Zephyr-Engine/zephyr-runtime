@@ -55,6 +55,7 @@ pub const Mat3 = math.Mat3;
 pub const Mat4 = math.Mat4;
 
 pub const Model = @import("asset/model.zig").Model;
+pub const gltf = @import("asset/gltf.zig");
 pub const Transform = @import("asset/transform.zig").Transform;
 pub const Quat = @import("core/math.zig").Quat;
 
