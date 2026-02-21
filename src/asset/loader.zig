@@ -18,7 +18,18 @@ pub const GltfPbrDesc = struct {
     transform: Transform = Transform.default,
 };
 
+pub const ObjDesc = struct {
+    obj: []const u8,
+    instance: *const MaterialInstance,
+    transform: Transform = Transform.default,
+};
+
 pub const AssetLoader = struct {
+    pub fn loadObj(allocator: std.mem.Allocator, desc: ObjDesc) !AssetHandle {
+        const model = try Model.init(allocator, desc.obj, desc.instance, desc.transform);
+        return try AssetManager.PushModel(allocator, model);
+    }
+
     pub fn loadGltfPbr(allocator: std.mem.Allocator, desc: GltfPbrDesc) !AssetHandle {
         const shader = try AssetManager.getOrCreateBuiltinPbrShader(allocator);
 

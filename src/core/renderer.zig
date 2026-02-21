@@ -127,7 +127,7 @@ pub const RenderCommand = struct {
         gl.glDisable(gl.GL_DEPTH_TEST);
 
         const scale_mat = math.Mat4.createScale(scale_factor, scale_factor, scale_factor);
-        const scaled_model_mat = model_mat.mul(scale_mat);
+        const scaled_model_mat = scale_mat.mul(model_mat);
         const mvp_scaled = scaled_model_mat.mul(vp);
         shader.setUniform("u_mvp", mvp_scaled);
         model.vao.draw();
