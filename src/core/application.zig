@@ -11,6 +11,7 @@ const Input = @import("input.zig").InputManager;
 const Camera = @import("../scene/camera.zig").Camera;
 const va = @import("../graphics/opengl_vertex_array.zig");
 const RenderCommand = @import("renderer.zig").RenderCommand;
+const DrawList = @import("draw_list.zig").DrawList;
 const Shader = @import("../graphics/opengl_shader.zig").Shader;
 const AssetManager = @import("../asset/manager.zig").AssetManager;
 
@@ -35,6 +36,7 @@ pub const Application = struct {
     scene_manager: scene.SceneManager,
     allocator: std.mem.Allocator,
     time: Time,
+    draw_list: DrawList,
 
     pub fn init(allocator: std.mem.Allocator, params: WindowParams) ApplicationError!*Application {
         const window = Window.init(allocator, params) catch |err| {
@@ -48,6 +50,7 @@ pub const Application = struct {
             .scene_manager = scene.SceneManager.init(allocator),
             .allocator = allocator,
             .time = Time.init(),
+            .draw_list = DrawList.init(allocator),
         };
         window.setEventCallback(app, eventCallback);
 
@@ -68,6 +71,7 @@ pub const Application = struct {
     }
 
     pub fn deinit(self: *Application, allocator: std.mem.Allocator) void {
+        self.draw_list.deinit();
         AssetManager.Deinit(allocator);
         self.scene_manager.deinit();
         self.window.deinit(allocator);
@@ -113,7 +117,12 @@ pub const Application = struct {
 
             app.scene_manager.update(app.time.delta_time);
 
-            RenderCommand.Draw(AssetManager.GetActiveCamera().?);
+            if (AssetManager.GetActiveCamera()) |camera| {
+                RenderCommand.Clear(.{ .x = 0.1, .y = 0.1, .z = 0.15 });
+                app.draw_list.collectFromScene(camera) catch {};
+                app.draw_list.sortOpaque();
+                app.draw_list.execute(camera);
+            }
 
             app.window.swapBuffers();
             Input.Clear();

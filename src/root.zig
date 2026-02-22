@@ -19,7 +19,16 @@ pub const ZEvent = event.ZEvent;
 pub const Key = event.Key;
 pub const MouseButton = event.MouseButton;
 
-pub const RenderCommand = @import("core/renderer.zig").RenderCommand;
+const renderer = @import("core/renderer.zig");
+pub const RenderCommand = renderer.RenderCommand;
+pub const RenderPass = renderer.RenderPass;
+pub const RenderPipeline = renderer.RenderPipeline;
+pub const ClearFlags = renderer.ClearFlags;
+pub const ShadowMap = @import("core/shadow_map.zig").ShadowMap;
+pub const PostProcessPipeline = @import("core/post_process.zig").PostProcessPipeline;
+const draw_list_mod = @import("core/draw_list.zig");
+pub const DrawList = draw_list_mod.DrawList;
+pub const DrawCommand = draw_list_mod.DrawCommand;
 pub const material = @import("asset/material.zig");
 pub const Material = material.Material;
 pub const MaterialInstance = material.MaterialInstance;
@@ -32,7 +41,11 @@ pub const VertexArray = @import("graphics/opengl_vertex_array.zig").VertexArray;
 
 pub const Texture = @import("graphics/opengl_texture.zig").Texture;
 pub const TextureFormat = @import("graphics/opengl_texture.zig").TextureFormat;
-pub const Framebuffer = @import("graphics/opengl_framebuffer.zig").Framebuffer;
+const framebuffer_mod = @import("graphics/opengl_framebuffer.zig");
+pub const Framebuffer = framebuffer_mod.Framebuffer;
+pub const FramebufferConfig = framebuffer_mod.FramebufferConfig;
+pub const AttachmentFormat = framebuffer_mod.AttachmentFormat;
+pub const fullscreen_quad = @import("graphics/fullscreen_quad.zig");
 
 pub const recommended_std_options: std.Options = .{
     .log_level = if (builtin.mode == .ReleaseFast) .err else .debug,
@@ -76,4 +89,9 @@ test {
     _ = @import("scene/camera.zig");
     _ = @import("asset/transform.zig");
     _ = @import("core/scene_state.zig");
+    _ = @import("core/render_pass.zig");
+    _ = @import("core/shadow_map.zig");
+    _ = @import("core/post_process.zig");
+    _ = @import("core/draw_list.zig");
+    _ = @import("graphics/fullscreen_quad.zig");
 }

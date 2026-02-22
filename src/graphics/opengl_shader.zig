@@ -232,9 +232,16 @@ pub const Shader = struct {
     }
 
     pub fn setUniform(self: *const Shader, name: []const u8, value: anytype) void {
-        const location = self.uniforms.get(name) orelse {
-            std.log.err("Could not find uniform with name: {s}", .{name});
-            return;
+        const location = self.uniforms.get(name) orelse blk: {
+            // Fallback: query GL directly (handles array element uniforms
+            // like lights[1].kind that glGetActiveUniform doesn't enumerate)
+            var buf: [256]u8 = undefined;
+            if (name.len >= buf.len) return;
+            @memcpy(buf[0..name.len], name);
+            buf[name.len] = 0;
+            const loc = gl.glGetUniformLocation(self.id, @ptrCast(&buf));
+            if (loc < 0) return;
+            break :blk loc;
         };
 
         const T = comptime @TypeOf(value);
