@@ -68,8 +68,9 @@ pub const Application = struct {
         };
         window.setEventCallback(app, eventCallback);
 
-        const width: f32 = @floatFromInt(window.data.width);
-        const height: f32 = @floatFromInt(window.data.height);
+        const fb = window.getFramebufferSize();
+        const width: f32 = @floatFromInt(fb.width);
+        const height: f32 = @floatFromInt(fb.height);
         const aspect = width / height;
 
         _ = try AssetManager.PushCamera(allocator, Camera.new(
@@ -144,6 +145,10 @@ pub const Application = struct {
                 }
 
                 app.draw_list.setShadowMap(&app.shadow_map);
+
+                // Restore viewport after shadow pass
+                const fb = app.window.getFramebufferSize();
+                RenderCommand.SetViewport(0, 0, @intCast(fb.width), @intCast(fb.height));
 
                 // Scene pass via RenderPass (renders to default framebuffer)
                 var scene_pass = RenderPass.init("scene");
