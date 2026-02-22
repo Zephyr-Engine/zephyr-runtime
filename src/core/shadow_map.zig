@@ -89,7 +89,6 @@ pub const ShadowMap = struct {
         self.framebuffer.bind();
         gl.glClear(gl.GL_DEPTH_BUFFER_BIT);
 
-        // Cull front faces to reduce shadow acne
         gl.glCullFace(gl.GL_FRONT);
         gl.glEnable(gl.GL_CULL_FACE);
 
@@ -103,8 +102,8 @@ pub const ShadowMap = struct {
             model.vao.draw();
         }
 
-        // Restore cull mode
         gl.glCullFace(gl.GL_BACK);
+        gl.glDisable(gl.GL_CULL_FACE);
 
         Framebuffer.unbind();
     }

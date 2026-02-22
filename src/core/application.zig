@@ -12,10 +12,22 @@ const Camera = @import("../scene/camera.zig").Camera;
 const va = @import("../graphics/opengl_vertex_array.zig");
 const RenderCommand = @import("renderer.zig").RenderCommand;
 const DrawList = @import("draw_list.zig").DrawList;
+const RenderPass = @import("render_pass.zig").RenderPass;
+const ShadowMap = @import("shadow_map.zig").ShadowMap;
 const Shader = @import("../graphics/opengl_shader.zig").Shader;
 const AssetManager = @import("../asset/manager.zig").AssetManager;
+const Light = @import("../asset/light.zig").Light;
 
 var isRunning = true;
+
+fn appSceneDrawFn(pass: *RenderPass) void {
+    const app: *Application = @ptrCast(@alignCast(pass.user_data orelse return));
+    const camera = AssetManager.GetActiveCamera() orelse return;
+
+    app.draw_list.collectFromScene(camera) catch {};
+    app.draw_list.sortOpaque();
+    app.draw_list.execute(camera);
+}
 
 pub const ApplicationError = error{
     WindowError,
@@ -37,6 +49,7 @@ pub const Application = struct {
     allocator: std.mem.Allocator,
     time: Time,
     draw_list: DrawList,
+    shadow_map: ShadowMap,
 
     pub fn init(allocator: std.mem.Allocator, params: WindowParams) ApplicationError!*Application {
         const window = Window.init(allocator, params) catch |err| {
@@ -51,6 +64,7 @@ pub const Application = struct {
             .allocator = allocator,
             .time = Time.init(),
             .draw_list = DrawList.init(allocator),
+            .shadow_map = ShadowMap.init(allocator, 2048, 20.0) catch return ApplicationError.WindowError,
         };
         window.setEventCallback(app, eventCallback);
 
@@ -72,6 +86,7 @@ pub const Application = struct {
 
     pub fn deinit(self: *Application, allocator: std.mem.Allocator) void {
         self.draw_list.deinit();
+        self.shadow_map.deinit();
         AssetManager.Deinit(allocator);
         self.scene_manager.deinit();
         self.window.deinit(allocator);
@@ -117,11 +132,28 @@ pub const Application = struct {
 
             app.scene_manager.update(app.time.delta_time);
 
-            if (AssetManager.GetActiveCamera()) |camera| {
-                RenderCommand.Clear(.{ .x = 0.1, .y = 0.1, .z = 0.15 });
-                app.draw_list.collectFromScene(camera) catch {};
-                app.draw_list.sortOpaque();
-                app.draw_list.execute(camera);
+            if (AssetManager.GetActiveCamera()) |_| {
+                // Shadow pass
+                const lights = AssetManager.GetLights();
+                for (lights) |light| {
+                    if (light.kind == .directional) {
+                        app.shadow_map.computeLightSpaceMatrix(light);
+                        app.shadow_map.renderShadowPass();
+                        break;
+                    }
+                }
+
+                app.draw_list.setShadowMap(&app.shadow_map);
+
+                // Scene pass via RenderPass (renders to default framebuffer)
+                var scene_pass = RenderPass.init("scene");
+                _ = scene_pass
+                    .setClearFlags(.{ .color = true, .depth = true, .stencil = true })
+                    .setClearColor(0.1, 0.1, 0.15, 1.0)
+                    .setDepthTest(true)
+                    .setDrawFn(appSceneDrawFn)
+                    .setUserData(app);
+                scene_pass.execute();
             }
 
             app.window.swapBuffers();
