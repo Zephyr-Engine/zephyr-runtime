@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const Input = @import("input.zig").InputManager;
 const glfw = @import("../c.zig").glfw;
 const win = @import("window.zig");
 const WindowParams = win.WindowParams;
@@ -32,6 +33,7 @@ pub const Application = struct {
 
     pub fn eventCallback(self: *const Application, ev: event.ZEvent) void {
         _ = self;
+        Input.Update(ev);
         switch (ev) {
             .MouseMove => |move_event| {
                 std.log.info("MouseMove: x={d}, y={d}", .{ move_event.x, move_event.y });
