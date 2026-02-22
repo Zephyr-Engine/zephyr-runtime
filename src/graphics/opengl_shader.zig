@@ -13,18 +13,53 @@ pub const ShaderError = error{
     ProgramCreationFailed,
     ProgramLinkingFailed,
     OpenGLError,
-    MemoryError,
+    OutOfMemory,
 };
 
 pub const Shader = struct {
     id: ShaderHandle,
     buffer_layout: layout.BufferLayout,
     allocator: std.mem.Allocator,
+    uniforms: Map,
+
+    const includes = std.StaticStringMap([]const u8).initComptime(.{
+        .{ "lighting", @embedFile("shaders/lighting.glsl") },
+    });
+
+    fn preprocess(allocator: std.mem.Allocator, src: []const u8) ShaderError!?[]u8 {
+        const needle = "#include \"";
+        const start = std.mem.indexOf(u8, src, needle) orelse return null;
+        const name_start = start + needle.len;
+        const name_end = std.mem.indexOfScalarPos(u8, src, name_start, '"') orelse return null;
+        const name = src[name_start..name_end];
+
+        const replacement = includes.get(name) orelse {
+            std.log.err("Unknown shader include: {s}", .{name});
+            return null;
+        };
+
+        const line_end = std.mem.indexOfScalarPos(u8, src, name_end, '\n') orelse src.len;
+
+        const result = try allocator.alloc(u8, start + replacement.len + (src.len - line_end));
+        @memcpy(result[0..start], src[0..start]);
+        @memcpy(result[start .. start + replacement.len], replacement);
+        @memcpy(result[start + replacement.len ..], src[line_end..]);
+        return result;
+    }
 
     pub fn init(allocator: std.mem.Allocator, vs_src: []const u8, fs_src: []const u8) ShaderError!Shader {
+        const vs_processed = try preprocess(allocator, vs_src);
+        defer if (vs_processed) |p| allocator.free(p);
+        const vs_final = vs_processed orelse vs_src;
+
+        const fs_processed = try preprocess(allocator, fs_src);
+        defer if (fs_processed) |p| allocator.free(p);
+        const fs_final = fs_processed orelse fs_src;
+
         const vs_ptrs = [_][*c]const u8{
-            @ptrCast(vs_src.ptr),
+            @ptrCast(vs_final.ptr),
         };
+        const vs_lens = [_]c_int{@intCast(vs_final.len)};
 
         const vs: u32 = gl.glCreateShader(gl.GL_VERTEX_SHADER);
         if (vs == 0) {
@@ -32,7 +67,7 @@ pub const Shader = struct {
         }
         errdefer gl.glDeleteShader(vs);
 
-        gl.glShaderSource(vs, 1, &vs_ptrs, null);
+        gl.glShaderSource(vs, 1, &vs_ptrs, &vs_lens);
         gl.glCompileShader(vs);
 
         var vs_success: i32 = 0;
@@ -40,13 +75,14 @@ pub const Shader = struct {
         if (vs_success == 0) {
             var info_log: [512]u8 = undefined;
             gl.glGetShaderInfoLog(vs, 512, null, @ptrCast(&info_log));
-            std.debug.print("Vertex shader compilation failed: {s}\n", .{info_log});
+            std.log.err("Vertex shader compilation failed: {s}\n", .{info_log});
             return ShaderError.VertexShaderCompilationFailed;
         }
 
         const fs_ptrs = [_][*c]const u8{
-            @ptrCast(fs_src.ptr),
+            @ptrCast(fs_final.ptr),
         };
+        const fs_lens = [_]c_int{@intCast(fs_final.len)};
 
         const fs: u32 = gl.glCreateShader(gl.GL_FRAGMENT_SHADER);
         if (fs == 0) {
@@ -54,7 +90,7 @@ pub const Shader = struct {
         }
         errdefer gl.glDeleteShader(fs);
 
-        gl.glShaderSource(fs, 1, &fs_ptrs, null);
+        gl.glShaderSource(fs, 1, &fs_ptrs, &fs_lens);
         gl.glCompileShader(fs);
 
         var fs_success: i32 = 0;
@@ -62,7 +98,7 @@ pub const Shader = struct {
         if (fs_success == 0) {
             var info_log: [512]u8 = undefined;
             gl.glGetShaderInfoLog(fs, 512, null, @ptrCast(&info_log));
-            std.debug.print("Fragment shader compilation failed: {s}\n", .{info_log});
+            std.log.err("Fragment shader compilation failed: {s}\n", .{info_log});
             return ShaderError.FragmentShaderCompilationFailed;
         }
 
@@ -81,7 +117,7 @@ pub const Shader = struct {
         if (link_success == 0) {
             var info_log: [512]u8 = undefined;
             gl.glGetProgramInfoLog(program, 512, null, @ptrCast(&info_log));
-            std.debug.print("Shader program linking failed: {s}\n", .{info_log});
+            std.log.err("Shader program linking failed: {s}\n", .{info_log});
             gl.glDeleteShader(vs);
             gl.glDeleteShader(fs);
             return ShaderError.ProgramLinkingFailed;
@@ -98,10 +134,7 @@ pub const Shader = struct {
             name: [256]u8,
             location: u32,
         };
-        var attrs = allocator.alloc(AttributeInfo, @intCast(count)) catch |err| {
-            std.log.err("Failed to allocate shader attribute info: {}", .{err});
-            return ShaderError.MemoryError;
-        };
+        var attrs = try allocator.alloc(AttributeInfo, @intCast(count));
         defer allocator.free(attrs);
 
         for (0..@intCast(count)) |i| {
@@ -142,27 +175,27 @@ pub const Shader = struct {
         }.lessThan);
 
         var stride: u32 = 0;
-        var bufferElements = layout.BufferElements.initCapacity(allocator, @intCast(count)) catch |err| {
-            std.log.err("Failed to initialize buffer elements: {}", .{err});
-            return ShaderError.MemoryError;
-        };
+        var bufferElements = try layout.BufferElements.initCapacity(allocator, @intCast(count));
         for (attrs) |attr| {
             const element = layout.BufferElement.new(attr.shader_type, stride, false, attr.name, attr.location);
             stride += element.size;
-            bufferElements.append(allocator, element) catch |err| {
-                std.log.err("Failed to append buffer element: {}", .{err});
-                return ShaderError.MemoryError;
-            };
+            try bufferElements.append(allocator, element);
         }
 
         return .{
             .id = program,
             .buffer_layout = layout.BufferLayout.new(bufferElements, stride),
             .allocator = allocator,
+            .uniforms = try getUniformLocations(program, allocator),
         };
     }
 
     pub fn deinit(self: *Shader) void {
+        var it = self.uniforms.keyIterator();
+        while (it.next()) |key| {
+            self.allocator.free(key.*);
+        }
+        self.uniforms.deinit();
         self.buffer_layout.elements.deinit(self.allocator);
     }
 
@@ -174,9 +207,10 @@ pub const Shader = struct {
         name: *const []u8,
         location: i32,
     };
-    pub fn getUniformLocations(self: Shader, allocator: std.mem.Allocator) !Map {
+
+    fn getUniformLocations(self: ShaderHandle, allocator: std.mem.Allocator) ShaderError!Map {
         var count: i32 = 0;
-        gl.glGetProgramiv(self.id, gl.GL_ACTIVE_UNIFORMS, &count);
+        gl.glGetProgramiv(self, gl.GL_ACTIVE_UNIFORMS, &count);
 
         var map = Map.init(allocator);
         try map.ensureTotalCapacity(@intCast(count));
@@ -186,8 +220,8 @@ pub const Shader = struct {
             var size: i32 = 0;
             var ty: u32 = 0;
             var name: [256]u8 = undefined;
-            gl.glGetActiveUniform(self.id, @intCast(i), 257, &length, &size, &ty, @ptrCast(&name));
-            const loc = gl.glGetUniformLocation(self.id, @ptrCast(&name));
+            gl.glGetActiveUniform(self, @intCast(i), 257, &length, &size, &ty, @ptrCast(&name));
+            const loc = gl.glGetUniformLocation(self, @ptrCast(&name));
 
             const name_slice = name[0..@intCast(length)];
             const owned_name = try allocator.dupe(u8, name_slice);
@@ -197,8 +231,12 @@ pub const Shader = struct {
         return map;
     }
 
-    pub fn setUniform(self: Shader, location: i32, value: anytype) void {
-        _ = self;
+    pub fn setUniform(self: *const Shader, name: []const u8, value: anytype) void {
+        const location = self.uniforms.get(name) orelse {
+            std.log.err("Could not find uniform with name: {s}", .{name});
+            return;
+        };
+
         const T = comptime @TypeOf(value);
         switch (comptime @typeInfo(T)) {
             .float, .comptime_float => {

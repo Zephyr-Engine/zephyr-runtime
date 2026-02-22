@@ -1,7 +1,7 @@
 const std = @import("std");
 const AssetManager = @import("../asset/manager.zig").AssetManager;
 const Camera = @import("../scene/camera.zig").Camera;
-const Model = @import("../asset/model.zig").Model;
+const Light = @import("../asset/light.zig").Light;
 const Shader = @import("../graphics/opengl_shader.zig").Shader;
 const math = @import("zlm").as(f32);
 const c = @import("../c.zig");
@@ -19,8 +19,47 @@ pub const RenderCommand = struct {
             model.material.setUniform("material.diffuse", model.material.lighting.diffuse);
             model.material.setUniform("material.specular", model.material.lighting.specular);
             model.material.setUniform("material.shininess", model.material.lighting.shininess);
+
+            if (model.material.hasTextures()) {
+                model.material.setUniform("u_useTextures", @as(i32, 1));
+                model.material.setUniform("u_baseColorTex", @as(i32, 0));
+                model.material.setUniform("u_metalRoughTex", @as(i32, 1));
+                model.material.bindTextures();
+            }
+
+            uploadLights(model.material.material.shader);
+
             model.draw();
         }
+    }
+
+    fn uploadLights(shader: *const Shader) void {
+        const lights = AssetManager.GetLights();
+        const count: i32 = @intCast(@min(lights.len, 16));
+        shader.setUniform("numLights", count);
+
+        for (lights[0..@intCast(count)], 0..) |light, i| {
+            var buf: [64]u8 = undefined;
+            const prefix = std.fmt.bufPrint(&buf, "lights[{d}].", .{i}) catch continue;
+            const p = prefix.len;
+
+            setField(shader, &buf, p, "kind", @as(i32, @intFromEnum(light.kind)));
+            setField(shader, &buf, p, "position", light.position);
+            setField(shader, &buf, p, "direction", light.direction);
+            setField(shader, &buf, p, "ambient", light.ambient);
+            setField(shader, &buf, p, "diffuse", light.diffuse);
+            setField(shader, &buf, p, "specular", light.specular);
+            setField(shader, &buf, p, "constant", light.constant);
+            setField(shader, &buf, p, "linear", light.linear);
+            setField(shader, &buf, p, "quadratic", light.quadratic);
+            setField(shader, &buf, p, "cutOff", light.cut_off);
+            setField(shader, &buf, p, "outerCutOff", light.outer_cut_off);
+        }
+    }
+
+    fn setField(shader: *const Shader, buf: *[64]u8, prefix_len: usize, field: []const u8, value: anytype) void {
+        @memcpy(buf[prefix_len .. prefix_len + field.len], field);
+        shader.setUniform(buf[0 .. prefix_len + field.len], value);
     }
 
     pub fn Clear(color: math.Vec3) void {
@@ -40,28 +79,25 @@ pub const RenderCommand = struct {
         gl.glDisable(gl.GL_MULTISAMPLE);
     }
 
-    pub fn DrawPicking(camera: *Camera, shader: *Shader, uniforms: *std.StringHashMap(i32)) void {
-        shader.bind();
-        const mvp_loc = uniforms.get("u_mvp") orelse return;
-        const id_loc = uniforms.get("u_objectId") orelse return;
-        const vp = camera.viewProjectionMatrix();
-
-        for (AssetManager.GetModels(), 0..) |model, i| {
-            const model_mat = AssetManager.GetWorldMatrix(i);
-            const mvp = model_mat.mul(vp);
-            shader.setUniform(mvp_loc, mvp);
-            shader.setUniform(id_loc, @as(i32, @intCast(i)));
-            model.vao.draw();
+    pub fn DrawModel(camera: *Camera, model_index: usize, shader: *Shader) void {
+        const models = AssetManager.GetModels();
+        if (model_index >= models.len) {
+            return;
         }
+        const model = models[model_index];
+
+        const model_mat = AssetManager.GetWorldMatrix(model_index);
+        const vp = camera.viewProjectionMatrix();
+        const mvp = model_mat.mul(vp);
+        shader.setUniform("u_mvp", mvp);
+        model.vao.draw();
     }
 
-    pub fn DrawOutline(camera: *Camera, model_index: usize, shader: *Shader, uniforms: *std.StringHashMap(i32), outline_color: math.Vec3, scale_factor: f32) void {
-        shader.bind();
-        const mvp_loc = uniforms.get("u_mvp") orelse return;
-        const color_loc = uniforms.get("u_outlineColor") orelse return;
-
+    pub fn DrawStencilOutline(camera: *Camera, model_index: usize, shader: *Shader, scale_factor: f32) void {
         const models = AssetManager.GetModels();
-        if (model_index >= models.len) return;
+        if (model_index >= models.len) {
+            return;
+        }
         const model = models[model_index];
 
         const model_mat = AssetManager.GetWorldMatrix(model_index);
@@ -80,8 +116,7 @@ pub const RenderCommand = struct {
         gl.glDepthMask(gl.GL_FALSE);
 
         const mvp_normal = model_mat.mul(vp);
-        shader.setUniform(mvp_loc, mvp_normal);
-        shader.setUniform(color_loc, outline_color);
+        shader.setUniform("u_mvp", mvp_normal);
         model.vao.draw();
 
         // --- Pass 2: Render scaled-up model where stencil != 1 ---
@@ -92,10 +127,9 @@ pub const RenderCommand = struct {
         gl.glDisable(gl.GL_DEPTH_TEST);
 
         const scale_mat = math.Mat4.createScale(scale_factor, scale_factor, scale_factor);
-        const scaled_model_mat = model_mat.mul(scale_mat);
+        const scaled_model_mat = scale_mat.mul(model_mat);
         const mvp_scaled = scaled_model_mat.mul(vp);
-        shader.setUniform(mvp_loc, mvp_scaled);
-        shader.setUniform(color_loc, outline_color);
+        shader.setUniform("u_mvp", mvp_scaled);
         model.vao.draw();
 
         // --- Restore GL state ---
