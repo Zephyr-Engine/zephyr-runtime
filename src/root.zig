@@ -10,6 +10,8 @@ pub const Window = window.Window;
 pub const Cursor = window.Cursor;
 pub const CursorShape = window.CursorShape;
 
+pub const Time = @import("core/time.zig").Time;
+
 const scene = @import("core/scene.zig");
 pub const Scene = scene.Scene;
 pub const SceneManager = scene.SceneManager;

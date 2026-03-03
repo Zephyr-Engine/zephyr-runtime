@@ -113,6 +113,7 @@ pub const DrawList = struct {
                 // Upload shadow uniforms once per shader change
                 if (self.shadow_map) |sm| {
                     shader.setUniform("u_shadowEnabled", @as(i32, 1));
+                    shader.setUniform("u_shadowLightIndex", sm.shadow_light_index);
                     shader.setUniform("u_lightSpaceMatrix", sm.getLightSpaceMatrix());
                     shader.setUniform("u_shadowMap", @as(i32, 4));
                     gl.glActiveTexture(gl.GL_TEXTURE4);

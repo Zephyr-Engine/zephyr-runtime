@@ -278,6 +278,14 @@ pub const AssetManager = struct {
         return null;
     }
 
+    pub fn GetActiveCameraHandle() ?CameraHandle {
+        const self = getInstance();
+        for (self.cameras.items, 0..) |camera, i| {
+            if (camera.is_active) return i;
+        }
+        return null;
+    }
+
     pub fn Deinit(allocator: std.mem.Allocator) void {
         const self = getInstance();
         for (self.models.items) |*model| {

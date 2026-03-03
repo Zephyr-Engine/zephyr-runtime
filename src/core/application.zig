@@ -134,10 +134,10 @@ pub const Application = struct {
             app.scene_manager.update(app.time.delta_time);
 
             if (AssetManager.GetActiveCamera()) |_| {
-                // Shadow pass
                 const lights = AssetManager.GetLights();
-                for (lights) |light| {
+                for (lights, 0..) |light, i| {
                     if (light.kind == .directional) {
+                        app.shadow_map.shadow_light_index = @intCast(i);
                         app.shadow_map.computeLightSpaceMatrix(light);
                         app.shadow_map.renderShadowPass();
                         break;
@@ -146,11 +146,9 @@ pub const Application = struct {
 
                 app.draw_list.setShadowMap(&app.shadow_map);
 
-                // Restore viewport after shadow pass
                 const fb = app.window.getFramebufferSize();
                 RenderCommand.SetViewport(0, 0, @intCast(fb.width), @intCast(fb.height));
 
-                // Scene pass via RenderPass (renders to default framebuffer)
                 var scene_pass = RenderPass.init("scene");
                 _ = scene_pass
                     .setClearFlags(.{ .color = true, .depth = true, .stencil = true })

@@ -20,6 +20,7 @@ pub const ShadowMap = struct {
     light_space_matrix: math.Mat4,
     resolution: i32,
     shadow_distance: f32,
+    shadow_light_index: i32 = 0,
 
     const shadow_vs = @embedFile("../graphics/shaders/shadow_vertex.glsl");
     const shadow_fs = @embedFile("../graphics/shaders/shadow_fragment.glsl");
