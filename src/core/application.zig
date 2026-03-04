@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const Input = @import("input.zig").InputManager;
+const Time = @import("time.zig").Time;
 const glfw = @import("../c.zig").glfw;
 const win = @import("window.zig");
 const WindowParams = win.WindowParams;
@@ -14,6 +15,7 @@ pub const ApplicationError = error{
 pub const Application = struct {
     window: *Window,
     allocator: std.mem.Allocator,
+    time: Time,
 
     pub fn init(allocator: std.mem.Allocator, params: WindowParams) !*Application {
         const window = Window.init(allocator, params) catch |err| {
@@ -25,6 +27,7 @@ pub const Application = struct {
         app.* = Application{
             .allocator = allocator,
             .window = window,
+            .time = Time.init(),
         };
         window.setEventCallback(app, eventCallback);
 

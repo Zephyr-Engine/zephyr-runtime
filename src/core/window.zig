@@ -131,6 +131,10 @@ pub const Window = struct {
         self.data.height = height;
     }
 
+    pub fn GetTime() f64 {
+        return glfw.glfwGetTime();
+    }
+
     pub fn SetVsync(value: bool) void {
         glfw.glfwSwapInterval(@intFromBool(value));
     }
