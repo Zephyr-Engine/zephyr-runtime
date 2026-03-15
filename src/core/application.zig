@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const SceneManager = @import("../scene/manager.zig").SceneManager;
+const Scene = @import("../scene/scene.zig").Scene;
 const Input = @import("input.zig").InputManager;
 const Time = @import("time.zig").Time;
 const glfw = @import("../c.zig").glfw;
@@ -13,6 +15,7 @@ pub const ApplicationError = error{
 };
 
 pub const Application = struct {
+    scene_manager: *SceneManager,
     window: *Window,
     allocator: std.mem.Allocator,
     time: Time,
@@ -25,48 +28,49 @@ pub const Application = struct {
 
         const app = try allocator.create(Application);
         app.* = Application{
+            .scene_manager = try .init(allocator),
             .allocator = allocator,
             .window = window,
-            .time = Time.init(),
+            .time = .init(),
         };
         window.setEventCallback(app, eventCallback);
 
         return app;
     }
 
-    pub fn eventCallback(self: *const Application, ev: event.ZEvent) void {
-        _ = self;
-        Input.Update(ev);
-        switch (ev) {
-            .MouseMove => |move_event| {
-                std.log.info("MouseMove: x={d}, y={d}", .{ move_event.x, move_event.y });
-            },
-            .MouseScroll => |scroll_event| {
-                std.log.info("MouseScroll: x_offset={d}, y_offset={d}", .{ scroll_event.x, scroll_event.y });
-            },
-            .KeyPressed => |key| {
-                std.log.info("KeyPressed: key={s}", .{@tagName(key)});
-            },
-            .KeyRepeated => |key| {
-                std.log.info("KeyRepeated: key={s}", .{@tagName(key)});
-            },
-            .KeyReleased => |key| {
-                std.log.info("KeyReleased: key={s}", .{@tagName(key)});
-            },
-            .MousePressed => |button| {
-                std.log.info("MousePressed: button={s}", .{@tagName(button)});
-            },
-            .MouseReleased => |button| {
-                std.log.info("MouseReleased: button={s}", .{@tagName(button)});
-            },
-            else => {
-                std.log.info("Event: {s}", .{@tagName(ev)});
-            },
+    pub fn run(app: *Application) void {
+        app.scene_manager.initScene();
+
+        while (app.window.shouldCloseWindow()) {
+            const current_time = Window.GetTime();
+            app.time.update(@floatCast(current_time));
+
+            Window.HandleInput();
+
+            app.scene_manager.updateScene(app.time.delta_time);
+            app.window.swapBuffers();
+
+            Input.Clear();
         }
+
+        Window.HandleInput();
+    }
+
+    pub fn eventCallback(self: *const Application, ev: event.ZEvent) void {
+        Input.Update(ev);
+        self.scene_manager.handleEvent(ev);
     }
 
     pub fn deinit(self: *Application) void {
+        self.scene_manager.deinit();
         self.window.deinit(self.allocator);
         self.allocator.destroy(self);
+    }
+
+    pub fn pushScene(self: *Application, comptime scene: type, is_active: bool) void {
+        self.scene_manager.addScene(scene, is_active) catch |err| {
+            std.log.err("Failed to push scene: {}", .{err});
+            return;
+        };
     }
 };

@@ -21,4 +21,19 @@ pub fn build(b: *std.Build) void {
 
     mod.linkLibrary(glfw_dep.artifact("glfw"));
     mod.linkLibrary(glad_dep.artifact("glad"));
+
+    const check = b.step("check", "Check if library compiles");
+    const lib_check = b.createModule(.{
+        .root_source_file = b.path("src/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    lib_check.linkLibrary(glfw_dep.artifact("glfw"));
+    lib_check.linkLibrary(glad_dep.artifact("glad"));
+
+    const check_compile = b.addObject(.{
+        .name = "zephyr_runtime_check",
+        .root_module = lib_check,
+    });
+    check.dependOn(&check_compile.step);
 }

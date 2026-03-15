@@ -3,6 +3,7 @@ const c = @import("c.zig");
 const glfw = c.glfw;
 pub const gl = c.glad;
 
+pub const ZEvent = @import("core/event.zig").ZEvent;
 pub const Window = @import("core/window.zig").Window;
 pub const Input = @import("core/input.zig").InputManager;
 pub const Shader = @import("graphics/opengl/shader.zig").Shader;
