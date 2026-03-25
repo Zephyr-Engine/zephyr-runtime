@@ -2,9 +2,9 @@ name: Build
 
 on:
   push:
-    branches: [ yt ]
+    branches: [ yt-ci-testing ]
   pull_request:
-    branches: [ yt ]
+    branches: [ yt-ci-testing ]
 
 jobs:
   build:
