@@ -6,14 +6,17 @@ on:
   pull_request:
     branches: [ main ]
 
-jobs:
-  build:
-    runs-on: ubunutu-latest
-    container: jackpar/x11-zig:0.15.2
+  jobs:
+    build:
+      runs-on: blacksmith-4vcpu-ubuntu-2404
+      container: jackpar/x11-zig:0.16.0-dev.2962
 
     steps:
-      - name: Checkout code
+      - name: Checkout version
         uses: actions/checkout@v4
 
-      - name: Build project
-        run: zig build
+      - name: Lint project
+        run: zig fmt --check .
+
+      - name: Test project
+        run: zig build test

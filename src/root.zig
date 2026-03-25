@@ -13,3 +13,8 @@ pub const VertexArray = @import("graphics/opengl/vertex_array.zig").VertexArray;
 pub const recommended_std_options: std.Options = .{
     .logFn = @import("core/log.zig").log,
 };
+
+test {
+    @import("std").testing.refAllDecls(@This());
+    _ = @import("core/time.zig");
+}

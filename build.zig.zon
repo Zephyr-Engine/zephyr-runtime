@@ -5,8 +5,8 @@
     .minimum_zig_version = "0.15.2",
     .dependencies = .{
         .glfw_zig = .{
-            .url = "git+https://github.com/tiawl/glfw.zig.git#9ab1b6f4c855ec5ad7bc2ec77a6565746d29ec44",
-            .hash = "glfw_zig-1.0.0-NrvYo-PXGQDMOO3ilxE5n1_HpDu_auyqRlHbneGb_JwJ",
+            .url = "git+https://github.com/tiawl/glfw.zig.git?ref=zig-0.16#b0b1ec9ab09da55b008d8bddf0cd70a379a1160f",
+            .hash = "glfw_zig-1.0.1-NrvYoz7SGQCqv1Q_2D3RkSWnnxKNvcofOaBpZnICHAlK",
         },
         .zig_glad = .{
             .url = "git+https://github.com/jackparsonss/zig.glad.git#e973c2a302d8217f6f1a65f46f5222892fe26429",
