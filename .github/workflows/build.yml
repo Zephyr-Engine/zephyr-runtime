@@ -15,5 +15,8 @@ jobs:
       - name: Checkout version
         uses: actions/checkout@v4
 
+      - name: Lint project
+        run: zig fmt --check .
+
       - name: Test project
         run: zig build test
