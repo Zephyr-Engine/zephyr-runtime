@@ -23,25 +23,22 @@ pub const InputManager = struct {
     enabled: if (build_options.editor) bool else void,
 
     var instance: ?InputManager = null;
-    var once = std.once(init);
-
-    fn init() void {
-        instance = InputManager{
-            .mouse_pos = .{ .x = 0.0, .y = 0.0 },
-            .mouse_delta = .{ .x = 0.0, .y = 0.0 },
-            .mouse_scroll = .{ .x = 0.0, .y = 0.0 },
-            .pressed_keys = [_]bool{false} ** 512,
-            .released_keys = [_]bool{false} ** 512,
-            .held_keys = [_]bool{false} ** 512,
-            .pressed_buttons = [_]bool{false} ** 8,
-            .released_buttons = [_]bool{false} ** 8,
-            .held_buttons = [_]bool{false} ** 8,
-            .enabled = if (build_options.editor) true else {},
-        };
-    }
 
     inline fn getInstance() *InputManager {
-        once.call();
+        if (instance == null) {
+            instance = InputManager{
+                .mouse_pos = .{ .x = 0.0, .y = 0.0 },
+                .mouse_delta = .{ .x = 0.0, .y = 0.0 },
+                .mouse_scroll = .{ .x = 0.0, .y = 0.0 },
+                .pressed_keys = [_]bool{false} ** 512,
+                .released_keys = [_]bool{false} ** 512,
+                .held_keys = [_]bool{false} ** 512,
+                .pressed_buttons = [_]bool{false} ** 8,
+                .released_buttons = [_]bool{false} ** 8,
+                .held_buttons = [_]bool{false} ** 8,
+                .enabled = if (build_options.editor) true else {},
+            };
+        }
         return &instance.?;
     }
 
@@ -65,37 +62,37 @@ pub const InputManager = struct {
     pub fn Update(ev: event.ZEvent) void {
         const self = getInstance();
         switch (ev) {
-            event.ZEvent.MouseMove => |move_event| {
+            .MouseMove => |move_event| {
                 self.mouse_delta.x = move_event.x - self.mouse_pos.x;
                 self.mouse_delta.y = move_event.y - self.mouse_pos.y;
                 self.mouse_pos.x = move_event.x;
                 self.mouse_pos.y = move_event.y;
             },
-            event.ZEvent.MouseScroll => |scroll_event| {
+            .MouseScroll => |scroll_event| {
                 self.mouse_scroll.x += scroll_event.x;
                 self.mouse_scroll.y += scroll_event.y;
             },
-            event.ZEvent.KeyPressed => |key_event| {
+            .KeyPressed => |key_event| {
                 const key = @intFromEnum(key_event);
                 self.pressed_keys[key] = true;
                 self.held_keys[key] = true;
             },
-            event.ZEvent.KeyRepeated => |key_event| {
+            .KeyRepeated => |key_event| {
                 const key = @intFromEnum(key_event);
                 self.pressed_keys[key] = true;
                 self.held_keys[key] = true;
             },
-            event.ZEvent.KeyReleased => |key_event| {
+            .KeyReleased => |key_event| {
                 const key = @intFromEnum(key_event);
                 self.released_keys[key] = true;
                 self.held_keys[key] = false;
             },
-            event.ZEvent.MousePressed => |button_event| {
+            .MousePressed => |button_event| {
                 const button = @intFromEnum(button_event);
                 self.pressed_buttons[button] = true;
                 self.held_buttons[button] = true;
             },
-            event.ZEvent.MouseReleased => |button_event| {
+            .MouseReleased => |button_event| {
                 const button = @intFromEnum(button_event);
                 self.released_buttons[button] = true;
                 self.held_buttons[button] = false;
