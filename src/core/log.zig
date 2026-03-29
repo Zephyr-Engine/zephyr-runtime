@@ -30,8 +30,8 @@ pub fn log(
     const prefix = "[" ++ comptime level.asText() ++ "] " ++ scope_prefix;
 
     var buffer: [256]u8 = undefined;
-    const stderr = std.debug.lockStderrWriter(&buffer);
-    defer std.debug.unlockStderrWriter();
+    const stderr = std.debug.lockStderr(&buffer);
+    defer std.debug.unlockStderr();
 
-    stderr.print(color ++ prefix ++ format ++ Color.reset ++ "\n", args) catch return;
+    stderr.file_writer.interface.print(color ++ prefix ++ format ++ Color.reset ++ "\n", args) catch return;
 }

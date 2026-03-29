@@ -33,6 +33,11 @@ pub fn build(b: *std.Build) void {
     runtime_mod.addImport("zlm", zlm.module("zlm"));
     runtime_mod.addOptions("build_options", options);
     runtime_mod.addIncludePath(b.path("external/image"));
+    if (!editor) {
+        runtime_mod.addCSourceFile(.{
+            .file = b.path("external/image/stb_image.c"),
+        });
+    }
 
     // Add a check step to populate LSP data
     const check = b.step("check", "Check if the library compiles");
@@ -45,6 +50,11 @@ pub fn build(b: *std.Build) void {
     lib_check.linkLibrary(glad_dep.artifact("glad"));
     lib_check.addOptions("build_options", options);
     lib_check.addIncludePath(b.path("external/image"));
+    if (!editor) {
+        lib_check.addCSourceFile(.{
+            .file = b.path("external/image/stb_image.c"),
+        });
+    }
 
     const check_compile = b.addObject(.{
         .name = "zephyr_runtime_check",
@@ -64,6 +74,11 @@ pub fn build(b: *std.Build) void {
     test_mod.addImport("zlm", zlm.module("zlm"));
     test_mod.addOptions("build_options", options);
     test_mod.addIncludePath(b.path("external/image"));
+    if (!editor) {
+        test_mod.addCSourceFile(.{
+            .file = b.path("external/image/stb_image.c"),
+        });
+    }
 
     const tests = b.addTest(.{
         .root_module = test_mod,

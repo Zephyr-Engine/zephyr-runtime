@@ -16,31 +16,78 @@ pub const GltfResult = struct {
 
 const Mat4 = [4][4]f32;
 
+// --- Typed GLTF JSON structures (avoids dynamic Value tree) ---
+
+const GltfFile = struct {
+    accessors: []const Accessor = &.{},
+    bufferViews: []const BufferView = &.{},
+    meshes: []const GltfMesh = &.{},
+    nodes: []const Node = &.{},
+    scenes: []const Scene = &.{},
+};
+
+const Accessor = struct {
+    bufferView: ?usize = null,
+    byteOffset: usize = 0,
+    componentType: usize = 0,
+    count: usize = 0,
+};
+
+const BufferView = struct {
+    byteOffset: usize = 0,
+    byteLength: usize = 0,
+    byteStride: ?usize = null,
+};
+
+const Attributes = struct {
+    POSITION: ?usize = null,
+    NORMAL: ?usize = null,
+    TEXCOORD_0: ?usize = null,
+};
+
+const Primitive = struct {
+    attributes: Attributes = .{},
+    indices: ?usize = null,
+};
+
+const GltfMesh = struct {
+    primitives: []const Primitive = &.{},
+};
+
+const Node = struct {
+    mesh: ?usize = null,
+    matrix: ?[16]f64 = null,
+    children: ?[]const usize = null,
+};
+
+const Scene = struct {
+    nodes: ?[]const usize = null,
+};
+
 pub fn parse(allocator: Allocator, gltf_json: []const u8, bin_data: []const u8) !GltfResult {
-    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, gltf_json, .{});
+    const parsed = try std.json.parseFromSlice(GltfFile, allocator, gltf_json, .{
+        .ignore_unknown_fields = true,
+    });
     defer parsed.deinit();
 
-    const root = parsed.value.object;
-
-    const accessors = (root.get("accessors") orelse return GltfError.InvalidGltf).array.items;
-    const buffer_views = (root.get("bufferViews") orelse return GltfError.InvalidGltf).array.items;
-    const meshes_json = (root.get("meshes") orelse return GltfError.InvalidGltf).array.items;
-    const nodes = (root.get("nodes") orelse return GltfError.InvalidGltf).array.items;
+    const file = parsed.value;
+    const accessors = file.accessors;
+    const buffer_views = file.bufferViews;
+    const meshes = file.meshes;
+    const nodes = file.nodes;
 
     // Build mesh-index → world transform mapping by walking the node tree
-    const mesh_transforms = try allocator.alloc(Mat4, meshes_json.len);
+    const mesh_transforms = try allocator.alloc(Mat4, meshes.len);
     defer allocator.free(mesh_transforms);
     for (mesh_transforms) |*m| {
         m.* = identity();
     }
 
     // Walk all nodes recursively from scene roots
-    const scenes = root.get("scenes");
-    if (scenes) |s| {
-        for (s.array.items) |scene| {
-            if (scene.object.get("nodes")) |scene_nodes| {
-                for (scene_nodes.array.items) |node_idx_val| {
-                    const node_idx: usize = @intCast(jsonInt(node_idx_val));
+    if (file.scenes.len > 0) {
+        for (file.scenes) |scene| {
+            if (scene.nodes) |scene_nodes| {
+                for (scene_nodes) |node_idx| {
                     walkNode(nodes, node_idx, identity(), mesh_transforms);
                 }
             }
@@ -52,23 +99,16 @@ pub fn parse(allocator: Allocator, gltf_json: []const u8, bin_data: []const u8) 
         }
     }
 
-    // First pass: count totals
+    // First pass: count totals (cheap with typed structs - direct field access)
     var total_vertices: usize = 0;
     var total_indices: usize = 0;
 
-    for (meshes_json) |mesh_val| {
-        const primitives = mesh_val.object.get("primitives") orelse continue;
-        for (primitives.array.items) |prim| {
-            const attrs = prim.object.get("attributes") orelse continue;
-            const pos_accessor_idx = jsonInt(attrs.object.get("POSITION") orelse continue);
-            const pos_accessor = accessors[@intCast(pos_accessor_idx)];
-            const vert_count: usize = @intCast(jsonInt(pos_accessor.object.get("count") orelse continue));
-            total_vertices += vert_count;
-
-            const idx_accessor_idx = jsonInt(prim.object.get("indices") orelse continue);
-            const idx_accessor = accessors[@intCast(idx_accessor_idx)];
-            const idx_count: usize = @intCast(jsonInt(idx_accessor.object.get("count") orelse continue));
-            total_indices += idx_count;
+    for (meshes) |mesh| {
+        for (mesh.primitives) |prim| {
+            const pos_idx = prim.attributes.POSITION orelse continue;
+            total_vertices += accessors[pos_idx].count;
+            const idx_idx = prim.indices orelse continue;
+            total_indices += accessors[idx_idx].count;
         }
     }
 
@@ -83,59 +123,42 @@ pub fn parse(allocator: Allocator, gltf_json: []const u8, bin_data: []const u8) 
     var base_vertex: u32 = 0;
 
     // Second pass: extract data with transforms applied
-    for (meshes_json, 0..) |mesh_val, mesh_idx| {
+    for (meshes, 0..) |mesh, mesh_idx| {
         const world = mesh_transforms[mesh_idx];
 
-        const primitives = mesh_val.object.get("primitives") orelse continue;
-        for (primitives.array.items) |prim| {
-            const attrs = prim.object.get("attributes") orelse continue;
+        for (mesh.primitives) |prim| {
+            const pos_acc_idx = prim.attributes.POSITION orelse continue;
+            const pos_acc = accessors[pos_acc_idx];
+            const vert_count = pos_acc.count;
 
-            const pos_acc_idx: usize = @intCast(jsonInt(attrs.object.get("POSITION") orelse continue));
-            const pos_accessor = accessors[pos_acc_idx].object;
-            const vert_count: usize = @intCast(jsonInt(pos_accessor.get("count").?));
+            const pos_offset = getOffset(pos_acc, buffer_views);
+            const pos_stride = getStride(pos_acc, buffer_views, 12);
 
-            const pos_data = getAccessorData(pos_accessor, buffer_views);
-            const pos_stride = getStride(pos_accessor, buffer_views, 12);
+            // Resolve optional attributes once per primitive, not per vertex
+            const has_normals = prim.attributes.NORMAL != null;
+            const norm_offset = if (prim.attributes.NORMAL) |ni| getOffset(accessors[ni], buffer_views) else 0;
+            const norm_stride = if (prim.attributes.NORMAL) |ni| getStride(accessors[ni], buffer_views, 12) else 0;
 
-            var norm_data: ?AccessorData = null;
-            var norm_stride: usize = 12;
-            if (attrs.object.get("NORMAL")) |norm_val| {
-                const norm_acc_idx: usize = @intCast(jsonInt(norm_val));
-                const norm_accessor = accessors[norm_acc_idx].object;
-                norm_data = getAccessorData(norm_accessor, buffer_views);
-                norm_stride = getStride(norm_accessor, buffer_views, 12);
-            }
-
-            var tc_data: ?AccessorData = null;
-            var tc_stride: usize = 8;
-            if (attrs.object.get("TEXCOORD_0")) |tc_val| {
-                const tc_acc_idx: usize = @intCast(jsonInt(tc_val));
-                const tc_accessor = accessors[tc_acc_idx].object;
-                tc_data = getAccessorData(tc_accessor, buffer_views);
-                tc_stride = getStride(tc_accessor, buffer_views, 8);
-            }
+            const has_texcoords = prim.attributes.TEXCOORD_0 != null;
+            const tc_offset = if (prim.attributes.TEXCOORD_0) |ti| getOffset(accessors[ti], buffer_views) else 0;
+            const tc_stride = if (prim.attributes.TEXCOORD_0) |ti| getStride(accessors[ti], buffer_views, 8) else 0;
 
             for (0..vert_count) |vi| {
                 const out_base = (vert_offset + vi) * 8;
 
-                // Position - transform by world matrix
-                const p_off = pos_data.offset + vi * pos_stride;
-                const px: f32 = @bitCast(bin_data[p_off..][0..4].*);
-                const py: f32 = @bitCast(bin_data[p_off + 4 ..][0..4].*);
-                const pz: f32 = @bitCast(bin_data[p_off + 8 ..][0..4].*);
-                const tp = mulPoint(world, px, py, pz);
+                // Position - batch read 3 floats, transform by world matrix
+                const p_off = pos_offset + vi * pos_stride;
+                const pos = std.mem.bytesToValue([3]f32, bin_data[p_off..][0..12]);
+                const tp = mulPoint(world, pos[0], pos[1], pos[2]);
                 vertices[out_base + 0] = tp[0];
                 vertices[out_base + 1] = tp[1];
                 vertices[out_base + 2] = tp[2];
 
-                // Normal - transform by normal matrix (inverse transpose of upper-left 3x3)
-                if (norm_data) |nd| {
-                    const n_off = nd.offset + vi * norm_stride;
-                    const nx: f32 = @bitCast(bin_data[n_off..][0..4].*);
-                    const ny: f32 = @bitCast(bin_data[n_off + 4 ..][0..4].*);
-                    const nz: f32 = @bitCast(bin_data[n_off + 8 ..][0..4].*);
-                    const tn = mulDir(world, nx, ny, nz);
-                    // Normalize
+                // Normal - transform by upper-left 3x3 and normalize
+                if (has_normals) {
+                    const n_off = norm_offset + vi * norm_stride;
+                    const norm = std.mem.bytesToValue([3]f32, bin_data[n_off..][0..12]);
+                    const tn = mulDir(world, norm[0], norm[1], norm[2]);
                     const len = @sqrt(tn[0] * tn[0] + tn[1] * tn[1] + tn[2] * tn[2]);
                     if (len > 1e-8) {
                         vertices[out_base + 3] = tn[0] / len;
@@ -153,41 +176,42 @@ pub fn parse(allocator: Allocator, gltf_json: []const u8, bin_data: []const u8) 
                 }
 
                 // Texcoord - pass through unchanged
-                if (tc_data) |td| {
-                    const t_off = td.offset + vi * tc_stride;
-                    vertices[out_base + 6] = @bitCast(bin_data[t_off..][0..4].*);
-                    vertices[out_base + 7] = @bitCast(bin_data[t_off + 4 ..][0..4].*);
+                if (has_texcoords) {
+                    const t_off = tc_offset + vi * tc_stride;
+                    const tc = std.mem.bytesToValue([2]f32, bin_data[t_off..][0..8]);
+                    vertices[out_base + 6] = tc[0];
+                    vertices[out_base + 7] = tc[1];
                 } else {
                     vertices[out_base + 6] = 0.0;
                     vertices[out_base + 7] = 0.0;
                 }
             }
 
-            // Read indices
-            const idx_acc_idx: usize = @intCast(jsonInt(prim.object.get("indices").?));
-            const idx_accessor = accessors[idx_acc_idx].object;
-            const idx_count: usize = @intCast(jsonInt(idx_accessor.get("count").?));
-            const component_type: usize = @intCast(jsonInt(idx_accessor.get("componentType").?));
-            const idx_data = getAccessorData(idx_accessor, buffer_views);
+            // Read indices - switch on component type OUTSIDE the loop
+            const idx_acc_idx = prim.indices orelse continue;
+            const idx_acc = accessors[idx_acc_idx];
+            const idx_count = idx_acc.count;
+            const idx_data_offset = getOffset(idx_acc, buffer_views);
 
-            for (0..idx_count) |ii| {
-                const raw_index: u32 = switch (component_type) {
-                    5125 => blk: {
-                        const off = idx_data.offset + ii * 4;
-                        break :blk @bitCast(bin_data[off..][0..4].*);
-                    },
-                    5123 => blk: {
-                        const off = idx_data.offset + ii * 2;
-                        const val: u16 = @bitCast(bin_data[off..][0..2].*);
-                        break :blk @as(u32, val);
-                    },
-                    5121 => blk: {
-                        const off = idx_data.offset + ii;
-                        break :blk @as(u32, bin_data[off]);
-                    },
-                    else => return GltfError.UnsupportedComponentType,
-                };
-                indices[idx_offset + ii] = raw_index + base_vertex;
+            switch (idx_acc.componentType) {
+                5125 => { // GL_UNSIGNED_INT
+                    for (0..idx_count) |ii| {
+                        const off = idx_data_offset + ii * 4;
+                        indices[idx_offset + ii] = std.mem.bytesToValue(u32, bin_data[off..][0..4]) + base_vertex;
+                    }
+                },
+                5123 => { // GL_UNSIGNED_SHORT
+                    for (0..idx_count) |ii| {
+                        const off = idx_data_offset + ii * 2;
+                        indices[idx_offset + ii] = @as(u32, std.mem.bytesToValue(u16, bin_data[off..][0..2])) + base_vertex;
+                    }
+                },
+                5121 => { // GL_UNSIGNED_BYTE
+                    for (0..idx_count) |ii| {
+                        indices[idx_offset + ii] = @as(u32, bin_data[idx_data_offset + ii]) + base_vertex;
+                    }
+                },
+                else => return GltfError.UnsupportedComponentType,
             }
 
             vert_offset += vert_count;
@@ -207,43 +231,35 @@ pub fn parse(allocator: Allocator, gltf_json: []const u8, bin_data: []const u8) 
 
 // --- Node tree walking ---
 
-fn walkNode(nodes: []const std.json.Value, node_idx: usize, parent_transform: Mat4, mesh_transforms: []Mat4) void {
+fn walkNode(nodes: []const Node, node_idx: usize, parent_transform: Mat4, mesh_transforms: []Mat4) void {
     if (node_idx >= nodes.len) return;
-    const node = nodes[node_idx].object;
+    const node = nodes[node_idx];
 
     const local = getNodeMatrix(node);
     const world = mulMat(parent_transform, local);
 
-    // If this node has a mesh, store its world transform
-    if (node.get("mesh")) |mesh_val| {
-        const mesh_idx: usize = @intCast(jsonInt(mesh_val));
+    if (node.mesh) |mesh_idx| {
         if (mesh_idx < mesh_transforms.len) {
             mesh_transforms[mesh_idx] = world;
         }
     }
 
-    // Recurse into children
-    if (node.get("children")) |children| {
-        for (children.array.items) |child_val| {
-            const child_idx: usize = @intCast(jsonInt(child_val));
+    if (node.children) |children| {
+        for (children) |child_idx| {
             walkNode(nodes, child_idx, world, mesh_transforms);
         }
     }
 }
 
-fn getNodeMatrix(node: std.json.ObjectMap) Mat4 {
-    if (node.get("matrix")) |mat_val| {
-        const items = mat_val.array.items;
-        if (items.len == 16) {
-            // GLTF stores matrices in column-major order
-            var m: Mat4 = undefined;
-            for (0..4) |col| {
-                for (0..4) |row| {
-                    m[col][row] = jsonFloat(items[col * 4 + row]);
-                }
+fn getNodeMatrix(node: Node) Mat4 {
+    if (node.matrix) |mat| {
+        var m: Mat4 = undefined;
+        for (0..4) |col| {
+            for (0..4) |row| {
+                m[col][row] = @floatCast(mat[col * 4 + row]);
             }
-            return m;
         }
+        return m;
     }
     return identity();
 }
@@ -291,41 +307,12 @@ fn mulDir(m: Mat4, x: f32, y: f32, z: f32) [3]f32 {
 
 // --- Accessor helpers ---
 
-const AccessorData = struct {
-    offset: usize,
-};
-
-fn getAccessorData(accessor: std.json.ObjectMap, buffer_views: []const std.json.Value) AccessorData {
-    const bv_idx: usize = @intCast(jsonInt(accessor.get("bufferView").?));
-    const bv = buffer_views[bv_idx].object;
-
-    const bv_offset: usize = if (bv.get("byteOffset")) |v| @intCast(jsonInt(v)) else 0;
-    const acc_offset: usize = if (accessor.get("byteOffset")) |v| @intCast(jsonInt(v)) else 0;
-
-    return .{ .offset = bv_offset + acc_offset };
+fn getOffset(accessor: Accessor, buffer_views: []const BufferView) usize {
+    const bv = buffer_views[accessor.bufferView orelse 0];
+    return bv.byteOffset + accessor.byteOffset;
 }
 
-fn getStride(accessor: std.json.ObjectMap, buffer_views: []const std.json.Value, default_stride: usize) usize {
-    const bv_idx: usize = @intCast(jsonInt(accessor.get("bufferView").?));
-    const bv = buffer_views[bv_idx].object;
-    if (bv.get("byteStride")) |v| {
-        return @intCast(jsonInt(v));
-    }
-    return default_stride;
-}
-
-fn jsonInt(val: std.json.Value) i64 {
-    return switch (val) {
-        .integer => |i| i,
-        .float => |f| @intFromFloat(f),
-        else => 0,
-    };
-}
-
-fn jsonFloat(val: std.json.Value) f32 {
-    return switch (val) {
-        .float => |f| @floatCast(f),
-        .integer => |i| @floatFromInt(i),
-        else => 0,
-    };
+fn getStride(accessor: Accessor, buffer_views: []const BufferView, default: usize) usize {
+    const bv = buffer_views[accessor.bufferView orelse 0];
+    return bv.byteStride orelse default;
 }

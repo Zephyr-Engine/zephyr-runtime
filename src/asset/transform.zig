@@ -11,7 +11,7 @@ pub const Transform = struct {
     rotation: Quat = Quat.identity,
     scale: Vec3 = Vec3.new(1, 1, 1),
     parent: ?AssetHandle = null,
-    children: std.ArrayListUnmanaged(AssetHandle) = .{},
+    children: std.ArrayListUnmanaged(AssetHandle) = .empty,
 
     pub const default = Transform{};
 

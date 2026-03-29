@@ -47,22 +47,19 @@ pub const AssetManager = struct {
     builtin_pbr_shader: ?*Shader = null,
 
     var instance: ?AssetManager = null;
-    var once = std.once(init);
-
-    fn init() void {
-        instance = AssetManager{
-            .models = .empty,
-            .lights = .empty,
-            .cameras = .empty,
-            .shaders = .empty,
-            .textures = .empty,
-            .materials = .empty,
-            .material_instances = .empty,
-        };
-    }
 
     inline fn getInstance() *AssetManager {
-        once.call();
+        if (instance == null) {
+            instance = AssetManager{
+                .models = .empty,
+                .lights = .empty,
+                .cameras = .empty,
+                .shaders = .empty,
+                .textures = .empty,
+                .materials = .empty,
+                .material_instances = .empty,
+            };
+        }
         return &instance.?;
     }
 
@@ -274,6 +271,14 @@ pub const AssetManager = struct {
         const self = getInstance();
         for (self.cameras.items) |*camera| {
             if (camera.is_active) return camera;
+        }
+        return null;
+    }
+
+    pub fn GetActiveCameraHandle() ?CameraHandle {
+        const self = getInstance();
+        for (self.cameras.items, 0..) |camera, i| {
+            if (camera.is_active) return i;
         }
         return null;
     }

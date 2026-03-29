@@ -1,74 +1,24 @@
 const std = @import("std");
 const AssetManager = @import("../asset/manager.zig").AssetManager;
 const Camera = @import("../scene/camera.zig").Camera;
-const Light = @import("../asset/light.zig").Light;
 const Shader = @import("../graphics/opengl_shader.zig").Shader;
 const math = @import("zlm").as(f32);
 const c = @import("../c.zig");
 const gl = c.glad;
 
+pub const render_pass = @import("render_pass.zig");
+pub const RenderPass = render_pass.RenderPass;
+pub const RenderPipeline = render_pass.RenderPipeline;
+pub const ClearFlags = render_pass.ClearFlags;
+
 pub const RenderCommand = struct {
-    pub fn Draw(camera: *Camera) void {
-        for (AssetManager.GetModels(), 0..) |model, i| {
-            const modelMatrix = AssetManager.GetWorldMatrix(i);
-            model.material.setUniform("r_position", modelMatrix.mul(camera.viewProjectionMatrix()));
-            model.material.setUniform("r_viewPos", camera.position);
-
-            model.material.setUniform("r_model", modelMatrix);
-            model.material.setUniform("material.ambient", model.material.lighting.ambient);
-            model.material.setUniform("material.diffuse", model.material.lighting.diffuse);
-            model.material.setUniform("material.specular", model.material.lighting.specular);
-            model.material.setUniform("material.shininess", model.material.lighting.shininess);
-
-            if (model.material.hasTextures()) {
-                model.material.setUniform("u_useTextures", @as(i32, 1));
-                model.material.setUniform("u_baseColorTex", @as(i32, 0));
-                model.material.setUniform("u_metalRoughTex", @as(i32, 1));
-                model.material.bindTextures();
-            }
-
-            uploadLights(model.material.material.shader);
-
-            model.draw();
-        }
-    }
-
-    fn uploadLights(shader: *const Shader) void {
-        const lights = AssetManager.GetLights();
-        const count: i32 = @intCast(@min(lights.len, 16));
-        shader.setUniform("numLights", count);
-
-        for (lights[0..@intCast(count)], 0..) |light, i| {
-            var buf: [64]u8 = undefined;
-            const prefix = std.fmt.bufPrint(&buf, "lights[{d}].", .{i}) catch continue;
-            const p = prefix.len;
-
-            setField(shader, &buf, p, "kind", @as(i32, @intFromEnum(light.kind)));
-            setField(shader, &buf, p, "position", light.position);
-            setField(shader, &buf, p, "direction", light.direction);
-            setField(shader, &buf, p, "ambient", light.ambient);
-            setField(shader, &buf, p, "diffuse", light.diffuse);
-            setField(shader, &buf, p, "specular", light.specular);
-            setField(shader, &buf, p, "constant", light.constant);
-            setField(shader, &buf, p, "linear", light.linear);
-            setField(shader, &buf, p, "quadratic", light.quadratic);
-            setField(shader, &buf, p, "cutOff", light.cut_off);
-            setField(shader, &buf, p, "outerCutOff", light.outer_cut_off);
-        }
-    }
-
-    fn setField(shader: *const Shader, buf: *[64]u8, prefix_len: usize, field: []const u8, value: anytype) void {
-        @memcpy(buf[prefix_len .. prefix_len + field.len], field);
-        shader.setUniform(buf[0 .. prefix_len + field.len], value);
+    pub fn SetViewport(x: i32, y: i32, width: i32, height: i32) void {
+        gl.glViewport(x, y, width, height);
     }
 
     pub fn Clear(color: math.Vec3) void {
-        gl.glClearColor(color.x, color.y, color.z, 1);
+        gl.glClearColor(color.x, color.y, color.z, 1.0);
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT);
-    }
-
-    pub fn SetViewport(x: i32, y: i32, width: i32, height: i32) void {
-        gl.glViewport(x, y, width, height);
     }
 
     pub fn EnableMultisample() void {
@@ -103,10 +53,9 @@ pub const RenderCommand = struct {
         const model_mat = AssetManager.GetWorldMatrix(model_index);
         const vp = camera.viewProjectionMatrix();
 
-        // Clear stencil buffer before outline pass
         gl.glClear(gl.GL_STENCIL_BUFFER_BIT);
 
-        // --- Pass 1: Write selected model to stencil ---
+        // Pass 1: Write selected model to stencil
         gl.glEnable(gl.GL_STENCIL_TEST);
         gl.glDepthFunc(gl.GL_LEQUAL);
         gl.glStencilFunc(gl.GL_ALWAYS, 1, 0xFF);
@@ -119,7 +68,7 @@ pub const RenderCommand = struct {
         shader.setUniform("u_mvp", mvp_normal);
         model.vao.draw();
 
-        // --- Pass 2: Render scaled-up model where stencil != 1 ---
+        // Pass 2: Render scaled-up model where stencil != 1
         gl.glStencilFunc(gl.GL_NOTEQUAL, 1, 0xFF);
         gl.glStencilMask(0x00);
         gl.glColorMask(gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE);
@@ -132,7 +81,7 @@ pub const RenderCommand = struct {
         shader.setUniform("u_mvp", mvp_scaled);
         model.vao.draw();
 
-        // --- Restore GL state ---
+        // Restore GL state
         gl.glStencilMask(0xFF);
         gl.glStencilFunc(gl.GL_ALWAYS, 0, 0xFF);
         gl.glEnable(gl.GL_DEPTH_TEST);
