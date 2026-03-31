@@ -10,6 +10,13 @@ pub const Shader = @import("graphics/opengl/shader.zig").Shader;
 pub const Application = @import("core/application.zig").Application;
 pub const VertexArray = @import("graphics/opengl/vertex_array.zig").VertexArray;
 
+const math = @import("core/math.zig");
+pub const Vec3 = math.Vec3;
+pub const Vec2 = math.Vec2;
+pub const Mat4 = math.Mat4;
+pub const Mat3 = math.Mat3;
+pub const Mat2 = math.Mat2;
+
 pub const recommended_std_options: std.Options = .{
     .logFn = @import("core/log.zig").log,
 };
