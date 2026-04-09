@@ -16,6 +16,10 @@
             .url = "git+https://github.com/ziglibs/zlm.git#35ab7df57cfb5392a11486f6e4b03a82f849a118",
             .hash = "zlm-0.1.0-LoZ6yDawAADMopilIe9MDzer0UqmruCy_PuhNv4OMc7c",
         },
+        .zimp = .{
+            .url = "git+https://github.com/Zephyr-Engine/zimport.git#d5f171737694e221ba48862d34d31bd75c44fe47",
+            .hash = "zimp-0.0.0-jO8AWu43AwB7LhMS_pvgYYh0YTvP_2GGO_lCmGii_G_l",
+        },
     },
     .paths = .{
         "build.zig",

@@ -1,10 +1,19 @@
 const std = @import("std");
+const zimp = @import("zimp");
+
+pub const CookStepOptions = zimp.CookStepOptions;
+pub const addCookStep = zimp.addCookStep;
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
     const zlm_dep = b.dependency("zlm", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const zimp_dep = b.dependency("zimp", .{
         .target = target,
         .optimize = optimize,
     });
@@ -27,6 +36,7 @@ pub fn build(b: *std.Build) void {
     mod.linkLibrary(glfw_dep.artifact("glfw"));
     mod.linkLibrary(glad_dep.artifact("glad"));
     mod.addImport("zlm", zlm_dep.module("zlm"));
+    mod.addImport("zimp", zimp_dep.module("zimp"));
 
     const check = b.step("check", "Check if library compiles");
     const lib_check = b.createModule(.{
@@ -37,6 +47,7 @@ pub fn build(b: *std.Build) void {
     lib_check.linkLibrary(glfw_dep.artifact("glfw"));
     lib_check.linkLibrary(glad_dep.artifact("glad"));
     lib_check.addImport("zlm", zlm_dep.module("zlm"));
+    lib_check.addImport("zimp", zimp_dep.module("zimp"));
 
     const check_compile = b.addObject(.{
         .name = "zephyr_runtime_check",
@@ -53,6 +64,7 @@ pub fn build(b: *std.Build) void {
     lib_unit_tests.root_module.linkLibrary(glfw_dep.artifact("glfw"));
     lib_unit_tests.root_module.linkLibrary(glad_dep.artifact("glad"));
     lib_unit_tests.root_module.addImport("zlm", zlm_dep.module("zlm"));
+    lib_unit_tests.root_module.addImport("zimp", zimp_dep.module("zimp"));
 
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
 

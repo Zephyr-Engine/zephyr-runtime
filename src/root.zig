@@ -6,6 +6,7 @@ pub const gl = c.glad;
 pub const ZEvent = @import("core/event.zig").ZEvent;
 pub const Window = @import("core/window.zig").Window;
 pub const Input = @import("core/input.zig").InputManager;
+pub const MeshHandle = @import("graphics/mesh.zig").MeshHandle;
 pub const Shader = @import("graphics/opengl/shader.zig").Shader;
 pub const Application = @import("core/application.zig").Application;
 pub const VertexArray = @import("graphics/opengl/vertex_array.zig").VertexArray;
@@ -16,6 +17,9 @@ pub const Vec2 = math.Vec2;
 pub const Mat4 = math.Mat4;
 pub const Mat3 = math.Mat3;
 pub const Mat2 = math.Mat2;
+
+const zimp = @import("zimp");
+pub const ZMesh = zimp.ZMesh;
 
 pub const recommended_std_options: std.Options = .{
     .logFn = @import("core/log.zig").log,

@@ -61,9 +61,9 @@ pub const SceneManager = struct {
         try active_scene.onEvent(e);
     }
 
-    pub fn initScene(self: *SceneManager) !void {
+    pub fn initScene(self: *SceneManager, io: std.Io) !void {
         const active_scene = self.getActiveScene();
-        try active_scene.onStartup(self.allocator);
+        try active_scene.onStartup(self.allocator, io);
     }
 
     pub fn deinitScene(self: *SceneManager) !void {

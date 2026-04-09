@@ -19,8 +19,9 @@ pub const Application = struct {
     window: *Window,
     allocator: std.mem.Allocator,
     time: Time,
+    io: std.Io,
 
-    pub fn init(allocator: std.mem.Allocator, params: WindowParams) !*Application {
+    pub fn init(allocator: std.mem.Allocator, io: std.Io, params: WindowParams) !*Application {
         const window = Window.init(allocator, params) catch |err| {
             std.log.err("Failed to initialize window: {}", .{err});
             return ApplicationError.WindowError;
@@ -32,6 +33,7 @@ pub const Application = struct {
             .allocator = allocator,
             .window = window,
             .time = .init(),
+            .io = io,
         };
         window.setEventCallback(app, eventCallback);
 
@@ -39,7 +41,7 @@ pub const Application = struct {
     }
 
     pub fn run(app: *Application) void {
-        app.scene_manager.initScene() catch |err| {
+        app.scene_manager.initScene(app.io) catch |err| {
             std.log.err("Error initializing scene: {}", .{err});
             return;
         };
