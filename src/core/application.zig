@@ -39,7 +39,10 @@ pub const Application = struct {
     }
 
     pub fn run(app: *Application) void {
-        app.scene_manager.initScene();
+        app.scene_manager.initScene() catch |err| {
+            std.log.err("Error initializing scene: {}", .{err});
+            return;
+        };
 
         while (app.window.shouldCloseWindow()) {
             const current_time = Window.GetTime();
@@ -47,7 +50,10 @@ pub const Application = struct {
 
             Window.HandleInput();
 
-            app.scene_manager.updateScene(app.time.delta_time);
+            app.scene_manager.updateScene(app.time.delta_time) catch |err| {
+                std.log.err("Error updating scene: {}", .{err});
+                continue;
+            };
             app.window.swapBuffers();
 
             Input.Clear();
@@ -56,13 +62,13 @@ pub const Application = struct {
         Window.HandleInput();
     }
 
-    pub fn eventCallback(self: *const Application, ev: event.ZEvent) void {
+    pub fn eventCallback(self: *const Application, ev: event.ZEvent) !void {
         Input.Update(ev);
-        self.scene_manager.handleEvent(ev);
+        try self.scene_manager.handleEvent(ev);
     }
 
-    pub fn deinit(self: *Application) void {
-        self.scene_manager.deinit();
+    pub fn deinit(self: *Application) !void {
+        try self.scene_manager.deinit();
         self.window.deinit(self.allocator);
         self.allocator.destroy(self);
     }

@@ -26,9 +26,9 @@ pub const SceneManager = struct {
         return manager;
     }
 
-    pub fn deinit(self: *SceneManager) void {
+    pub fn deinit(self: *SceneManager) !void {
         const active_scene = self.getActiveScene();
-        active_scene.onCleanup(self.allocator);
+        try active_scene.onCleanup(self.allocator);
         self.scenes.deinit(self.allocator);
         self.allocator.destroy(self);
     }
@@ -51,24 +51,23 @@ pub const SceneManager = struct {
         }
     }
 
-    pub fn updateScene(self: *SceneManager, delta_time: f32) void {
+    pub fn updateScene(self: *SceneManager, delta_time: f32) !void {
         const active_scene = self.getActiveScene();
-        active_scene.onUpdate(delta_time);
+        try active_scene.onUpdate(delta_time);
     }
 
-    pub fn handleEvent(self: *SceneManager, e: ZEvent) void {
+    pub fn handleEvent(self: *SceneManager, e: ZEvent) !void {
         const active_scene = self.getActiveScene();
-        active_scene.onEvent(e);
+        try active_scene.onEvent(e);
     }
 
-    pub fn initScene(self: *SceneManager) void {
+    pub fn initScene(self: *SceneManager) !void {
         const active_scene = self.getActiveScene();
-        active_scene.onStartup(self.allocator);
+        try active_scene.onStartup(self.allocator);
     }
 
-    pub fn deinitScene(self: *SceneManager) void {
+    pub fn deinitScene(self: *SceneManager) !void {
         const active_scene = self.getActiveScene();
-        active_scene.onCleanup(self.allocator);
+        try active_scene.onCleanup(self.allocator);
     }
 };
-

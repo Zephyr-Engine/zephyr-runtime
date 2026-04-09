@@ -11,10 +11,10 @@ pub const Scene = struct {
     is_active: bool,
 
     const VTable = struct {
-        onStartup: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator) void,
-        onUpdate: *const fn (ptr: *anyopaque, delta_time: f32) void,
-        onEvent: *const fn (ptr: *anyopaque, e: ZEvent) void,
-        onCleanup: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator) void,
+        onStartup: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!void,
+        onUpdate: *const fn (ptr: *anyopaque, delta_time: f32) anyerror!void,
+        onEvent: *const fn (ptr: *anyopaque, e: ZEvent) anyerror!void,
+        onCleanup: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!void,
     };
 
     pub fn init(
@@ -25,24 +25,24 @@ pub const Scene = struct {
         comptime validateScene(T);
 
         const gen = struct {
-            fn onStartup(ptr: *anyopaque, alloc: std.mem.Allocator) void {
+            fn onStartup(ptr: *anyopaque, alloc: std.mem.Allocator) !void {
                 const self: *T = @ptrCast(@alignCast(ptr));
-                T.onStartup(self, alloc);
+                try T.onStartup(self, alloc);
             }
 
-            fn onUpdate(ptr: *anyopaque, delta_time: f32) void {
+            fn onUpdate(ptr: *anyopaque, delta_time: f32) !void {
                 const self: *T = @ptrCast(@alignCast(ptr));
-                T.onUpdate(self, delta_time);
+                try T.onUpdate(self, delta_time);
             }
 
-            fn onEvent(ptr: *anyopaque, e: ZEvent) void {
+            fn onEvent(ptr: *anyopaque, e: ZEvent) !void {
                 const self: *T = @ptrCast(@alignCast(ptr));
-                T.onEvent(self, e);
+                try T.onEvent(self, e);
             }
 
-            fn onCleanup(ptr: *anyopaque, alloc: std.mem.Allocator) void {
+            fn onCleanup(ptr: *anyopaque, alloc: std.mem.Allocator) !void {
                 const self: *T = @ptrCast(@alignCast(ptr));
-                T.onCleanup(self, alloc);
+                try T.onCleanup(self, alloc);
                 alloc.destroy(self);
             }
         };
@@ -64,42 +64,51 @@ pub const Scene = struct {
         };
     }
 
-    pub fn onStartup(self: *Scene, allocator: std.mem.Allocator) void {
-        self.vtable.onStartup(self.ptr, allocator);
+    pub fn onStartup(self: *Scene, allocator: std.mem.Allocator) !void {
+        try self.vtable.onStartup(self.ptr, allocator);
     }
 
-    pub fn onUpdate(self: *Scene, delta_time: f32) void {
-        self.vtable.onUpdate(self.ptr, delta_time);
+    pub fn onUpdate(self: *Scene, delta_time: f32) !void {
+        try self.vtable.onUpdate(self.ptr, delta_time);
     }
 
-    pub fn onEvent(self: *Scene, e: ZEvent) void {
-        self.vtable.onEvent(self.ptr, e);
+    pub fn onEvent(self: *Scene, e: ZEvent) !void {
+        try self.vtable.onEvent(self.ptr, e);
     }
 
-    pub fn onCleanup(self: *Scene, allocator: std.mem.Allocator) void {
-        self.vtable.onCleanup(self.ptr, allocator);
+    pub fn onCleanup(self: *Scene, allocator: std.mem.Allocator) !void {
+        try self.vtable.onCleanup(self.ptr, allocator);
     }
 };
 
-fn validateScene(comptime T: type) void {
-    const required_fns = .{
-        .{ "onStartup", fn (*T, std.mem.Allocator) void },
-        .{ "onUpdate", fn (*T, f32) void },
-        .{ "onEvent", fn (*T, ZEvent) void },
-        .{ "onCleanup", fn (*T, std.mem.Allocator) void },
-    };
+fn validateSceneFn(comptime T: type, comptime name: []const u8, comptime Sig: type) void {
+    if (!@hasDecl(T, name)) {
+        @compileError("Scene implementation missing: " ++ name);
+    }
+    const actual = @TypeOf(@field(T, name));
+    const expected_info = @typeInfo(Sig).@"fn";
+    const actual_info = @typeInfo(actual).@"fn";
 
-    inline for (required_fns) |req| {
-        const name = req[0];
-        const Sig = req[1];
+    if (actual_info.params.len != expected_info.params.len) {
+        @compileError("Scene." ++ name ++ " has wrong number of parameters. Expected: " ++ @typeName(Sig) ++ ", got: " ++ @typeName(actual));
+    }
 
-        if (!@hasDecl(T, name)) {
-            @compileError("Scene implementation missing: " ++ name);
-        }
-
-        const actual = @TypeOf(@field(T, name));
-        if (actual != Sig) {
-            @compileError("Scene." ++ name ++ " has wrong signature. Expected: " ++ @typeName(Sig) ++ ", got: " ++ @typeName(actual));
+    inline for (actual_info.params, expected_info.params) |ap, ep| {
+        if (ap.type != ep.type) {
+            @compileError("Scene." ++ name ++ " has wrong parameter types. Expected: " ++ @typeName(Sig) ++ ", got: " ++ @typeName(actual));
         }
     }
+
+    const ret = actual_info.return_type orelse @compileError("Scene." ++ name ++ " must have a return type");
+    const ret_info = @typeInfo(ret);
+    if (ret_info != .error_union or ret_info.error_union.payload != void) {
+        @compileError("Scene." ++ name ++ " must return !void, got: " ++ @typeName(actual));
+    }
+}
+
+fn validateScene(comptime T: type) void {
+    comptime validateSceneFn(T, "onStartup", fn (*T, std.mem.Allocator) anyerror!void);
+    comptime validateSceneFn(T, "onUpdate", fn (*T, f32) anyerror!void);
+    comptime validateSceneFn(T, "onEvent", fn (*T, ZEvent) anyerror!void);
+    comptime validateSceneFn(T, "onCleanup", fn (*T, std.mem.Allocator) anyerror!void);
 }
