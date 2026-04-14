@@ -17,6 +17,10 @@ pub const Vec2 = math.Vec2;
 pub const Mat4 = math.Mat4;
 pub const Mat3 = math.Mat3;
 pub const Mat2 = math.Mat2;
+pub const Quat = math.Quat;
+
+pub const Camera3D = @import("scene/camera.zig").Camera3D;
+pub const EditorCamera = @import("scene/editor_camera.zig").EditorCamera;
 
 const zimp = @import("zimp");
 pub const ZMesh = zimp.ZMesh;
@@ -30,6 +34,9 @@ test {
     _ = @import("core/time.zig");
     _ = @import("core/event.zig");
     _ = @import("core/input.zig");
+    _ = @import("core/math.zig");
     _ = @import("scene/scene.zig");
     _ = @import("scene/manager.zig");
+    _ = @import("scene/camera.zig");
+    _ = @import("scene/editor_camera.zig");
 }
