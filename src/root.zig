@@ -6,9 +6,11 @@ pub const gl = c.glad;
 pub const ZEvent = @import("core/event.zig").ZEvent;
 pub const Window = @import("core/window.zig").Window;
 pub const Input = @import("core/input.zig").InputManager;
+pub const Material = @import("graphics/material.zig").Material;
 pub const MeshHandle = @import("graphics/mesh.zig").MeshHandle;
 pub const Shader = @import("graphics/opengl/shader.zig").Shader;
 pub const Application = @import("core/application.zig").Application;
+pub const Texture = @import("graphics/opengl/texture.zig").Texture2D;
 pub const VertexArray = @import("graphics/opengl/vertex_array.zig").VertexArray;
 
 const math = @import("core/math.zig");
@@ -24,6 +26,9 @@ pub const EditorCamera = @import("scene/editor_camera.zig").EditorCamera;
 
 const zimp = @import("zimp");
 pub const ZMesh = zimp.ZMesh;
+pub const ZShader = zimp.ZShader;
+pub const Zatex = zimp.Zatex;
+pub const Zamat = zimp.Zamat;
 
 pub const recommended_std_options: std.Options = .{
     .logFn = @import("core/log.zig").log,

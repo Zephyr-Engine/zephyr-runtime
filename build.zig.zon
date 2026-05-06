@@ -5,8 +5,8 @@
     .minimum_zig_version = "0.16.0-dev",
     .dependencies = .{
         .glfw_zig = .{
-            .url = "git+https://github.com/tiawl/glfw.zig.git?ref=zig-0.16#b0b1ec9ab09da55b008d8bddf0cd70a379a1160f",
-            .hash = "glfw_zig-1.0.1-NrvYoz7SGQCqv1Q_2D3RkSWnnxKNvcofOaBpZnICHAlK",
+            .url = "git+https://github.com/tiawl/glfw.zig#32a093cd869a0694ca2c0306680f7c7bc5dcd0b9",
+            .hash = "glfw_zig-1.0.0-NrvYoyvRGQDgKTTvaAaJLZWQsL6AL5F8jGsBla2V275Y",
         },
         .zig_glad = .{
             .url = "git+https://github.com/jackparsonss/zig.glad.git#e973c2a302d8217f6f1a65f46f5222892fe26429",
@@ -17,8 +17,8 @@
             .hash = "zlm-0.1.0-LoZ6yDawAADMopilIe9MDzer0UqmruCy_PuhNv4OMc7c",
         },
         .zimp = .{
-            .url = "git+https://github.com/Zephyr-Engine/zimport.git#b2320af3b60c7c04391737da7d186c75886c6d2a",
-            .hash = "zimp-0.0.0-jO8AWn1WBAAF0eCVIaMMUASwvWUDRfXKdVInn7pejZbC",
+            .url = "git+https://github.com/Zephyr-Engine/zimport.git#e813e5c776339fb9773d2371626fe21525f4fee0",
+            .hash = "zimp-0.0.0-jO8AWkYFDgD0gFISS4d-xQxeQvUCBjFz2LS78JBcwf-5",
         },
     },
     .paths = .{

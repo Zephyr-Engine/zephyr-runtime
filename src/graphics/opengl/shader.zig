@@ -99,6 +99,13 @@ pub const Shader = struct {
 
         const uniform_count: u32 = @intCast(count);
         var map = Map.init(allocator);
+        errdefer {
+            var it = map.keyIterator();
+            while (it.next()) |key| {
+                allocator.free(key.*);
+            }
+            map.deinit();
+        }
         try map.ensureTotalCapacity(uniform_count);
 
         var name_buf: [256]u8 = undefined;
@@ -129,12 +136,16 @@ pub const Shader = struct {
         return map;
     }
 
-    pub fn setUniform(self: *const Shader, name: []const u8, value: anytype) void {
+    pub fn uniformLocation(self: *const Shader, name: []const u8) ?i32 {
         const location = self.uniforms.get(name) orelse {
-            std.log.err("count not find uniform with name: {s}", .{name});
-            return;
+            std.log.err("could not find uniform with name: {s}", .{name});
+            return null;
         };
+        return location;
+    }
 
+    pub fn setUniform(self: *const Shader, name: []const u8, value: anytype) void {
+        const location = self.uniformLocation(name) orelse return;
         self.bind();
         const T = comptime @TypeOf(value);
         switch (comptime @typeInfo(T)) {
@@ -146,9 +157,9 @@ pub const Shader = struct {
             },
             .int => |i| {
                 if (comptime i.signedness == .signed) {
-                    gl.glUniformi1(location, @as(i32, value));
+                    gl.glUniform1i(location, @as(i32, value));
                 } else {
-                    gl.glUniform1f(location, @as(32, value));
+                    gl.glUniform1i(location, @as(32, value));
                 }
             },
             .@"struct" => {
