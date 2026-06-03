@@ -19,14 +19,16 @@ pub const Shader = struct {
     allocator: std.mem.Allocator,
     uniforms: Map,
 
-    pub fn init(allocator: std.mem.Allocator, vs_src: [*c]const u8, fs_src: [*c]const u8) ShaderError!Shader {
+    pub fn init(allocator: std.mem.Allocator, vs_src: []const u8, fs_src: []const u8) ShaderError!Shader {
         const vs: u32 = gl.glCreateShader(gl.GL_VERTEX_SHADER);
         if (vs == 0) {
             return ShaderError.VertexShaderCreationFailed;
         }
         errdefer gl.glDeleteShader(vs);
 
-        gl.glShaderSource(vs, 1, &vs_src, null);
+        const vs_ptr: [*c]const u8 = @ptrCast(vs_src.ptr);
+        const vs_len: c_int = @intCast(vs_src.len);
+        gl.glShaderSource(vs, 1, &vs_ptr, &vs_len);
         gl.glCompileShader(vs);
 
         var vs_success: i32 = 0;
@@ -44,7 +46,9 @@ pub const Shader = struct {
         }
         errdefer gl.glDeleteShader(fs);
 
-        gl.glShaderSource(fs, 1, &fs_src, null);
+        const fs_ptr: [*c]const u8 = @ptrCast(fs_src.ptr);
+        const fs_len: c_int = @intCast(fs_src.len);
+        gl.glShaderSource(fs, 1, &fs_ptr, &fs_len);
         gl.glCompileShader(fs);
 
         var fs_success: i32 = 0;
@@ -91,6 +95,8 @@ pub const Shader = struct {
             self.allocator.free(key.*);
         }
         self.uniforms.deinit();
+        gl.glDeleteProgram(self.id);
+        self.id = 0;
     }
 
     fn getUniformLocations(self: u32, allocator: std.mem.Allocator) ShaderError!Map {
@@ -159,7 +165,7 @@ pub const Shader = struct {
                 if (comptime i.signedness == .signed) {
                     gl.glUniform1i(location, @as(i32, value));
                 } else {
-                    gl.glUniform1i(location, @as(32, value));
+                    gl.glUniform1i(location, @as(i32, @intCast(value)));
                 }
             },
             .@"struct" => {
