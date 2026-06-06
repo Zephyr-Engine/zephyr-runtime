@@ -5,12 +5,12 @@ const ZMesh = zimp.ZMesh;
 const IndexBuffer = @import("opengl/buffer.zig").IndexBuffer;
 const VertexArray = @import("opengl/vertex_array.zig").VertexArray;
 
-pub const MeshHandle = struct {
+pub const Mesh = struct {
     vao: VertexArray,
     aabb_min: [3]f32,
     aabb_max: [3]f32,
 
-    pub fn loadFromZMesh(mesh: ZMesh) !MeshHandle {
+    pub fn loadFromZMesh(mesh: ZMesh) !Mesh {
         var vao = try VertexArray.init();
         errdefer vao.deinit();
 
@@ -80,11 +80,11 @@ pub const MeshHandle = struct {
         };
     }
 
-    pub fn draw(self: *const MeshHandle) void {
+    pub fn draw(self: *const Mesh) void {
         self.vao.draw();
     }
 
-    pub fn deinit(self: *MeshHandle) void {
+    pub fn deinit(self: *Mesh) void {
         self.vao.deinit();
     }
 };

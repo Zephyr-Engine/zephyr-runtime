@@ -1,6 +1,7 @@
 const std = @import("std");
 const Scene = @import("scene.zig").Scene;
 const ZEvent = @import("../core/event.zig").ZEvent;
+const RuntimeContext = @import("../core/runtime_context.zig").RuntimeContext;
 
 pub const SceneManagerError = error{
     OutOfMemory,
@@ -26,9 +27,9 @@ pub const SceneManager = struct {
         return manager;
     }
 
-    pub fn deinit(self: *SceneManager) !void {
+    pub fn deinit(self: *SceneManager, ctx: *RuntimeContext) !void {
         const active_scene = self.getActiveScene();
-        try active_scene.onCleanup(self.allocator);
+        try active_scene.onCleanup(ctx);
         self.scenes.deinit(self.allocator);
         self.allocator.destroy(self);
     }
@@ -51,23 +52,23 @@ pub const SceneManager = struct {
         }
     }
 
-    pub fn updateScene(self: *SceneManager, delta_time: f32) !void {
+    pub fn updateScene(self: *SceneManager, ctx: *RuntimeContext, delta_time: f32) !void {
         const active_scene = self.getActiveScene();
-        try active_scene.onUpdate(delta_time);
+        try active_scene.onUpdate(ctx, delta_time);
     }
 
-    pub fn handleEvent(self: *SceneManager, e: ZEvent) !void {
+    pub fn handleEvent(self: *SceneManager, ctx: *RuntimeContext, e: ZEvent) !void {
         const active_scene = self.getActiveScene();
-        try active_scene.onEvent(e);
+        try active_scene.onEvent(ctx, e);
     }
 
-    pub fn initScene(self: *SceneManager, io: std.Io) !void {
+    pub fn initScene(self: *SceneManager, ctx: *RuntimeContext) !void {
         const active_scene = self.getActiveScene();
-        try active_scene.onStartup(self.allocator, io);
+        try active_scene.onStartup(ctx);
     }
 
-    pub fn deinitScene(self: *SceneManager) !void {
+    pub fn deinitScene(self: *SceneManager, ctx: *RuntimeContext) !void {
         const active_scene = self.getActiveScene();
-        try active_scene.onCleanup(self.allocator);
+        try active_scene.onCleanup(ctx);
     }
 };

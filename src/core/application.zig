@@ -1,6 +1,9 @@
 const std = @import("std");
 
+const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
+const RuntimeContext = @import("runtime_context.zig").RuntimeContext;
 const SceneManager = @import("../scene/manager.zig").SceneManager;
+const AssetRoots = @import("../assets/source.zig").AssetRoots;
 const Scene = @import("../scene/scene.zig").Scene;
 const Input = @import("input.zig").InputManager;
 const Time = @import("time.zig").Time;
@@ -20,12 +23,27 @@ pub const Application = struct {
     allocator: std.mem.Allocator,
     time: Time,
     io: std.Io,
+    assets: AssetManager,
+    ctx: RuntimeContext,
 
-    pub fn init(allocator: std.mem.Allocator, io: std.Io, params: WindowParams) !*Application {
+    pub fn init(
+        allocator: std.mem.Allocator,
+        io: std.Io,
+        params: WindowParams,
+        asset_roots: AssetRoots,
+    ) !*Application {
         const window = Window.init(allocator, params) catch |err| {
             std.log.err("Failed to initialize window: {}", .{err});
             return ApplicationError.WindowError;
         };
+        errdefer window.deinit(allocator);
+
+        var assets = try AssetManager.initFiles(
+            allocator,
+            io,
+            asset_roots,
+        );
+        errdefer assets.deinit();
 
         const app = try allocator.create(Application);
         app.* = Application{
@@ -34,6 +52,13 @@ pub const Application = struct {
             .window = window,
             .time = .init(),
             .io = io,
+            .ctx = undefined,
+            .assets = assets,
+        };
+        app.ctx = .{
+            .allocator = allocator,
+            .io = io,
+            .assets = &app.assets,
         };
         window.setEventCallback(app, eventCallback);
 
@@ -41,7 +66,7 @@ pub const Application = struct {
     }
 
     pub fn run(app: *Application) void {
-        app.scene_manager.initScene(app.io) catch |err| {
+        app.scene_manager.initScene(&app.ctx) catch |err| {
             std.log.err("Error initializing scene: {}", .{err});
             return;
         };
@@ -52,7 +77,7 @@ pub const Application = struct {
 
             Window.HandleInput();
 
-            app.scene_manager.updateScene(app.time.delta_time) catch |err| {
+            app.scene_manager.updateScene(&app.ctx, app.time.delta_time) catch |err| {
                 std.log.err("Error updating scene: {}", .{err});
                 continue;
             };
@@ -64,13 +89,14 @@ pub const Application = struct {
         Window.HandleInput();
     }
 
-    pub fn eventCallback(self: *const Application, ev: event.ZEvent) !void {
+    pub fn eventCallback(self: *Application, ev: event.ZEvent) !void {
         Input.Update(ev);
-        try self.scene_manager.handleEvent(ev);
+        try self.scene_manager.handleEvent(&self.ctx, ev);
     }
 
     pub fn deinit(self: *Application) !void {
-        try self.scene_manager.deinit();
+        try self.scene_manager.deinit(&self.ctx);
+        self.assets.deinit();
         self.window.deinit(self.allocator);
         self.allocator.destroy(self);
     }

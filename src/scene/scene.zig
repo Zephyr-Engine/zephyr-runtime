@@ -1,5 +1,6 @@
 const std = @import("std");
 const ZEvent = @import("../core/event.zig").ZEvent;
+const RuntimeContext = @import("../core/runtime_context.zig").RuntimeContext;
 
 pub const SceneError = error{
     OutOfMemory,
@@ -11,10 +12,24 @@ pub const Scene = struct {
     is_active: bool,
 
     const VTable = struct {
-        onStartup: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io) anyerror!void,
-        onUpdate: *const fn (ptr: *anyopaque, delta_time: f32) anyerror!void,
-        onEvent: *const fn (ptr: *anyopaque, e: ZEvent) anyerror!void,
-        onCleanup: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!void,
+        onStartup: *const fn (
+            ptr: *anyopaque,
+            ctx: *RuntimeContext,
+        ) anyerror!void,
+        onUpdate: *const fn (
+            ptr: *anyopaque,
+            ctx: *RuntimeContext,
+            delta_time: f32,
+        ) anyerror!void,
+        onEvent: *const fn (
+            ptr: *anyopaque,
+            ctx: *RuntimeContext,
+            e: ZEvent,
+        ) anyerror!void,
+        onCleanup: *const fn (
+            ptr: *anyopaque,
+            ctx: *RuntimeContext,
+        ) anyerror!void,
     };
 
     pub fn init(
@@ -25,25 +40,25 @@ pub const Scene = struct {
         comptime validateScene(T);
 
         const gen = struct {
-            fn onStartup(ptr: *anyopaque, alloc: std.mem.Allocator, io: std.Io) !void {
+            fn onStartup(ptr: *anyopaque, ctx: *RuntimeContext) !void {
                 const self: *T = @ptrCast(@alignCast(ptr));
-                try T.onStartup(self, alloc, io);
+                try T.onStartup(self, ctx);
             }
 
-            fn onUpdate(ptr: *anyopaque, delta_time: f32) !void {
+            fn onUpdate(ptr: *anyopaque, ctx: *RuntimeContext, delta_time: f32) !void {
                 const self: *T = @ptrCast(@alignCast(ptr));
-                try T.onUpdate(self, delta_time);
+                try T.onUpdate(self, ctx, delta_time);
             }
 
-            fn onEvent(ptr: *anyopaque, e: ZEvent) !void {
+            fn onEvent(ptr: *anyopaque, ctx: *RuntimeContext, e: ZEvent) !void {
                 const self: *T = @ptrCast(@alignCast(ptr));
-                try T.onEvent(self, e);
+                try T.onEvent(self, ctx, e);
             }
 
-            fn onCleanup(ptr: *anyopaque, alloc: std.mem.Allocator) !void {
+            fn onCleanup(ptr: *anyopaque, ctx: *RuntimeContext) !void {
                 const self: *T = @ptrCast(@alignCast(ptr));
-                try T.onCleanup(self, alloc);
-                alloc.destroy(self);
+                try T.onCleanup(self, ctx);
+                ctx.allocator.destroy(self);
             }
         };
 
@@ -64,20 +79,20 @@ pub const Scene = struct {
         };
     }
 
-    pub fn onStartup(self: *Scene, allocator: std.mem.Allocator, io: std.Io) !void {
-        try self.vtable.onStartup(self.ptr, allocator, io);
+    pub fn onStartup(self: *Scene, ctx: *RuntimeContext) !void {
+        try self.vtable.onStartup(self.ptr, ctx);
     }
 
-    pub fn onUpdate(self: *Scene, delta_time: f32) !void {
-        try self.vtable.onUpdate(self.ptr, delta_time);
+    pub fn onUpdate(self: *Scene, ctx: *RuntimeContext, delta_time: f32) !void {
+        try self.vtable.onUpdate(self.ptr, ctx, delta_time);
     }
 
-    pub fn onEvent(self: *Scene, e: ZEvent) !void {
-        try self.vtable.onEvent(self.ptr, e);
+    pub fn onEvent(self: *Scene, ctx: *RuntimeContext, e: ZEvent) !void {
+        try self.vtable.onEvent(self.ptr, ctx, e);
     }
 
-    pub fn onCleanup(self: *Scene, allocator: std.mem.Allocator) !void {
-        try self.vtable.onCleanup(self.ptr, allocator);
+    pub fn onCleanup(self: *Scene, ctx: *RuntimeContext) !void {
+        try self.vtable.onCleanup(self.ptr, ctx);
     }
 };
 
@@ -107,8 +122,8 @@ fn validateSceneFn(comptime T: type, comptime name: []const u8, comptime Sig: ty
 }
 
 fn validateScene(comptime T: type) void {
-    comptime validateSceneFn(T, "onStartup", fn (*T, std.mem.Allocator, io: std.Io) anyerror!void);
-    comptime validateSceneFn(T, "onUpdate", fn (*T, f32) anyerror!void);
-    comptime validateSceneFn(T, "onEvent", fn (*T, ZEvent) anyerror!void);
-    comptime validateSceneFn(T, "onCleanup", fn (*T, std.mem.Allocator) anyerror!void);
+    comptime validateSceneFn(T, "onStartup", fn (*T, *RuntimeContext) anyerror!void);
+    comptime validateSceneFn(T, "onUpdate", fn (*T, *RuntimeContext, f32) anyerror!void);
+    comptime validateSceneFn(T, "onEvent", fn (*T, *RuntimeContext, ZEvent) anyerror!void);
+    comptime validateSceneFn(T, "onCleanup", fn (*T, *RuntimeContext) anyerror!void);
 }

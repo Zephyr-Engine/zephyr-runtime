@@ -7,77 +7,29 @@ const Shader = @import("opengl/shader.zig").Shader;
 const Texture2D = @import("opengl/texture.zig").Texture2D;
 
 pub const Material = struct {
-    shader: Shader,
+    shader: *Shader,
     source: zimp.Zamat,
     texture_bindings: []TextureBinding,
     param_bindings: []ParamBinding,
     allocator: std.mem.Allocator,
 
-    const TextureBinding = struct {
+    pub const TextureBinding = struct {
         unit: u16,
-        texture: Texture2D,
+        texture: *Texture2D,
         slot_name_hash: u64,
     };
 
-    const ParamBinding = struct {
+    pub const ParamBinding = struct {
         param_index: usize,
         location: i32,
     };
 
-    pub fn load(
+    pub fn initFromSource(
         allocator: std.mem.Allocator,
-        io: std.Io,
-        dir: std.Io.Dir,
-        path: []const u8,
+        source: zimp.Zamat,
+        shader: *Shader,
+        texture_bindings: []TextureBinding,
     ) !Material {
-        const file = try dir.openFile(io, path, .{});
-        defer file.close(io);
-
-        var buf: [8192]u8 = undefined;
-        var reader_state = file.reader(io, &buf);
-        const source = try zimp.Zamat.read(allocator, &reader_state.interface);
-        errdefer {
-            var tmp = source;
-            tmp.deinit(allocator);
-        }
-
-        const base_dir = std.fs.path.dirname(path);
-
-        const vertex_shader_path = try materialRelativePath(allocator, base_dir, source.vertex_shader_path);
-        defer allocator.free(vertex_shader_path);
-        const fragment_shader_path = try materialRelativePath(allocator, base_dir, source.fragment_shader_path);
-        defer allocator.free(fragment_shader_path);
-
-        var shader = try loadShader(allocator, io, dir, vertex_shader_path, fragment_shader_path);
-        errdefer shader.deinit();
-
-        var texture_bindings = std.ArrayList(TextureBinding).empty;
-        errdefer {
-            for (texture_bindings.items) |*binding| binding.texture.deinit();
-            texture_bindings.deinit(allocator);
-        }
-
-        for (source.texture_slots) |slot| {
-            if (slot.slot_index == std.math.maxInt(u16)) {
-                continue;
-            }
-            if (slot.cooked_path.len == 0) {
-                continue;
-            }
-
-            const texture_path = try materialRelativePath(allocator, base_dir, slot.cooked_path);
-            defer allocator.free(texture_path);
-
-            var texture = try loadTexture(allocator, io, dir, texture_path);
-            errdefer texture.deinit();
-
-            try texture_bindings.append(allocator, .{
-                .unit = slot.slot_index,
-                .texture = texture,
-                .slot_name_hash = slot.slot_name_hash,
-            });
-        }
-
         var param_bindings = std.ArrayList(ParamBinding).empty;
         errdefer param_bindings.deinit(allocator);
 
@@ -89,18 +41,11 @@ pub const Material = struct {
             });
         }
 
-        const texture_slice = try texture_bindings.toOwnedSlice(allocator);
-        errdefer {
-            for (texture_slice) |*binding| binding.texture.deinit();
-            allocator.free(texture_slice);
-        }
-        const param_slice = try param_bindings.toOwnedSlice(allocator);
-
         return .{
             .shader = shader,
             .source = source,
-            .texture_bindings = texture_slice,
-            .param_bindings = param_slice,
+            .texture_bindings = texture_bindings,
+            .param_bindings = try param_bindings.toOwnedSlice(allocator),
             .allocator = allocator,
         };
     }
@@ -159,63 +104,11 @@ pub const Material = struct {
     }
 
     pub fn deinit(self: *Material) void {
-        for (self.texture_bindings) |*binding| {
-            binding.texture.deinit();
-        }
         self.allocator.free(self.texture_bindings);
         self.allocator.free(self.param_bindings);
-        self.shader.deinit();
         self.source.deinit(self.allocator);
     }
 };
-
-fn materialRelativePath(allocator: std.mem.Allocator, base_dir: ?[]const u8, path: []const u8) ![]u8 {
-    if (base_dir) |base| {
-        return std.fs.path.join(allocator, &.{ base, path });
-    }
-    return allocator.dupe(u8, path);
-}
-
-fn loadShader(
-    allocator: std.mem.Allocator,
-    io: std.Io,
-    dir: std.Io.Dir,
-    vertex_path: []const u8,
-    fragment_path: []const u8,
-) !Shader {
-    const vertex_file = try dir.openFile(io, vertex_path, .{});
-    defer vertex_file.close(io);
-    var vertex_reader_buf: [8192]u8 = undefined;
-    var vertex_reader = vertex_file.reader(io, &vertex_reader_buf);
-    var vertex_shader = try zimp.ZShader.read(allocator, &vertex_reader.interface);
-    defer vertex_shader.deinit(allocator);
-
-    const fragment_file = try dir.openFile(io, fragment_path, .{});
-    defer fragment_file.close(io);
-    var fragment_reader_buf: [8192]u8 = undefined;
-    var fragment_reader = fragment_file.reader(io, &fragment_reader_buf);
-    var fragment_shader = try zimp.ZShader.read(allocator, &fragment_reader.interface);
-    defer fragment_shader.deinit(allocator);
-
-    const vertex_source = try vertex_shader.baseSource();
-    const fragment_source = try fragment_shader.baseSource();
-    return Shader.init(allocator, vertex_source.ptr, fragment_source.ptr);
-}
-
-fn loadTexture(
-    allocator: std.mem.Allocator,
-    io: std.Io,
-    dir: std.Io.Dir,
-    path: []const u8,
-) !Texture2D {
-    const file = try dir.openFile(io, path, .{});
-    defer file.close(io);
-
-    var ztex = try zimp.Zatex.read(allocator, io, file);
-    defer ztex.deinit(allocator);
-
-    return Texture2D.init(ztex);
-}
 
 fn applyAlphaMode(mode: anytype) void {
     switch (mode) {
@@ -254,8 +147,7 @@ fn readF32(bytes: *const [4]u8) f32 {
 fn fnv1a(bytes: []const u8) u64 {
     var hash: u64 = 0xcbf29ce484222325;
     for (bytes) |byte| {
-        const b: u8 = if (byte == '\\') '/' else byte;
-        hash ^= b;
+        hash ^= byte;
         hash *%= 0x00000100000001B3;
     }
     return hash;
