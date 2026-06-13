@@ -15,6 +15,7 @@ pub const RuntimeContext = @import("core/runtime_context.zig").RuntimeContext;
 pub const VertexArray = @import("graphics/opengl/vertex_array.zig").VertexArray;
 
 pub const AssetManager = @import("assets/asset_manager.zig").AssetManager;
+pub const AssetState = @import("assets/asset_manager.zig").AssetState;
 pub const AssetKind = @import("assets/uuid.zig").AssetKind;
 pub const AssetId = @import("assets/uuid.zig").AssetId;
 pub const AssetRef = @import("assets/uuid.zig").AssetRef;

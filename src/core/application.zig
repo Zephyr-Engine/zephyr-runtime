@@ -77,6 +77,11 @@ pub const Application = struct {
 
             Window.HandleInput();
 
+            app.assets.pump() catch |err| {
+                std.log.err("Error updating assets: {}", .{err});
+                continue;
+            };
+
             app.scene_manager.updateScene(&app.ctx, app.time.delta_time) catch |err| {
                 std.log.err("Error updating scene: {}", .{err});
                 continue;
