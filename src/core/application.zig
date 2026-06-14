@@ -2,7 +2,9 @@ const std = @import("std");
 
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
 const RuntimeContext = @import("runtime_context.zig").RuntimeContext;
+const RenderViewport = @import("runtime_context.zig").RenderViewport;
 const SceneManager = @import("../scene/manager.zig").SceneManager;
+const Framebuffer = @import("../graphics/opengl/framebuffer.zig").Framebuffer;
 const AssetRoots = @import("../assets/source.zig").AssetRoots;
 const Scene = @import("../scene/scene.zig").Scene;
 const Input = @import("input.zig").InputManager;
@@ -25,6 +27,8 @@ pub const Application = struct {
     io: std.Io,
     assets: AssetManager,
     ctx: RuntimeContext,
+    events: std.ArrayList(event.ZEvent) = .empty,
+    scene_started: bool = false,
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -66,41 +70,108 @@ pub const Application = struct {
     }
 
     pub fn run(app: *Application) void {
-        app.scene_manager.initScene(&app.ctx) catch |err| {
+        app.start() catch |err| {
             std.log.err("Error initializing scene: {}", .{err});
             return;
         };
 
         while (app.window.shouldCloseWindow()) {
-            const current_time = Window.GetTime();
-            app.time.update(@floatCast(current_time));
-
-            Window.HandleInput();
-
-            app.assets.pump() catch |err| {
-                std.log.err("Error updating assets: {}", .{err});
+            _ = app.beginFrame();
+            app.processQueuedEvents() catch |err| {
+                std.log.err("Error processing events: {}", .{err});
                 continue;
             };
 
-            app.scene_manager.updateScene(&app.ctx, app.time.delta_time) catch |err| {
+            app.update() catch |err| {
                 std.log.err("Error updating scene: {}", .{err});
                 continue;
             };
-            app.window.swapBuffers();
-
-            Input.Clear();
+            app.present();
         }
 
         Window.HandleInput();
     }
 
     pub fn eventCallback(self: *Application, ev: event.ZEvent) !void {
+        try self.events.append(self.allocator, ev);
+    }
+
+    pub fn start(self: *Application) !void {
+        if (self.scene_started) return;
+        try self.scene_manager.initScene(&self.ctx);
+        self.scene_started = true;
+    }
+
+    pub fn beginFrame(self: *Application) []const event.ZEvent {
+        self.events.clearRetainingCapacity();
+        self.time.update(@floatCast(Window.GetTime()));
+        Window.HandleInput();
+        return self.events.items;
+    }
+
+    pub fn processQueuedEvents(self: *Application) !void {
+        try self.processEvents(self.events.items);
+    }
+
+    pub fn processEvents(self: *Application, events: []const event.ZEvent) !void {
+        for (events) |ev| {
+            try self.processEvent(ev);
+        }
+    }
+
+    pub fn processEvent(self: *Application, ev: event.ZEvent) !void {
         Input.Update(ev);
-        try self.scene_manager.handleEvent(&self.ctx, ev);
+        if (self.scene_started) {
+            try self.scene_manager.handleEvent(&self.ctx, ev);
+        }
+    }
+
+    pub fn pumpAssets(self: *Application) !void {
+        try self.assets.pump();
+    }
+
+    pub fn update(self: *Application) !void {
+        try self.pumpAssets();
+        try self.renderScene(null);
+    }
+
+    pub fn renderScene(self: *Application, target: ?*Framebuffer) !void {
+        if (!self.scene_started) {
+            try self.start();
+        }
+
+        var restore_default = false;
+        if (target) |framebuffer| {
+            framebuffer.bind();
+            self.ctx.render_viewport = .{
+                .width = framebuffer.width,
+                .height = framebuffer.height,
+            };
+            restore_default = true;
+        } else {
+            const fb_size = self.window.getFramebufferSize();
+            Framebuffer.bindDefault(fb_size.width, fb_size.height);
+            self.ctx.render_viewport = RenderViewport{
+                .width = fb_size.width,
+                .height = fb_size.height,
+            };
+        }
+        defer if (restore_default) {
+            const fb_size = self.window.getFramebufferSize();
+            Framebuffer.bindDefault(fb_size.width, fb_size.height);
+        };
+
+        try self.scene_manager.updateScene(&self.ctx, self.time.delta_time);
+    }
+
+    pub fn present(self: *Application) void {
+        self.window.swapBuffers();
+        Input.Clear();
     }
 
     pub fn deinit(self: *Application) !void {
         try self.scene_manager.deinit(&self.ctx);
+        self.events.deinit(self.allocator);
         self.assets.deinit();
         self.window.deinit(self.allocator);
         self.allocator.destroy(self);
