@@ -36,20 +36,35 @@ pub const CursorKind = enum {
     resize_y,
 };
 
-fn getDefaultWidth() u32 {
-    const monitor = glfw.glfwGetPrimaryMonitor();
-    const video = glfw.glfwGetVideoMode(monitor);
-    const full_width: u32 = @intCast(video.*.width);
+const DefaultWindowBounds = struct {
+    x: c_int = 0,
+    y: c_int = 0,
+    width: u32 = 1280,
+    height: u32 = 720,
+};
 
-    return @intFromFloat(@as(f32, @floatFromInt(full_width)) * 0.5);
-}
+fn getDefaultWindowBounds() DefaultWindowBounds {
+    const monitor = glfw.glfwGetPrimaryMonitor() orelse return .{};
 
-fn getDefaultHeight() u32 {
-    const monitor = glfw.glfwGetPrimaryMonitor();
-    const video = glfw.glfwGetVideoMode(monitor);
-    const full_height: u32 = @intCast(video.*.height);
+    var x: c_int = 0;
+    var y: c_int = 0;
+    var width: c_int = 0;
+    var height: c_int = 0;
+    glfw.glfwGetMonitorWorkarea(monitor, &x, &y, &width, &height);
+    if (width > 0 and height > 0) {
+        return .{
+            .x = x,
+            .y = y,
+            .width = @intCast(width),
+            .height = @intCast(height),
+        };
+    }
 
-    return @intFromFloat(@as(f32, @floatFromInt(full_height)) * 0.5);
+    const video = glfw.glfwGetVideoMode(monitor) orelse return .{};
+    return .{
+        .width = @intCast(video.*.width),
+        .height = @intCast(video.*.height),
+    };
 }
 
 pub const Window = struct {
@@ -83,8 +98,9 @@ pub const Window = struct {
         };
         defer allocator.free(title);
 
-        const width = if (params.width) |w| w else getDefaultWidth();
-        const height = if (params.height) |h| h else getDefaultHeight();
+        const default_bounds = getDefaultWindowBounds();
+        const width = params.width orelse default_bounds.width;
+        const height = params.height orelse default_bounds.height;
 
         const window = glfw.glfwCreateWindow(@intCast(width), @intCast(height), title, null, null);
         if (window == null) {
@@ -92,6 +108,9 @@ pub const Window = struct {
             return WindowError.InitializeFailed;
         }
         errdefer glfw.glfwDestroyWindow(window);
+        if (params.width == null or params.height == null) {
+            glfw.glfwSetWindowPos(window, default_bounds.x, default_bounds.y);
+        }
 
         glfw.glfwMakeContextCurrent(window);
         Window.SetVsync(true);
