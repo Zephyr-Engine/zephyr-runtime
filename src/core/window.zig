@@ -1,9 +1,17 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const event = @import("event.zig");
 const c = @import("../c.zig");
 const glfw = c.glfw;
 const gl = c.glad;
+
+const macos = if (builtin.os.tag == .macos) @cImport({
+    @cInclude("objc/message.h");
+    @cInclude("objc/runtime.h");
+}) else struct {};
+
+extern fn glfwGetCocoaWindow(window: c.Window) ?*anyopaque;
 
 pub const WindowError = error{
     InitializeFailed,
@@ -111,6 +119,7 @@ pub const Window = struct {
         if (params.width == null or params.height == null) {
             glfw.glfwSetWindowPos(window, default_bounds.x, default_bounds.y);
         }
+        applyPlatformWindowAppearance(window);
 
         glfw.glfwMakeContextCurrent(window);
         Window.SetVsync(true);
@@ -255,3 +264,44 @@ pub const Window = struct {
         allocator.destroy(self);
     }
 };
+
+fn applyPlatformWindowAppearance(window: c.Window) void {
+    if (builtin.os.tag == .macos) {
+        applyMacWindowAppearance(window);
+    }
+}
+
+fn applyMacWindowAppearance(window: c.Window) void {
+    const ns_window = glfwGetCocoaWindow(window) orelse return;
+
+    const ns_string_class = macos.objc_getClass("NSString");
+    const ns_appearance_class = macos.objc_getClass("NSAppearance");
+    const dark_aqua_name = objcMsgSendId(
+        ns_string_class,
+        macos.sel_registerName("stringWithUTF8String:"),
+        "NSAppearanceNameDarkAqua",
+    ) orelse return;
+    const dark_appearance = objcMsgSendId(
+        ns_appearance_class,
+        macos.sel_registerName("appearanceNamed:"),
+        dark_aqua_name,
+    ) orelse return;
+
+    objcMsgSendVoid(
+        ns_window,
+        macos.sel_registerName("setAppearance:"),
+        dark_appearance,
+    );
+}
+
+fn objcMsgSendId(receiver: anytype, selector: anytype, argument: anytype) ?*anyopaque {
+    const Fn = *const fn (@TypeOf(receiver), @TypeOf(selector), @TypeOf(argument)) callconv(.c) ?*anyopaque;
+    const msg_send: Fn = @ptrCast(&macos.objc_msgSend);
+    return msg_send(receiver, selector, argument);
+}
+
+fn objcMsgSendVoid(receiver: anytype, selector: anytype, argument: anytype) void {
+    const Fn = *const fn (@TypeOf(receiver), @TypeOf(selector), @TypeOf(argument)) callconv(.c) void;
+    const msg_send: Fn = @ptrCast(&macos.objc_msgSend);
+    msg_send(receiver, selector, argument);
+}
