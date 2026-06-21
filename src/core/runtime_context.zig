@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
+const ecs = @import("../ecs/world.zig");
 
 pub const RenderViewport = struct {
     width: u32 = 1,
@@ -16,6 +17,7 @@ pub const RuntimeContext = struct {
     io: std.Io,
     assets: *AssetManager,
     render_viewport: RenderViewport = .{},
+    world: ecs.World,
 };
 
 test "RenderViewport aspect guards against zero height" {

@@ -1,30 +1,25 @@
-const std = @import("std");
-const c = @import("c.zig");
-const glfw = c.glfw;
-pub const gl = c.glad;
-
-pub const Mesh = @import("graphics/mesh.zig").Mesh;
-pub const ZEvent = @import("core/event.zig").ZEvent;
-pub const Window = @import("core/window.zig").Window;
-pub const CursorKind = @import("core/window.zig").CursorKind;
-pub const Input = @import("core/input.zig").InputManager;
-pub const Material = @import("graphics/material.zig").Material;
-pub const Shader = @import("graphics/opengl/shader.zig").Shader;
-pub const Application = @import("core/application.zig").Application;
-pub const Texture = @import("graphics/opengl/texture.zig").Texture2D;
-pub const Framebuffer = @import("graphics/opengl/framebuffer.zig").Framebuffer;
+pub const VertexArray = @import("graphics/opengl/vertex_array.zig").VertexArray;
 pub const RuntimeContext = @import("core/runtime_context.zig").RuntimeContext;
 pub const RenderViewport = @import("core/runtime_context.zig").RenderViewport;
-pub const VertexArray = @import("graphics/opengl/vertex_array.zig").VertexArray;
+pub const Framebuffer = @import("graphics/opengl/framebuffer.zig").Framebuffer;
+pub const Texture = @import("graphics/opengl/texture.zig").Texture2D;
+pub const Application = @import("core/application.zig").Application;
+pub const Shader = @import("graphics/opengl/shader.zig").Shader;
+pub const Material = @import("graphics/material.zig").Material;
+pub const CursorKind = @import("core/window.zig").CursorKind;
+pub const Input = @import("core/input.zig").InputManager;
+pub const Window = @import("core/window.zig").Window;
+pub const ZEvent = @import("core/event.zig").ZEvent;
+pub const Mesh = @import("graphics/mesh.zig").Mesh;
 
 pub const AssetManager = @import("assets/asset_manager.zig").AssetManager;
 pub const AssetState = @import("assets/asset_manager.zig").AssetState;
-pub const AssetKind = @import("assets/uuid.zig").AssetKind;
-pub const AssetId = @import("assets/uuid.zig").AssetId;
-pub const AssetRef = @import("assets/uuid.zig").AssetRef;
-pub const Uuid = @import("assets/uuid.zig").Uuid;
 pub const AssetRoots = @import("assets/source.zig").AssetRoots;
 pub const AssetError = @import("assets/source.zig").AssetError;
+pub const AssetKind = @import("assets/uuid.zig").AssetKind;
+pub const AssetRef = @import("assets/uuid.zig").AssetRef;
+pub const AssetId = @import("assets/uuid.zig").AssetId;
+pub const Uuid = @import("assets/uuid.zig").Uuid;
 
 const math = @import("core/math.zig");
 pub const Vec3 = math.Vec3;
@@ -34,8 +29,15 @@ pub const Mat3 = math.Mat3;
 pub const Mat2 = math.Mat2;
 pub const Quat = math.Quat;
 
-pub const Camera3D = @import("scene/camera.zig").Camera3D;
-pub const EditorCamera = @import("scene/editor_camera.zig").EditorCamera;
+const camera = @import("scene/camera.zig");
+
+pub const ActiveCamera = camera.ActiveCamera;
+pub const setActiveCamera = camera.setActive;
+pub const activeCamera = camera.active;
+pub const renderFromCamera = @import("graphics/renderer.zig").renderFromCamera;
+
+pub const components = @import("ecs/components.zig");
+pub const ecs = @import("ecs/world.zig");
 
 const zimp = @import("zimp");
 pub const ZMesh = zimp.ZMesh;
@@ -45,18 +47,19 @@ pub const Zamat = zimp.Zamat;
 
 test {
     @import("std").testing.refAllDecls(@This());
+    _ = @import("ecs/world.zig");
     _ = @import("core/time.zig");
+    _ = @import("core/math.zig");
     _ = @import("core/event.zig");
     _ = @import("core/input.zig");
-    _ = @import("core/math.zig");
     _ = @import("scene/scene.zig");
-    _ = @import("scene/manager.zig");
-    _ = @import("scene/camera.zig");
-    _ = @import("core/runtime_context.zig");
     _ = @import("assets/uuid.zig");
+    _ = @import("scene/camera.zig");
+    _ = @import("scene/manager.zig");
     _ = @import("assets/source.zig");
+    _ = @import("ecs/components.zig");
     _ = @import("assets/asset_manager.zig");
     _ = @import("core/runtime_context.zig");
-    _ = @import("scene/editor_camera.zig");
+    _ = @import("core/runtime_context.zig");
     _ = @import("graphics/opengl/framebuffer.zig");
 }

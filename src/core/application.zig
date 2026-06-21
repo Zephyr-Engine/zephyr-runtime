@@ -6,6 +6,7 @@ const RenderViewport = @import("runtime_context.zig").RenderViewport;
 const SceneManager = @import("../scene/manager.zig").SceneManager;
 const Framebuffer = @import("../graphics/opengl/framebuffer.zig").Framebuffer;
 const AssetRoots = @import("../assets/source.zig").AssetRoots;
+const renderer = @import("../graphics/renderer.zig");
 const Scene = @import("../scene/scene.zig").Scene;
 const Input = @import("input.zig").InputManager;
 const Time = @import("time.zig").Time;
@@ -29,8 +30,6 @@ pub const Application = struct {
     assets: AssetManager,
     ctx: RuntimeContext,
     events: std.ArrayList(event.ZEvent) = .empty,
-    scene_started: bool = false,
-    event_overflow_logged: bool = false,
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -68,6 +67,7 @@ pub const Application = struct {
             .allocator = allocator,
             .io = io,
             .assets = &app.assets,
+            .world = .init(allocator),
         };
         window.setEventCallback(app, eventCallback);
 
@@ -99,17 +99,12 @@ pub const Application = struct {
 
     pub fn eventCallback(self: *Application, ev: event.ZEvent) !void {
         self.events.append(self.allocator, ev) catch |err| {
-            if (!self.event_overflow_logged) {
-                log.err("dropping window events because the event queue cannot grow: {}", .{err});
-                self.event_overflow_logged = true;
-            }
+            log.err("dropping window events because the event queue cannot grow: {}", .{err});
         };
     }
 
     pub fn start(self: *Application) !void {
-        if (self.scene_started) return;
         try self.scene_manager.initScene(&self.ctx);
-        self.scene_started = true;
     }
 
     pub fn beginFrame(self: *Application) []const event.ZEvent {
@@ -131,9 +126,7 @@ pub const Application = struct {
 
     pub fn processEvent(self: *Application, ev: event.ZEvent) !void {
         Input.Update(ev);
-        if (self.scene_started) {
-            try self.scene_manager.handleEvent(&self.ctx, ev);
-        }
+        try self.scene_manager.handleEvent(&self.ctx, ev);
     }
 
     pub fn pumpAssets(self: *Application) !void {
@@ -146,10 +139,6 @@ pub const Application = struct {
     }
 
     pub fn renderScene(self: *Application, target: ?*Framebuffer) !void {
-        if (!self.scene_started) {
-            try self.start();
-        }
-
         var restore_default = false;
         if (target) |framebuffer| {
             framebuffer.bind();
@@ -161,7 +150,7 @@ pub const Application = struct {
         } else {
             const fb_size = self.window.getFramebufferSize();
             Framebuffer.bindDefault(fb_size.width, fb_size.height);
-            self.ctx.render_viewport = RenderViewport{
+            self.ctx.render_viewport = .{
                 .width = fb_size.width,
                 .height = fb_size.height,
             };
@@ -171,7 +160,9 @@ pub const Application = struct {
             Framebuffer.bindDefault(fb_size.width, fb_size.height);
         };
 
+        self.ctx.world.advanceTick();
         try self.scene_manager.updateScene(&self.ctx, self.time.delta_time);
+        try renderer.renderWorld(&self.ctx);
     }
 
     pub fn present(self: *Application) void {
@@ -184,6 +175,7 @@ pub const Application = struct {
         self.scene_manager.deinit(&self.ctx) catch |err| {
             shutdown_error = err;
         };
+        self.ctx.world.deinit();
         self.events.deinit(self.allocator);
         self.assets.deinit();
         self.window.deinit(self.allocator);

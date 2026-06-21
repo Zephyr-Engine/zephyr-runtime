@@ -135,6 +135,7 @@ fn testContext(assets: *AssetManager) RuntimeContext {
         .allocator = std.testing.allocator,
         .io = std.testing.io,
         .assets = assets,
+        .world = .init(std.testing.allocator),
     };
 }
 
@@ -142,6 +143,7 @@ test "SceneManager dispatches scene lifecycle callbacks" {
     LifecycleTestScene.reset();
     var assets: AssetManager = undefined;
     var ctx = testContext(&assets);
+    defer ctx.world.deinit();
     const manager = try SceneManager.init(std.testing.allocator);
 
     try manager.addScene(LifecycleTestScene, true);
@@ -161,6 +163,7 @@ test "SceneManager cleans every scene when a cleanup callback fails" {
     CleanupFailureTestScene.cleanup_calls = 0;
     var assets: AssetManager = undefined;
     var ctx = testContext(&assets);
+    defer ctx.world.deinit();
     const manager = try SceneManager.init(std.testing.allocator);
 
     try manager.addScene(CleanupFailureTestScene, true);
