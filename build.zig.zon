@@ -17,15 +17,15 @@
             .hash = "zlm-0.1.0-LoZ6yDawAADMopilIe9MDzer0UqmruCy_PuhNv4OMc7c",
         },
         .zimp = .{
-            .path = "../zimp",
+            .url = "git+https://github.com/Zephyr-Engine/zimport.git#88b9fe4f6aa0f165c152b2ea741a451dab135891",
+            .hash = "zimp-0.0.0-jO8AWs0wDgD5B5TCHgIZqMc3pt5I01o39NSKS_-iZhK9",
         },
     },
     .paths = .{
         "build.zig",
         "build.zig.zon",
         "src",
-        // For example...
-        //"LICENSE",
-        //"README.md",
+        "LICENSE",
+        "README.md",
     },
 }

@@ -43,10 +43,6 @@ pub const ZShader = zimp.ZShader;
 pub const Zatex = zimp.Zatex;
 pub const Zamat = zimp.Zamat;
 
-pub const recommended_std_options: std.Options = .{
-    .logFn = @import("core/log.zig").log,
-};
-
 test {
     @import("std").testing.refAllDecls(@This());
     _ = @import("core/time.zig");

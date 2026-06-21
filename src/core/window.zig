@@ -5,6 +5,7 @@ const event = @import("event.zig");
 const c = @import("../c.zig");
 const glfw = c.glfw;
 const gl = c.glad;
+const log = @import("log.zig");
 
 const macos = if (builtin.os.tag == .macos) @cImport({
     @cInclude("objc/message.h");
@@ -78,7 +79,7 @@ fn getDefaultWindowBounds() DefaultWindowBounds {
 pub const Window = struct {
     window: c.Window,
     data: WindowData,
-    event_fn: *const fn (*anyopaque, event.ZEvent) anyerror!void = undefined,
+    event_fn: ?*const fn (*anyopaque, event.ZEvent) anyerror!void = null,
     event_ctx: *anyopaque = undefined,
     arrow_cursor: ?*glfw.GLFWcursor = null,
     hand_cursor: ?*glfw.GLFWcursor = null,
@@ -88,11 +89,12 @@ pub const Window = struct {
 
     pub fn init(allocator: std.mem.Allocator, params: WindowParams) WindowError!*Window {
         if (glfw.glfwInit() == 0) {
-            std.log.err("Failed to initialize glfw", .{});
+            log.err("failed to initialize GLFW", .{});
             return WindowError.InitializeFailed;
         }
         errdefer glfw.glfwTerminate();
 
+        glfw.glfwDefaultWindowHints();
         glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MAJOR, 3);
         glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MINOR, 3);
         glfw.glfwWindowHint(glfw.GLFW_OPENGL_PROFILE, glfw.GLFW_OPENGL_CORE_PROFILE);
@@ -101,22 +103,27 @@ pub const Window = struct {
         }
 
         const title = allocator.dupeZ(u8, params.title) catch |err| {
-            std.log.err("Failed to duplicate window title: {}", .{err});
+            log.err("failed to allocate window title: {}", .{err});
             return WindowError.MemoryError;
         };
         defer allocator.free(title);
 
-        const default_bounds = getDefaultWindowBounds();
+        const maximize = params.width == null and params.height == null;
+        if (maximize) {
+            glfw.glfwWindowHint(glfw.GLFW_MAXIMIZED, glfw.GLFW_TRUE);
+        }
+
+        const default_bounds = if (maximize) DefaultWindowBounds{} else getDefaultWindowBounds();
         const width = params.width orelse default_bounds.width;
         const height = params.height orelse default_bounds.height;
 
         const window = glfw.glfwCreateWindow(@intCast(width), @intCast(height), title, null, null);
         if (window == null) {
-            std.log.err("Failed to initialize glfw window", .{});
+            log.err("failed to create GLFW window", .{});
             return WindowError.InitializeFailed;
         }
         errdefer glfw.glfwDestroyWindow(window);
-        if (params.width == null or params.height == null) {
+        if (!maximize and (params.width == null or params.height == null)) {
             glfw.glfwSetWindowPos(window, default_bounds.x, default_bounds.y);
         }
         applyPlatformWindowAppearance(window);
@@ -126,7 +133,7 @@ pub const Window = struct {
 
         const loader: gl.GLADloadproc = @ptrCast(&glfw.glfwGetProcAddress);
         if (gl.gladLoadGLLoader(loader) == 0) {
-            std.log.err("Failed to load glad", .{});
+            log.err("failed to load OpenGL functions", .{});
             return WindowError.ContextLoadFailed;
         }
         if (params.msaa_samples > 1) {
@@ -134,7 +141,7 @@ pub const Window = struct {
         }
 
         const win = allocator.create(Window) catch |err| {
-            std.log.err("Failed to allocate Window: {}", .{err});
+            log.err("failed to allocate window state: {}", .{err});
             return WindowError.MemoryError;
         };
 
@@ -181,8 +188,9 @@ pub const Window = struct {
     }
 
     pub fn dispatchEvent(self: *Window, ev: event.ZEvent) void {
-        self.event_fn(self.event_ctx, ev) catch |err| {
-            std.log.err("Error dispatching event: {}", .{err});
+        const event_fn = self.event_fn orelse return;
+        event_fn(self.event_ctx, ev) catch |err| {
+            log.err("failed to dispatch window event: {}", .{err});
         };
     }
 

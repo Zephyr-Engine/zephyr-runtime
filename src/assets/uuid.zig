@@ -96,3 +96,16 @@ test "Uuid.toString formats canonical lowercase UUID text" {
     });
     try testing.expectEqualStrings("12345678-9abc-4def-8012-3456789abcde", &id.toString());
 }
+
+test "Uuid equality and zero detection use all bytes" {
+    const zero = Uuid.zero;
+    const same_zero = Uuid.fromBytes([_]u8{0} ** 16);
+    var non_zero_bytes = [_]u8{0} ** 16;
+    non_zero_bytes[15] = 1;
+    const non_zero = Uuid.fromBytes(non_zero_bytes);
+
+    try testing.expect(zero.eql(same_zero));
+    try testing.expect(zero.isZero());
+    try testing.expect(!zero.eql(non_zero));
+    try testing.expect(!non_zero.isZero());
+}

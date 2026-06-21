@@ -60,3 +60,9 @@ pub const EditorCamera = struct {
         self.camera.processEvent(event);
     }
 };
+
+test "EditorCamera forwards framebuffer resize events" {
+    var editor = EditorCamera.init(Vec3.zero, 1.0);
+    editor.processEvent(.{ .FramebufferResize = .{ .width = 1600, .height = 900 } });
+    try std.testing.expectApproxEqAbs(@as(f32, 16.0 / 9.0), editor.camera.aspect, 0.0001);
+}

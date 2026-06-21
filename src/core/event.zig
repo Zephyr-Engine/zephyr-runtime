@@ -4,6 +4,7 @@ const Window = @import("window.zig").Window;
 const c = @import("../c.zig");
 const glfw = c.glfw;
 const gl = c.glad;
+const log = @import("log.zig");
 
 pub const MouseButton = enum(u8) {
     Left = 0,
@@ -281,8 +282,8 @@ pub const ZEvent = union(enum) {
     MouseReleased: MouseButton,
 };
 
-inline fn getWindowFromGLFW(window: c.Window) *Window {
-    const ptr = glfw.glfwGetWindowUserPointer(window).?;
+inline fn getWindowFromGLFW(window: c.Window) ?*Window {
+    const ptr = glfw.glfwGetWindowUserPointer(window) orelse return null;
     return @ptrCast(@alignCast(ptr));
 }
 
@@ -299,7 +300,7 @@ pub fn mouseButtonCallback(window: c.Window, btn: c_int, action: c_int, mods: c_
         return;
     }
 
-    const win = getWindowFromGLFW(window);
+    const win = getWindowFromGLFW(window) orelse return;
 
     const button: MouseButton = @enumFromInt(@as(u8, @intCast(btn)));
     const ev: ZEvent = if (isPress)
@@ -314,27 +315,26 @@ pub fn keyButtonCallback(window: c.Window, key: c_int, scancode: c_int, action: 
     _ = mods;
     _ = scancode;
 
-    const win = getWindowFromGLFW(window);
+    const win = getWindowFromGLFW(window) orelse return;
     const mappedKey = Key.fromGLFW(key);
     if (mappedKey == .Unknown) {
-        std.log.debug("Found unkown key code: {}", .{key});
+        log.debug("ignoring unknown GLFW key code: {}", .{key});
         return;
     }
 
-    var ev: ZEvent = undefined;
-    if (action == glfw.GLFW_PRESS) {
-        ev = ZEvent{ .KeyPressed = mappedKey };
-    } else if (action == glfw.GLFW_REPEAT) {
-        ev = ZEvent{ .KeyRepeated = mappedKey };
-    } else if (action == glfw.GLFW_RELEASE) {
-        ev = ZEvent{ .KeyReleased = mappedKey };
-    }
+    const ev: ZEvent = switch (action) {
+        glfw.GLFW_PRESS => .{ .KeyPressed = mappedKey },
+        glfw.GLFW_REPEAT => .{ .KeyRepeated = mappedKey },
+        glfw.GLFW_RELEASE => .{ .KeyReleased = mappedKey },
+        else => return,
+    };
 
     win.dispatchEvent(ev);
 }
 
 pub fn windowResizeCallback(window: c.Window, width: c_int, height: c_int) callconv(.c) void {
-    const win = getWindowFromGLFW(window);
+    if (width < 0 or height < 0) return;
+    const win = getWindowFromGLFW(window) orelse return;
     win.setSize(@intCast(width), @intCast(height));
 
     const ev = ZEvent{ .WindowResize = .{
@@ -345,8 +345,9 @@ pub fn windowResizeCallback(window: c.Window, width: c_int, height: c_int) callc
 }
 
 pub fn framebufferSizeCallback(window: c.Window, width: c_int, height: c_int) callconv(.c) void {
+    if (width < 0 or height < 0) return;
     gl.glViewport(0, 0, @intCast(width), @intCast(height));
-    const win = getWindowFromGLFW(window);
+    const win = getWindowFromGLFW(window) orelse return;
 
     const ev = ZEvent{ .FramebufferResize = .{
         .width = @intCast(width),
@@ -356,36 +357,42 @@ pub fn framebufferSizeCallback(window: c.Window, width: c_int, height: c_int) ca
 }
 
 pub fn contentScaleCallback(window: c.Window, xscale: f32, yscale: f32) callconv(.c) void {
-    const win = getWindowFromGLFW(window);
+    const win = getWindowFromGLFW(window) orelse return;
 
     const ev = ZEvent{ .ContentScaleChange = .{ .x = xscale, .y = yscale } };
     win.dispatchEvent(ev);
 }
 
 pub fn windowCloseCallback(window: c.Window) callconv(.c) void {
-    const win = getWindowFromGLFW(window);
+    const win = getWindowFromGLFW(window) orelse return;
 
     const ev: ZEvent = .WindowClose;
     win.dispatchEvent(ev);
 }
 
 pub fn cursorPosCallback(window: c.Window, x: f64, y: f64) callconv(.c) void {
-    const win = getWindowFromGLFW(window);
+    const win = getWindowFromGLFW(window) orelse return;
 
     const ev = ZEvent{ .MouseMove = .{ .x = @floatCast(x), .y = @floatCast(y) } };
     win.dispatchEvent(ev);
 }
 
 pub fn cursorScrollCallback(window: c.Window, x: f64, y: f64) callconv(.c) void {
-    const win = getWindowFromGLFW(window);
+    const win = getWindowFromGLFW(window) orelse return;
 
     const ev = ZEvent{ .MouseScroll = .{ .x = @floatCast(x), .y = @floatCast(y) } };
     win.dispatchEvent(ev);
 }
 
 pub fn charCallback(window: c.Window, codepoint: c_uint) callconv(.c) void {
-    const win = getWindowFromGLFW(window);
+    const win = getWindowFromGLFW(window) orelse return;
 
     const ev = ZEvent{ .CharInput = @intCast(codepoint) };
     win.dispatchEvent(ev);
+}
+
+test "Key.fromGLFW maps known and unknown key codes" {
+    try std.testing.expectEqual(Key.A, Key.fromGLFW(glfw.GLFW_KEY_A));
+    try std.testing.expectEqual(Key.F12, Key.fromGLFW(glfw.GLFW_KEY_F12));
+    try std.testing.expectEqual(Key.Unknown, Key.fromGLFW(-1));
 }

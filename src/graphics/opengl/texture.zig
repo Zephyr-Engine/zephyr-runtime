@@ -7,6 +7,7 @@ pub const TextureError = error{
     TextureCreationFailed,
     UnsupportedTextureType,
     UnsupportedTextureFormat,
+    InvalidMipChain,
     OpenGLError,
 };
 
@@ -18,6 +19,9 @@ pub const Texture2D = struct {
     pub fn init(tex: zimp.Zatex) TextureError!Texture2D {
         if (tex.texture_type != .texture_2d) {
             return TextureError.UnsupportedTextureType;
+        }
+        if (tex.mips.len == 0) {
+            return TextureError.InvalidMipChain;
         }
 
         var id: u32 = 0;
@@ -71,10 +75,11 @@ pub const Texture2D = struct {
         const is_block_compressed = tex.format.isBlockCompressed();
         for (tex.mips, 0..) |mip, level| {
             if (is_block_compressed) {
+                const internal_format = compressedInternalFormat(tex.format, tex.color_space) orelse return TextureError.UnsupportedTextureFormat;
                 gl.glCompressedTexImage2D(
                     gl.GL_TEXTURE_2D,
                     @intCast(level),
-                    compressedInternalFormat(tex.format, tex.color_space),
+                    internal_format,
                     @intCast(mip.width),
                     @intCast(mip.height),
                     0,
@@ -82,7 +87,7 @@ pub const Texture2D = struct {
                     mip.data.ptr,
                 );
             } else {
-                const fmt = uncompressedFormat(tex.format, tex.color_space);
+                const fmt = uncompressedFormat(tex.format, tex.color_space) orelse return TextureError.UnsupportedTextureFormat;
                 gl.glTexImage2D(
                     gl.GL_TEXTURE_2D,
                     @intCast(level),
@@ -122,22 +127,22 @@ const UploadFormat = struct {
     ty: u32,
 };
 
-fn uncompressedFormat(format: anytype, color_space: anytype) UploadFormat {
+fn uncompressedFormat(format: anytype, color_space: anytype) ?UploadFormat {
     return switch (format) {
         .rgba8 => .{ .internal = if (color_space == .srgb) gl.GL_SRGB8_ALPHA8 else gl.GL_RGBA8, .format = gl.GL_RGBA, .ty = gl.GL_UNSIGNED_BYTE },
         .rg8 => .{ .internal = gl.GL_RG8, .format = gl.GL_RG, .ty = gl.GL_UNSIGNED_BYTE },
         .r8 => .{ .internal = gl.GL_R8, .format = gl.GL_RED, .ty = gl.GL_UNSIGNED_BYTE },
         .rgb16f => .{ .internal = gl.GL_RGB16F, .format = gl.GL_RGB, .ty = gl.GL_HALF_FLOAT },
-        else => unreachable,
+        else => null,
     };
 }
 
-fn compressedInternalFormat(format: anytype, color_space: anytype) u32 {
+fn compressedInternalFormat(format: anytype, color_space: anytype) ?u32 {
     return switch (format) {
         .bc4 => gl.GL_COMPRESSED_RED_RGTC1,
         .bc5 => gl.GL_COMPRESSED_RG_RGTC2,
         .bc7 => if (color_space == .srgb) gl.GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM else gl.GL_COMPRESSED_RGBA_BPTC_UNORM,
         .bc6h => gl.GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT,
-        else => unreachable,
+        else => null,
     };
 }

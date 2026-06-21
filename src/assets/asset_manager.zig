@@ -14,6 +14,7 @@ const Mesh = @import("../graphics/mesh.zig").Mesh;
 const Material = @import("../graphics/material.zig").Material;
 const Shader = @import("../graphics/opengl/shader.zig").Shader;
 const Texture2D = @import("../graphics/opengl/texture.zig").Texture2D;
+const log = @import("../core/log.zig");
 
 pub const AssetState = enum {
     queued,
@@ -236,6 +237,11 @@ const ReaderPool = struct {
         self.mutex.unlock(self.io);
 
         const loaded = self.loadCookedAsset(job.record) catch |err| {
+            log.err("failed to load {s} asset '{s}': {}", .{
+                @tagName(job.record.kind),
+                assetPath(job.record),
+                err,
+            });
             self.mutex.lockUncancelable(self.io);
             job.record.failure = err;
             job.record.state = .failed;
@@ -445,6 +451,11 @@ pub const AssetManager = struct {
 
         for (ready.items) |record| {
             const result = self.finalizeRecord(record) catch |err| {
+                log.err("failed to finalize {s} asset '{s}': {}", .{
+                    @tagName(record.kind),
+                    assetPath(record),
+                    err,
+                });
                 self.lock();
                 self.failRecordLocked(record, err);
                 self.unlock();
@@ -512,17 +523,17 @@ pub const AssetManager = struct {
 
     pub fn loadMesh(self: *AssetManager, path: []const u8) !*Mesh {
         const id = try self.registerSync(Mesh, path);
-        return self.get(Mesh, id).?;
+        return self.get(Mesh, id) orelse AssetError.LoadFailed;
     }
 
     pub fn loadMaterial(self: *AssetManager, path: []const u8) !*Material {
         const id = try self.registerSync(Material, path);
-        return self.get(Material, id).?;
+        return self.get(Material, id) orelse AssetError.LoadFailed;
     }
 
     pub fn loadTexture(self: *AssetManager, path: []const u8) !*Texture2D {
         const id = try self.registerSync(Texture2D, path);
-        return self.get(Texture2D, id).?;
+        return self.get(Texture2D, id) orelse AssetError.LoadFailed;
     }
 
     fn requestKind(self: *AssetManager, expected: AssetKind, path: []const u8) !AssetId {
@@ -553,11 +564,12 @@ pub const AssetManager = struct {
             record.deinit(self.allocator, self.worker_allocator);
             self.allocator.destroy(record);
         };
+        const record_path = record.path orelse return AssetError.LoadFailed;
 
         try self.assets.put(id, record);
         errdefer _ = self.assets.remove(id);
-        try self.paths.put(record.path.?, id);
-        errdefer _ = self.paths.remove(record.path.?);
+        try self.paths.put(record_path, id);
+        errdefer _ = self.paths.remove(record_path);
         try self.pool.enqueueLocked(record);
 
         record_owned = false;
@@ -636,16 +648,17 @@ pub const AssetManager = struct {
             .material => |*source| source,
             else => return AssetError.WrongAssetKind,
         };
+        const record_path = record.path orelse return AssetError.LoadFailed;
 
         const vertex_path = try zimp.runtime.resolveRelativeVirtualPath(
             self.allocator,
-            record.path.?,
+            record_path,
             material_source_ptr.vertex_shader_path,
         );
         defer self.allocator.free(vertex_path);
         const fragment_path = try zimp.runtime.resolveRelativeVirtualPath(
             self.allocator,
-            record.path.?,
+            record_path,
             material_source_ptr.fragment_shader_path,
         );
         defer self.allocator.free(fragment_path);
@@ -662,7 +675,7 @@ pub const AssetManager = struct {
 
             const texture_path = try zimp.runtime.resolveRelativeVirtualPath(
                 self.allocator,
-                record.path.?,
+                record_path,
                 slot.cooked_path,
             );
             defer self.allocator.free(texture_path);
@@ -676,12 +689,12 @@ pub const AssetManager = struct {
             });
         }
 
-        const cooked_asset = record.cooked.?;
+        const cooked_asset = record.cooked orelse return AssetError.LoadFailed;
         record.cooked = null;
 
         var material_source = switch (cooked_asset) {
             .material => |source| source,
-            else => unreachable,
+            else => return AssetError.WrongAssetKind,
         };
         var source_owned = true;
         errdefer if (source_owned) material_source.deinit(self.allocator);
@@ -721,10 +734,20 @@ pub const AssetManager = struct {
 
         self.lock();
         if (self.shader_programs.get(lookup_key)) |id| {
-            const record = self.assets.get(id).?;
-            const shader = switch (record.asset.?) {
+            const record = self.assets.get(id) orelse {
+                self.unlock();
+                return AssetError.LoadFailed;
+            };
+            const asset = record.asset orelse {
+                self.unlock();
+                return AssetError.LoadFailed;
+            };
+            const shader = switch (asset) {
                 .shader_program => |shader| shader,
-                else => unreachable,
+                else => {
+                    self.unlock();
+                    return AssetError.WrongAssetKind;
+                },
             };
             self.unlock();
             return shader;
@@ -749,13 +772,15 @@ pub const AssetManager = struct {
         defer self.unlock();
 
         if (self.shader_programs.get(lookup_key)) |id| {
-            const record = self.assets.get(id).?;
+            const record = self.assets.get(id) orelse return AssetError.LoadFailed;
+            const asset = record.asset orelse return AssetError.LoadFailed;
+            const cached = switch (asset) {
+                .shader_program => |cached| cached,
+                else => return AssetError.WrongAssetKind,
+            };
             shader.deinit();
             self.allocator.destroy(shader);
-            return switch (record.asset.?) {
-                .shader_program => |cached| cached,
-                else => unreachable,
-            };
+            return cached;
         }
 
         const id = try self.newAssetIdLocked();
@@ -788,7 +813,8 @@ pub const AssetManager = struct {
         const record = self.assets.get(id) orelse return AssetError.AssetNotFound;
         if (record.state == .failed) return record.failure orelse AssetError.LoadFailed;
         if (record.state != .loaded) return null;
-        return switch (record.asset.?) {
+        const asset = record.asset orelse return AssetError.LoadFailed;
+        return switch (asset) {
             .texture => |texture| texture,
             else => AssetError.WrongAssetKind,
         };
@@ -800,7 +826,8 @@ pub const AssetManager = struct {
         const record = self.assets.get(id) orelse return AssetError.AssetNotFound;
         if (record.state == .failed) return record.failure orelse AssetError.LoadFailed;
         if (record.state != .loaded) return null;
-        return switch (record.asset.?) {
+        const asset = record.asset orelse return AssetError.LoadFailed;
+        return switch (asset) {
             .shader_stage => |shader| shader,
             else => AssetError.WrongAssetKind,
         };
@@ -841,6 +868,10 @@ pub const AssetManager = struct {
         self.pool.mutex.unlock(self.io);
     }
 };
+
+fn assetPath(record: *const AssetRecord) []const u8 {
+    return record.path orelse "<generated shader program>";
+}
 
 fn defaultWorkerCount() usize {
     const cpu_count = std.Thread.getCpuCount() catch 2;
@@ -901,6 +932,7 @@ test "makeShaderProgramKey includes both stage paths" {
 const TestSource = struct {
     reads: std.atomic.Value(usize) = .init(0),
     bytes: []const u8,
+    failure: ?anyerror = null,
 
     fn source(self: *TestSource) AssetSource {
         return .{
@@ -922,6 +954,7 @@ const TestSource = struct {
         _ = normalized_path;
         const self: *TestSource = @ptrCast(@alignCast(ptr));
         _ = self.reads.fetchAdd(1, .monotonic);
+        if (self.failure) |err| return err;
         return allocator.dupe(u8, self.bytes);
     }
 
@@ -952,5 +985,44 @@ test "register deduplicates normalized paths before worker load finishes" {
 
     manager.wait(first) catch {};
     try std.testing.expectEqual(AssetState.failed, manager.state(first).?);
+    try std.testing.expectEqual(@as(usize, 1), source.reads.load(.monotonic));
+}
+
+test "register rejects invalid and mismatched asset paths before queuing work" {
+    if (@import("builtin").single_threaded) return error.SkipZigTest;
+
+    var source = TestSource{ .bytes = "unused" };
+    var manager = try AssetManager.initWithOptions(
+        std.testing.allocator,
+        std.testing.io,
+        source.source(),
+        .{ .worker_count = 1 },
+    );
+    defer manager.deinit();
+
+    try std.testing.expectError(AssetError.InvalidPath, manager.register(Mesh, "../escape.zmesh"));
+    try std.testing.expectError(AssetError.UnsupportedAssetKind, manager.register(Mesh, "unknown.asset"));
+    try std.testing.expectError(AssetError.WrongAssetKind, manager.register(Texture2D, "mesh.zmesh"));
+    try std.testing.expectEqual(@as(usize, 0), source.reads.load(.monotonic));
+}
+
+test "worker load failures are observable through wait and state" {
+    if (@import("builtin").single_threaded) return error.SkipZigTest;
+
+    var source = TestSource{
+        .bytes = "unused",
+        .failure = AssetError.AssetNotFound,
+    };
+    var manager = try AssetManager.initWithOptions(
+        std.testing.allocator,
+        std.testing.io,
+        source.source(),
+        .{ .worker_count = 1 },
+    );
+    defer manager.deinit();
+
+    const id = try manager.register(Mesh, "missing.zmesh");
+    try std.testing.expectError(AssetError.AssetNotFound, manager.wait(id));
+    try std.testing.expectEqual(AssetState.failed, manager.state(id).?);
     try std.testing.expectEqual(@as(usize, 1), source.reads.load(.monotonic));
 }

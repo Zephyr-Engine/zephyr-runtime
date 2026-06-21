@@ -153,3 +153,14 @@ test "FileSource maps missing files to AssetNotFound" {
 
     try testing.expectError(AssetError.AssetNotFound, loose.readAlloc(testing.allocator, testing.io, "missing.zmesh"));
 }
+
+test "FileSource rejects paths outside the asset root" {
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const dir = try std.Io.Dir.openDir(tmp.dir, testing.io, ".", .{});
+    var loose = try FileSource.initFromDir(testing.allocator, ".", dir);
+    defer loose.deinit(testing.allocator, testing.io);
+
+    try testing.expectError(AssetError.InvalidPath, loose.readAlloc(testing.allocator, testing.io, "../outside.zmesh"));
+}

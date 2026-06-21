@@ -8,6 +8,7 @@ pub const VertexArrayError = error{
     VertexArrayCreationFailed,
     VertexBufferCreationFailed,
     IndexBufferCreationFailed,
+    TooManyStreams,
     OpenGLError,
 };
 
@@ -17,7 +18,7 @@ pub const VertexArray = struct {
     id: u32,
     streams: [MAX_STREAMS]?Stream,
     stream_count: u32,
-    ebo: buffer.IndexBuffer,
+    ebo: ?buffer.IndexBuffer = null,
 
     const Stream = struct {
         vbo: buffer.VertexBuffer,
@@ -35,7 +36,7 @@ pub const VertexArray = struct {
             .id = vao,
             .streams = [_]?Stream{null} ** MAX_STREAMS,
             .stream_count = 0,
-            .ebo = undefined,
+            .ebo = null,
         };
     }
 
@@ -44,6 +45,9 @@ pub const VertexArray = struct {
         data: []const u8,
         attribute: StreamAttribute,
     ) VertexArrayError!void {
+        if (self.stream_count >= MAX_STREAMS) {
+            return VertexArrayError.TooManyStreams;
+        }
         gl.glBindVertexArray(self.id);
 
         const vbo = buffer.VertexBuffer.init(data) catch {
@@ -102,19 +106,21 @@ pub const VertexArray = struct {
     }
 
     pub fn indexCount(self: *const VertexArray) usize {
-        return self.ebo.count;
+        const ebo = self.ebo orelse return 0;
+        return ebo.count;
     }
 
     pub fn draw(self: *const VertexArray) void {
+        const ebo = self.ebo orelse return;
         self.bind();
-        const gl_index_type: u32 = switch (self.ebo.index_format) {
+        const gl_index_type: u32 = switch (ebo.index_format) {
             .u16 => gl.GL_UNSIGNED_SHORT,
             .u32 => gl.GL_UNSIGNED_INT,
         };
 
         gl.glDrawElements(
             gl.GL_TRIANGLES,
-            @intCast(self.ebo.count),
+            @intCast(ebo.count),
             gl_index_type,
             null,
         );
@@ -129,7 +135,10 @@ pub const VertexArray = struct {
             }
         }
 
-        self.ebo.deinit();
+        if (self.ebo) |*ebo| {
+            ebo.deinit();
+            self.ebo = null;
+        }
         gl.glDeleteVertexArrays(1, &self.id);
         self.id = 0;
     }

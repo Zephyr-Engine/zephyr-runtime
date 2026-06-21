@@ -152,3 +152,14 @@ fn fnv1a(bytes: []const u8) u64 {
     }
     return hash;
 }
+
+test "material sampler names are selected from stable slot hashes" {
+    try std.testing.expectEqualStrings("u_albedo", samplerUniformName(fnv1a("albedo")).?);
+    try std.testing.expectEqualStrings("u_roughness_metallic", samplerUniformName(fnv1a("roughness_metallic")).?);
+    try std.testing.expect(samplerUniformName(fnv1a("unsupported")) == null);
+}
+
+test "readF32 decodes little-endian parameter data" {
+    const bytes = [_]u8{ 0x00, 0x00, 0xc0, 0x3f };
+    try std.testing.expectEqual(@as(f32, 1.5), readF32(&bytes));
+}

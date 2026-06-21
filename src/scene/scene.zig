@@ -1,6 +1,7 @@
 const std = @import("std");
 const ZEvent = @import("../core/event.zig").ZEvent;
 const RuntimeContext = @import("../core/runtime_context.zig").RuntimeContext;
+const log = @import("../core/log.zig");
 
 pub const SceneError = error{
     OutOfMemory,
@@ -57,13 +58,13 @@ pub const Scene = struct {
 
             fn onCleanup(ptr: *anyopaque, ctx: *RuntimeContext) !void {
                 const self: *T = @ptrCast(@alignCast(ptr));
+                defer ctx.allocator.destroy(self);
                 try T.onCleanup(self, ctx);
-                ctx.allocator.destroy(self);
             }
         };
 
         const instance = allocator.create(T) catch |err| {
-            std.log.err("Failed to allocate scene instance: {}", .{err});
+            log.err("failed to allocate scene instance: {}", .{err});
             return SceneError.OutOfMemory;
         };
 

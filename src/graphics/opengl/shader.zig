@@ -1,5 +1,7 @@
 const std = @import("std");
 const Map = std.StringHashMap(i32);
+
+const log = @import("../../core/log.zig");
 const c = @import("../../c.zig");
 const gl = c.glad;
 
@@ -34,9 +36,11 @@ pub const Shader = struct {
         var vs_success: i32 = 0;
         gl.glGetShaderiv(vs, gl.GL_COMPILE_STATUS, &vs_success);
         if (vs_success == 0) {
-            var info_log: [512]u8 = undefined;
-            gl.glGetShaderInfoLog(vs, 512, null, @ptrCast(&info_log));
-            std.log.err("Vertex shader compilation failed: {s}\n", .{info_log});
+            var info_log: [512]u8 = [_]u8{0} ** 512;
+            var info_log_len: c_int = 0;
+            gl.glGetShaderInfoLog(vs, info_log.len, &info_log_len, @ptrCast(&info_log));
+            const message = info_log[0..@intCast(@min(@max(info_log_len, 0), info_log.len))];
+            log.err("vertex shader compilation failed: {s}", .{message});
             return ShaderError.VertexShaderCompilationFailed;
         }
 
@@ -54,9 +58,11 @@ pub const Shader = struct {
         var fs_success: i32 = 0;
         gl.glGetShaderiv(fs, gl.GL_COMPILE_STATUS, &fs_success);
         if (fs_success == 0) {
-            var info_log: [512]u8 = undefined;
-            gl.glGetShaderInfoLog(fs, 512, null, @ptrCast(&info_log));
-            std.log.err("Fragment shader compilation failed: {s}\n", .{info_log});
+            var info_log: [512]u8 = [_]u8{0} ** 512;
+            var info_log_len: c_int = 0;
+            gl.glGetShaderInfoLog(fs, info_log.len, &info_log_len, @ptrCast(&info_log));
+            const message = info_log[0..@intCast(@min(@max(info_log_len, 0), info_log.len))];
+            log.err("fragment shader compilation failed: {s}", .{message});
             return ShaderError.FragmentShaderCompilationFailed;
         }
 
@@ -73,9 +79,11 @@ pub const Shader = struct {
         var link_success: i32 = 0;
         gl.glGetProgramiv(program, gl.GL_LINK_STATUS, &link_success);
         if (link_success == 0) {
-            var info_log: [512]u8 = undefined;
-            gl.glGetProgramInfoLog(program, 512, null, @ptrCast(&info_log));
-            std.log.err("Shader program linking failed: {s}\n", .{info_log});
+            var info_log: [512]u8 = [_]u8{0} ** 512;
+            var info_log_len: c_int = 0;
+            gl.glGetProgramInfoLog(program, info_log.len, &info_log_len, @ptrCast(&info_log));
+            const message = info_log[0..@intCast(@min(@max(info_log_len, 0), info_log.len))];
+            log.err("shader program linking failed: {s}", .{message});
             return ShaderError.ProgramLinkingFailed;
         }
 
@@ -143,11 +151,7 @@ pub const Shader = struct {
     }
 
     pub fn uniformLocation(self: *const Shader, name: []const u8) ?i32 {
-        const location = self.uniforms.get(name) orelse {
-            std.log.err("could not find uniform with name: {s}", .{name});
-            return null;
-        };
-        return location;
+        return self.uniforms.get(name);
     }
 
     pub fn setUniform(self: *const Shader, name: []const u8, value: anytype) void {

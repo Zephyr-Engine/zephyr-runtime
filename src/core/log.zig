@@ -1,37 +1,29 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const Color = struct {
-    const reset = "\x1b[0m";
-    const red = "\x1b[31m";
-    const orange = "\x1b[33m";
-    const blue = "\x1b[34m";
-    const green = "\x1b[32m";
-};
+const logger = std.log.scoped(.runtime);
 
-pub fn log(
-    comptime level: std.log.Level,
-    comptime scope: @TypeOf(.EnumLiteral),
-    comptime format: []const u8,
-    args: anytype,
-) void {
-    if (comptime builtin.mode == .ReleaseFast and level == .debug) {
+pub fn err(comptime format: []const u8, args: anytype) void {
+    if (comptime builtin.is_test) {
         return;
     }
+    logger.err(format, args);
+}
 
-    const color = switch (comptime level) {
-        .err => Color.red,
-        .warn => Color.orange,
-        .info => Color.blue,
-        .debug => Color.green,
-    };
+pub fn warn(comptime format: []const u8, args: anytype) void {
+    if (comptime builtin.is_test) {
+        return;
+    }
+    logger.warn(format, args);
+}
 
-    const scope_prefix = if (scope == .default) "" else "(" ++ @tagName(scope) ++ "): ";
-    const prefix = "[" ++ comptime level.asText() ++ "] " ++ scope_prefix;
+pub fn info(comptime format: []const u8, args: anytype) void {
+    logger.info(format, args);
+}
 
-    var buffer: [256]u8 = undefined;
-    const stderr = std.debug.lockStderr(&buffer);
-    defer std.debug.unlockStderr();
-
-    stderr.file_writer.interface.print(color ++ prefix ++ format ++ Color.reset ++ "\n", args) catch return;
+pub fn debug(comptime format: []const u8, args: anytype) void {
+    if (comptime builtin.mode == .ReleaseFast) {
+        return;
+    }
+    logger.debug(format, args);
 }

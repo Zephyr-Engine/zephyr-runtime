@@ -17,3 +17,8 @@ pub const RuntimeContext = struct {
     assets: *AssetManager,
     render_viewport: RenderViewport = .{},
 };
+
+test "RenderViewport aspect guards against zero height" {
+    try std.testing.expectApproxEqAbs(@as(f32, 16.0 / 9.0), (RenderViewport{ .width = 1920, .height = 1080 }).aspect(), 0.0001);
+    try std.testing.expectEqual(@as(f32, 640.0), (RenderViewport{ .width = 640, .height = 0 }).aspect());
+}

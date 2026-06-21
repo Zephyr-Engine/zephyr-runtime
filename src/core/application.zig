@@ -14,6 +14,7 @@ const win = @import("window.zig");
 const WindowParams = win.WindowParams;
 const Window = win.Window;
 const event = @import("event.zig");
+const log = @import("log.zig");
 
 pub const ApplicationError = error{
     WindowError,
@@ -29,6 +30,7 @@ pub const Application = struct {
     ctx: RuntimeContext,
     events: std.ArrayList(event.ZEvent) = .empty,
     scene_started: bool = false,
+    event_overflow_logged: bool = false,
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -37,7 +39,7 @@ pub const Application = struct {
         asset_roots: AssetRoots,
     ) !*Application {
         const window = Window.init(allocator, params) catch |err| {
-            std.log.err("Failed to initialize window: {}", .{err});
+            log.err("failed to initialize window: {}", .{err});
             return ApplicationError.WindowError;
         };
         errdefer window.deinit(allocator);
@@ -50,8 +52,11 @@ pub const Application = struct {
         errdefer assets.deinit();
 
         const app = try allocator.create(Application);
+        errdefer allocator.destroy(app);
+        const scene_manager = try SceneManager.init(allocator);
+        errdefer allocator.destroy(scene_manager);
         app.* = Application{
-            .scene_manager = try .init(allocator),
+            .scene_manager = scene_manager,
             .allocator = allocator,
             .window = window,
             .time = .init(),
@@ -71,20 +76,20 @@ pub const Application = struct {
 
     pub fn run(app: *Application) void {
         app.start() catch |err| {
-            std.log.err("Error initializing scene: {}", .{err});
+            log.err("failed to initialize scene; terminating application run: {}", .{err});
             return;
         };
 
         while (app.window.shouldCloseWindow()) {
             _ = app.beginFrame();
             app.processQueuedEvents() catch |err| {
-                std.log.err("Error processing events: {}", .{err});
-                continue;
+                log.err("failed to process events; terminating application run: {}", .{err});
+                return;
             };
 
             app.update() catch |err| {
-                std.log.err("Error updating scene: {}", .{err});
-                continue;
+                log.err("failed to update application; terminating application run: {}", .{err});
+                return;
             };
             app.present();
         }
@@ -93,7 +98,12 @@ pub const Application = struct {
     }
 
     pub fn eventCallback(self: *Application, ev: event.ZEvent) !void {
-        try self.events.append(self.allocator, ev);
+        self.events.append(self.allocator, ev) catch |err| {
+            if (!self.event_overflow_logged) {
+                log.err("dropping window events because the event queue cannot grow: {}", .{err});
+                self.event_overflow_logged = true;
+            }
+        };
     }
 
     pub fn start(self: *Application) !void {
@@ -170,16 +180,20 @@ pub const Application = struct {
     }
 
     pub fn deinit(self: *Application) !void {
-        try self.scene_manager.deinit(&self.ctx);
+        var shutdown_error: ?anyerror = null;
+        self.scene_manager.deinit(&self.ctx) catch |err| {
+            shutdown_error = err;
+        };
         self.events.deinit(self.allocator);
         self.assets.deinit();
         self.window.deinit(self.allocator);
         self.allocator.destroy(self);
+        if (shutdown_error) |err| return err;
     }
 
     pub fn pushScene(self: *Application, comptime scene: type, is_active: bool) void {
         self.scene_manager.addScene(scene, is_active) catch |err| {
-            std.log.err("Failed to push scene: {}", .{err});
+            log.err("failed to push scene: {}", .{err});
             return;
         };
     }

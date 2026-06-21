@@ -125,3 +125,13 @@ test "Camera3D pitch clamping" {
     try expect(cam.pitch <= Camera3D.max_pitch);
     try expect(cam.pitch >= -Camera3D.max_pitch);
 }
+
+test "Camera3D updates aspect ratio only for valid framebuffer sizes" {
+    var cam = Camera3D.init(Vec3.zero, 1.0);
+
+    cam.processEvent(.{ .FramebufferResize = .{ .width = 1920, .height = 1080 } });
+    try expectApproxEq(cam.aspect, 16.0 / 9.0, tolerance);
+
+    cam.processEvent(.{ .FramebufferResize = .{ .width = 0, .height = 1080 } });
+    try expectApproxEq(cam.aspect, 16.0 / 9.0, tolerance);
+}
