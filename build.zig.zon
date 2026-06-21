@@ -17,8 +17,8 @@
             .hash = "zlm-0.1.0-LoZ6yDawAADMopilIe9MDzer0UqmruCy_PuhNv4OMc7c",
         },
         .zimp = .{
-            .url = "git+https://github.com/Zephyr-Engine/zimport.git#88b9fe4f6aa0f165c152b2ea741a451dab135891",
-            .hash = "zimp-0.0.0-jO8AWs0wDgD5B5TCHgIZqMc3pt5I01o39NSKS_-iZhK9",
+            .url = "git+https://github.com/Zephyr-Engine/zimp.git#d676ae1a4afa90204d3fab716b6ef1756dc81342",
+            .hash = "zimp-0.0.0-jO8AWhE0DgBEszduGUXg5mQI0ELHKla0vzZEy4LsBF5n",
         },
     },
     .paths = .{
