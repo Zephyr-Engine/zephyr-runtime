@@ -1,7 +1,14 @@
 const std = @import("std");
-const zimp = @import("zimp");
+
+const diagnostics = @import("diagnostics.zig");
+const log = @import("../../core/log.zig");
 const c = @import("../../c.zig");
+const zimp = @import("zimp");
 const gl = c.glad;
+
+const anisotropic_filtering_extension = "GL_EXT_texture_filter_anisotropic";
+const bptc_compression_extension = "GL_ARB_texture_compression_bptc";
+const rgtc_compression_extension = "GL_ARB_texture_compression_rgtc";
 
 pub const TextureError = error{
     TextureCreationFailed,
@@ -23,54 +30,90 @@ pub const Texture2D = struct {
         if (tex.mips.len == 0) {
             return TextureError.InvalidMipChain;
         }
+        if (!supportsTextureFormat(tex.format)) {
+            return TextureError.UnsupportedTextureFormat;
+        }
 
         var id: u32 = 0;
         gl.glGenTextures(1, &id);
+        if (!diagnostics.checkError("creating texture")) {
+            return TextureError.OpenGLError;
+        }
         if (id == 0) {
             return TextureError.TextureCreationFailed;
         }
         errdefer gl.glDeleteTextures(1, &id);
 
         gl.glBindTexture(gl.GL_TEXTURE_2D, id);
+        if (!diagnostics.checkError("binding texture")) {
+            return TextureError.OpenGLError;
+        }
         gl.glTexParameteri(
             gl.GL_TEXTURE_2D,
             gl.GL_TEXTURE_MIN_FILTER,
             if (tex.mips.len > 1) gl.GL_LINEAR_MIPMAP_LINEAR else gl.GL_LINEAR,
         );
+        if (!diagnostics.checkError("setting texture minification filter")) {
+            return TextureError.OpenGLError;
+        }
         gl.glTexParameteri(
             gl.GL_TEXTURE_2D,
             gl.GL_TEXTURE_MAG_FILTER,
             gl.GL_LINEAR,
         );
+        if (!diagnostics.checkError("setting texture magnification filter")) {
+            return TextureError.OpenGLError;
+        }
         gl.glTexParameteri(
             gl.GL_TEXTURE_2D,
             gl.GL_TEXTURE_WRAP_S,
             gl.GL_REPEAT,
         );
+        if (!diagnostics.checkError("setting texture S wrapping")) {
+            return TextureError.OpenGLError;
+        }
         gl.glTexParameteri(
             gl.GL_TEXTURE_2D,
             gl.GL_TEXTURE_WRAP_T,
             gl.GL_REPEAT,
         );
-        var max_anisotrophy: f32 = 1.0;
-        gl.glGetFloatv(gl.GL_MAX_TEXTURE_MAX_ANISOTROPY, &max_anisotrophy);
-        if (max_anisotrophy > 1.0) {
-            gl.glTexParameterf(
-                gl.GL_TEXTURE_2D,
-                gl.GL_TEXTURE_MAX_ANISOTROPY,
-                @min(max_anisotrophy, 8.0),
-            );
+        if (!diagnostics.checkError("setting texture T wrapping")) {
+            return TextureError.OpenGLError;
+        }
+        if (diagnostics.hasExtension(anisotropic_filtering_extension)) {
+            var max_anisotrophy: f32 = 1.0;
+            gl.glGetFloatv(gl.GL_MAX_TEXTURE_MAX_ANISOTROPY, &max_anisotrophy);
+            if (!diagnostics.checkError("querying maximum texture anisotropy")) {
+                return TextureError.OpenGLError;
+            }
+
+            if (max_anisotrophy > 1.0) {
+                gl.glTexParameterf(
+                    gl.GL_TEXTURE_2D,
+                    gl.GL_TEXTURE_MAX_ANISOTROPY,
+                    @min(max_anisotrophy, 8.0),
+                );
+                if (!diagnostics.checkError("setting texture anisotropy")) {
+                    return TextureError.OpenGLError;
+                }
+            }
         }
         gl.glTexParameteri(
             gl.GL_TEXTURE_2D,
             gl.GL_TEXTURE_BASE_LEVEL,
             0,
         );
+        if (!diagnostics.checkError("setting texture base mip level")) {
+            return TextureError.OpenGLError;
+        }
         gl.glTexParameteri(
             gl.GL_TEXTURE_2D,
             gl.GL_TEXTURE_MAX_LEVEL,
             @intCast(tex.mips.len - 1),
         );
+        if (!diagnostics.checkError("setting texture maximum mip level")) {
+            return TextureError.OpenGLError;
+        }
 
         const is_block_compressed = tex.format.isBlockCompressed();
         for (tex.mips, 0..) |mip, level| {
@@ -86,6 +129,9 @@ pub const Texture2D = struct {
                     @intCast(mip.data.len),
                     mip.data.ptr,
                 );
+                if (!diagnostics.checkError("uploading compressed texture mip")) {
+                    return TextureError.OpenGLError;
+                }
             } else {
                 const fmt = uncompressedFormat(tex.format, tex.color_space) orelse return TextureError.UnsupportedTextureFormat;
                 gl.glTexImage2D(
@@ -99,12 +145,10 @@ pub const Texture2D = struct {
                     fmt.ty,
                     mip.data.ptr,
                 );
+                if (!diagnostics.checkError("uploading texture mip")) {
+                    return TextureError.OpenGLError;
+                }
             }
-        }
-
-        const err = gl.glGetError();
-        if (err != gl.GL_NO_ERROR) {
-            return TextureError.OpenGLError;
         }
 
         return .{ .id = id, .width = tex.width, .height = tex.height };
@@ -120,6 +164,23 @@ pub const Texture2D = struct {
         self.id = 0;
     }
 };
+
+fn supportsTextureFormat(format: anytype) bool {
+    const required_extension = switch (format) {
+        .bc4, .bc5 => rgtc_compression_extension,
+        .bc6h, .bc7 => bptc_compression_extension,
+        else => return true,
+    };
+    if (diagnostics.hasExtension(required_extension)) {
+        return true;
+    }
+
+    log.err(
+        "texture format '{s}' is unsupported by this OpenGL driver; it requires {s}",
+        .{ @tagName(format), required_extension },
+    );
+    return false;
+}
 
 const UploadFormat = struct {
     internal: u32,

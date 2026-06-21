@@ -2,6 +2,7 @@ const std = @import("std");
 
 const c = @import("../../c.zig");
 const gl = c.glad;
+const diagnostics = @import("diagnostics.zig");
 const IndexFormat = @import("zimp").mesh.IndexFormat;
 
 pub const BufferError = error{
@@ -28,8 +29,7 @@ pub const VertexBuffer = struct {
             gl.GL_STATIC_DRAW,
         );
 
-        const err = gl.glGetError();
-        if (err != gl.GL_NO_ERROR) {
+        if (!diagnostics.checkError("uploading vertex buffer")) {
             gl.glDeleteBuffers(1, &vbo.id);
             return BufferError.OpenGLError;
         }
@@ -92,8 +92,7 @@ pub const IndexBuffer = struct {
             data.ptr,
             gl.GL_STATIC_DRAW,
         );
-        const err = gl.glGetError();
-        if (err != gl.GL_NO_ERROR) {
+        if (!diagnostics.checkError("uploading index buffer")) {
             gl.glDeleteBuffers(1, &ebo.id);
             return BufferError.OpenGLError;
         }
