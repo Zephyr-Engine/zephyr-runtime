@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build project
-        run: zig build -Doptimize=OptimizeRelease
+        run: zig build -Doptimize=OptimizeFast
 
       - name: Build project
         run: zig build test --summary all
