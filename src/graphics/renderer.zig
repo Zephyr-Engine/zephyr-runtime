@@ -1,6 +1,5 @@
 const std = @import("std");
 
-const RuntimeContext = @import("../core/runtime_context.zig").RuntimeContext;
 const Material = @import("material.zig").Material;
 const components = @import("../ecs/components.zig");
 const ecs = @import("../ecs/world.zig");
@@ -9,7 +8,7 @@ const Mesh = @import("mesh.zig").Mesh;
 const c = @import("../c.zig");
 const gl = c.glad;
 
-pub fn renderWorld(ctx: *RuntimeContext) !void {
+pub fn renderWorld(ctx: anytype) !void {
     gl.glEnable(gl.GL_DEPTH_TEST);
     gl.glClearColor(0.4, 0.4, 0.4, 1);
     gl.glDepthMask(gl.GL_TRUE);
@@ -23,7 +22,7 @@ pub fn renderWorld(ctx: *RuntimeContext) !void {
     try renderFromCamera(ctx, camera_entity);
 }
 
-pub fn renderFromCamera(ctx: *RuntimeContext, camera_entity: ecs.EntityID) !void {
+pub fn renderFromCamera(ctx: anytype, camera_entity: ecs.EntityID) !void {
     const camera = ctx.world.getComponent(camera_entity, components.CameraComponent) orelse {
         return error.InvalidCamera;
     };

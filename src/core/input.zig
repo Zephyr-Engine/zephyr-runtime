@@ -6,6 +6,29 @@ pub const Position = struct {
     y: f32,
 };
 
+/// Per-frame input data exposed to ECS systems as a world resource.
+/// The application refreshes it after processing window events and clears its
+/// transient fields at the end of each frame.
+pub const InputState = struct {
+    mouse_pos: Position = .{ .x = 0, .y = 0 },
+    mouse_delta: Position = .{ .x = 0, .y = 0 },
+    mouse_scroll: Position = .{ .x = 0, .y = 0 },
+    pressed_keys: [512]bool = [_]bool{false} ** 512,
+    released_keys: [512]bool = [_]bool{false} ** 512,
+    held_keys: [512]bool = [_]bool{false} ** 512,
+    pressed_buttons: [8]bool = [_]bool{false} ** 8,
+    released_buttons: [8]bool = [_]bool{false} ** 8,
+    held_buttons: [8]bool = [_]bool{false} ** 8,
+
+    pub fn isKeyHeld(self: *const InputState, key: event.Key) bool {
+        return self.held_keys[@intFromEnum(key)];
+    }
+
+    pub fn isButtonHeld(self: *const InputState, button: event.MouseButton) bool {
+        return self.held_buttons[@intFromEnum(button)];
+    }
+};
+
 pub const InputManager = struct {
     mouse_pos: Position,
     mouse_delta: Position,
@@ -148,6 +171,21 @@ pub const InputManager = struct {
     pub fn GetMouseMoveScroll() Position {
         const self = getInstance();
         return self.mouse_scroll;
+    }
+
+    pub fn snapshot() InputState {
+        const self = getInstance();
+        return .{
+            .mouse_pos = self.mouse_pos,
+            .mouse_delta = self.mouse_delta,
+            .mouse_scroll = self.mouse_scroll,
+            .pressed_keys = self.pressed_keys,
+            .released_keys = self.released_keys,
+            .held_keys = self.held_keys,
+            .pressed_buttons = self.pressed_buttons,
+            .released_buttons = self.released_buttons,
+            .held_buttons = self.held_buttons,
+        };
     }
 };
 

@@ -1,8 +1,6 @@
 const std = @import("std");
 
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
-const ecs = @import("../ecs/world.zig");
-
 pub const RenderViewport = struct {
     width: u32 = 1,
     height: u32 = 1,
@@ -12,13 +10,15 @@ pub const RenderViewport = struct {
     }
 };
 
-pub const RuntimeContext = struct {
-    allocator: std.mem.Allocator,
-    io: std.Io,
-    assets: *AssetManager,
-    render_viewport: RenderViewport = .{},
-    world: ecs.World,
-};
+pub fn RuntimeContext(comptime Ecs: type) type {
+    return struct {
+        allocator: std.mem.Allocator,
+        io: std.Io,
+        assets: *AssetManager,
+        render_viewport: RenderViewport = .{},
+        world: Ecs.World,
+    };
+}
 
 test "RenderViewport aspect guards against zero height" {
     try std.testing.expectApproxEqAbs(@as(f32, 16.0 / 9.0), (RenderViewport{ .width = 1920, .height = 1080 }).aspect(), 0.0001);

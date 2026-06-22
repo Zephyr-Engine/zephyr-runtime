@@ -12,7 +12,7 @@ pub const ActiveCamera = struct {
 const expectApproxEq = std.testing.expectApproxEqAbs;
 const tolerance: f32 = 1e-4;
 
-pub fn setActive(world: *ecs.World, entity: ecs.EntityID) !void {
+pub fn setActive(world: anytype, entity: ecs.EntityID) !void {
     if (world.getComponent(entity, components.TransformComponent) == null or
         world.getComponent(entity, components.CameraComponent) == null)
     {
@@ -21,7 +21,7 @@ pub fn setActive(world: *ecs.World, entity: ecs.EntityID) !void {
     try world.setResource(ActiveCamera, .{ .entity = entity });
 }
 
-pub fn active(world: *ecs.World) ?ecs.EntityID {
+pub fn active(world: anytype) ?ecs.EntityID {
     const selection = world.getResourceOrNull(ActiveCamera) orelse return null;
     const entity = selection.entity;
     if (world.getComponent(entity, components.TransformComponent) == null or
@@ -45,7 +45,7 @@ test "camera projection uses the render-view aspect" {
 }
 
 test "active camera is an explicit world selection" {
-    var world = ecs.World.init(std.testing.allocator);
+    var world = ecs.EngineEcs.World.init(std.testing.allocator);
     defer world.deinit();
 
     const first = try world.spawnWith(.{
@@ -65,7 +65,7 @@ test "active camera is an explicit world selection" {
 }
 
 test "active camera must have camera and transform components" {
-    var world = ecs.World.init(std.testing.allocator);
+    var world = ecs.EngineEcs.World.init(std.testing.allocator);
     defer world.deinit();
 
     const entity = try world.spawn();
