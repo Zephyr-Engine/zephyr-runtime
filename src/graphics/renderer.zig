@@ -12,6 +12,7 @@ const gl = c.glad;
 pub fn renderWorld(ctx: *RuntimeContext) !void {
     gl.glEnable(gl.GL_DEPTH_TEST);
     gl.glClearColor(0.4, 0.4, 0.4, 1);
+    gl.glDepthMask(gl.GL_TRUE);
     gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT);
 
     const camera_entity = camera_system.active(&ctx.world) orelse {
