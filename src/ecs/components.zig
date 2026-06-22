@@ -8,14 +8,11 @@ const Quat = math.Quat;
 const Vec3 = math.Vec3;
 
 pub const TransformComponent = struct {
-    position: Vec3 = Vec3.zero,
     rotation: Quat = Quat.identity,
+    position: Vec3 = Vec3.zero,
     scale: Vec3 = Vec3.one,
 
     pub fn modelMatrix(self: *const TransformComponent) Mat4 {
-        // zlm uses the row-vector convention (v' = v * M), so a.mul(b) applies
-        // `a` before `b`. Scale first, then rotate, then translate, so the local
-        // origin maps to `position` instead of a rotated/scaled translation.
         return Mat4.createScale(self.scale.x, self.scale.y, self.scale.z)
             .mul(self.rotation.toMat4())
             .mul(Mat4.createTranslation(self.position));
@@ -35,14 +32,14 @@ pub const TransformComponent = struct {
 };
 
 pub const MeshRenderComponent = struct {
-    mesh: AssetId,
     material: AssetId,
+    mesh: AssetId,
 };
 
 pub const CameraComponent = struct {
     fov: f32 = std.math.pi / 4.0,
-    near: f32 = 0.1,
     far: f32 = 1000.0,
+    near: f32 = 0.1,
 
     pub fn projectionMatrix(self: *const CameraComponent, aspect: f32) Mat4 {
         return Mat4.createPerspective(self.fov, aspect, self.near, self.far);
@@ -58,11 +55,11 @@ pub const CameraComponent = struct {
 };
 
 pub const FlyCameraController = struct {
-    yaw: f32 = 0,
-    pitch: f32 = 0,
     look_sensitivity: f32 = 0.02,
     pan_sensitivity: f32 = 0.035,
     zoom_speed: f32 = 1.0,
+    pitch: f32 = 0,
+    yaw: f32 = 0,
 };
 
 const expectApproxEq = std.testing.expectApproxEqAbs;
