@@ -1,6 +1,7 @@
 const std = @import("std");
-const ZEvent = @import("../core/event.zig").ZEvent;
+
 const runtime_context = @import("../core/runtime_context.zig");
+const ZEvent = @import("../core/event.zig").ZEvent;
 const log = @import("../core/log.zig");
 
 pub const SceneError = error{

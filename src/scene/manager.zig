@@ -1,8 +1,9 @@
 const std = @import("std");
-const scene_mod = @import("scene.zig");
-const ZEvent = @import("../core/event.zig").ZEvent;
-const runtime_context = @import("../core/runtime_context.zig");
+
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
+const runtime_context = @import("../core/runtime_context.zig");
+const ZEvent = @import("../core/event.zig").ZEvent;
+const scene_mod = @import("scene.zig");
 const log = @import("../core/log.zig");
 
 pub const SceneManagerError = error{

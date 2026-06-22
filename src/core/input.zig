@@ -1,4 +1,5 @@
 const std = @import("std");
+
 const event = @import("event.zig");
 
 pub const Position = struct {
@@ -6,9 +7,6 @@ pub const Position = struct {
     y: f32,
 };
 
-/// Per-frame input data exposed to ECS systems as a world resource.
-/// The application refreshes it after processing window events and clears its
-/// transient fields at the end of each frame.
 pub const InputState = struct {
     mouse_pos: Position = .{ .x = 0, .y = 0 },
     mouse_delta: Position = .{ .x = 0, .y = 0 },

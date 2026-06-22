@@ -1,6 +1,7 @@
 const std = @import("std");
-const math = @import("../core/math.zig");
+
 const components = @import("../ecs/components.zig");
+const math = @import("../core/math.zig");
 const ecs = @import("../ecs/world.zig");
 
 const Mat4 = math.Mat4;

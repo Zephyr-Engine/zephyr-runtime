@@ -1,9 +1,9 @@
 const std = @import("std");
 const zimp = @import("zimp");
 
-const ZMesh = zimp.ZMesh;
-const IndexBuffer = @import("opengl/buffer.zig").IndexBuffer;
 const VertexArray = @import("opengl/vertex_array.zig").VertexArray;
+const IndexBuffer = @import("opengl/buffer.zig").IndexBuffer;
+const ZMesh = zimp.ZMesh;
 
 pub const Mesh = struct {
     vao: VertexArray,

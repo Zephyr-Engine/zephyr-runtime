@@ -1,22 +1,22 @@
 const std = @import("std");
 
-const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
-const runtime_context = @import("runtime_context.zig");
-const RenderViewport = @import("runtime_context.zig").RenderViewport;
-const scene_manager = @import("../scene/manager.zig");
 const Framebuffer = @import("../graphics/opengl/framebuffer.zig").Framebuffer;
+const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
+const RenderViewport = @import("runtime_context.zig").RenderViewport;
 const AssetRoots = @import("../assets/source.zig").AssetRoots;
+const runtime_context = @import("runtime_context.zig");
+const scene_manager = @import("../scene/manager.zig");
 const renderer = @import("../graphics/renderer.zig");
-const input = @import("input.zig");
 const InputManager = input.InputManager;
-const InputState = input.InputState;
+const WindowParams = win.WindowParams;
 const Time = @import("time.zig").Time;
 const glfw = @import("../c.zig").glfw;
+const InputState = input.InputState;
+const input = @import("input.zig");
 const win = @import("window.zig");
-const WindowParams = win.WindowParams;
-const Window = win.Window;
 const event = @import("event.zig");
 const log = @import("log.zig");
+const Window = win.Window;
 
 pub const ApplicationError = error{
     WindowError,

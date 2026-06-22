@@ -1,6 +1,5 @@
-const zcs = @import("zcs");
-
 const components = @import("components.zig");
+const zcs = @import("zcs");
 
 pub const EngineEcs = zcs.Registry(&.{
     components.TransformComponent,
