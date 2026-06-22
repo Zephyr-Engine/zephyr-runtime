@@ -22,8 +22,6 @@ pub fn renderWorld(ctx: *RuntimeContext) !void {
     try renderFromCamera(ctx, camera_entity);
 }
 
-/// Renders the current view from any camera entity. The caller owns target
-/// binding, so multiple cameras can render to independent framebuffers.
 pub fn renderFromCamera(ctx: *RuntimeContext, camera_entity: ecs.EntityID) !void {
     const camera = ctx.world.getComponent(camera_entity, components.CameraComponent) orelse {
         return error.InvalidCamera;
@@ -43,8 +41,6 @@ pub fn renderFromCamera(ctx: *RuntimeContext, camera_entity: ecs.EntityID) !void
         const target = row.read(components.MeshRenderComponent);
 
         const material = ctx.assets.get(Material, target.material) orelse {
-            // Asset loading is asynchronous. A target may exist before its
-            // material is finalized; try it again on a later frame.
             continue;
         };
         const mesh = ctx.assets.get(Mesh, target.mesh) orelse {

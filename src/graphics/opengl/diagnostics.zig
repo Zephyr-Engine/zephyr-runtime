@@ -47,3 +47,16 @@ pub fn errorName(err: u32) []const u8 {
         else => "unknown OpenGL error",
     };
 }
+
+test "errorName maps known GL error codes" {
+    try std.testing.expectEqualStrings("GL_INVALID_ENUM", errorName(gl.GL_INVALID_ENUM));
+    try std.testing.expectEqualStrings("GL_INVALID_VALUE", errorName(gl.GL_INVALID_VALUE));
+    try std.testing.expectEqualStrings("GL_INVALID_OPERATION", errorName(gl.GL_INVALID_OPERATION));
+    try std.testing.expectEqualStrings("GL_INVALID_FRAMEBUFFER_OPERATION", errorName(gl.GL_INVALID_FRAMEBUFFER_OPERATION));
+    try std.testing.expectEqualStrings("GL_OUT_OF_MEMORY", errorName(gl.GL_OUT_OF_MEMORY));
+}
+
+test "errorName falls back for GL_NO_ERROR and unknown codes" {
+    try std.testing.expectEqualStrings("unknown OpenGL error", errorName(gl.GL_NO_ERROR));
+    try std.testing.expectEqualStrings("unknown OpenGL error", errorName(0xdead));
+}

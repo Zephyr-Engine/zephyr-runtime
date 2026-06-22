@@ -62,4 +62,6 @@ test {
     _ = @import("core/runtime_context.zig");
     _ = @import("core/runtime_context.zig");
     _ = @import("graphics/opengl/framebuffer.zig");
+    _ = @import("graphics/opengl/diagnostics.zig");
+    _ = @import("graphics/layout.zig");
 }

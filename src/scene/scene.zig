@@ -128,3 +128,70 @@ fn validateScene(comptime T: type) void {
     comptime validateSceneFn(T, "onEvent", fn (*T, *RuntimeContext, ZEvent) anyerror!void);
     comptime validateSceneFn(T, "onCleanup", fn (*T, *RuntimeContext) anyerror!void);
 }
+
+var test_call_log: [8]u8 = undefined;
+var test_call_count: usize = 0;
+
+fn recordCall(tag: u8) void {
+    test_call_log[test_call_count] = tag;
+    test_call_count += 1;
+}
+
+const RecordingScene = struct {
+    fn onStartup(_: *RecordingScene, _: *RuntimeContext) !void {
+        recordCall('S');
+    }
+    fn onUpdate(_: *RecordingScene, _: *RuntimeContext, _: f32) !void {
+        recordCall('U');
+    }
+    fn onEvent(_: *RecordingScene, _: *RuntimeContext, _: ZEvent) !void {
+        recordCall('E');
+    }
+    fn onCleanup(_: *RecordingScene, _: *RuntimeContext) !void {
+        recordCall('C');
+    }
+};
+
+const FailingScene = struct {
+    fn onStartup(_: *FailingScene, _: *RuntimeContext) !void {
+        return error.Boom;
+    }
+    fn onUpdate(_: *FailingScene, _: *RuntimeContext, _: f32) !void {}
+    fn onEvent(_: *FailingScene, _: *RuntimeContext, _: ZEvent) !void {}
+    fn onCleanup(_: *FailingScene, _: *RuntimeContext) !void {}
+};
+
+fn fakeContext() RuntimeContext {
+    // The recording scenes never touch these fields; only the allocator (used by
+    // onCleanup to free the instance) needs to be real.
+    return .{
+        .allocator = std.testing.allocator,
+        .io = undefined,
+        .assets = undefined,
+        .world = undefined,
+    };
+}
+
+test "Scene forwards lifecycle calls to the implementation in order" {
+    test_call_count = 0;
+    var scene = try Scene.init(RecordingScene, std.testing.allocator, true);
+    try std.testing.expect(scene.is_active);
+
+    var ctx = fakeContext();
+    try scene.onStartup(&ctx);
+    try scene.onUpdate(&ctx, 0.016);
+    try scene.onEvent(&ctx, .WindowClose);
+    // onCleanup frees the heap instance; testing.allocator flags a leak otherwise.
+    try scene.onCleanup(&ctx);
+
+    try std.testing.expectEqualStrings("SUEC", test_call_log[0..test_call_count]);
+}
+
+test "Scene propagates errors raised by the implementation" {
+    var scene = try Scene.init(FailingScene, std.testing.allocator, false);
+    try std.testing.expect(!scene.is_active);
+
+    var ctx = fakeContext();
+    try std.testing.expectError(error.Boom, scene.onStartup(&ctx));
+    try scene.onCleanup(&ctx);
+}
