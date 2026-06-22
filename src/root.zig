@@ -34,7 +34,7 @@ const camera = @import("scene/camera.zig");
 pub const ActiveCamera = camera.ActiveCamera;
 pub const setActiveCamera = camera.setActive;
 pub const activeCamera = camera.active;
-pub const renderFromCamera = @import("graphics/renderer.zig").renderFromCamera;
+pub const Renderer = @import("graphics/renderer.zig").Renderer;
 
 pub const components = @import("ecs/components.zig");
 pub const ecs = @import("ecs/world.zig");

@@ -30,6 +30,7 @@ pub fn Application(comptime Game: type) type {
     const Ecs = Game.Ecs;
     const RuntimeContext = runtime_context.RuntimeContext(Ecs);
     const SceneManager = scene_manager.SceneManager(Ecs);
+    const Renderer = renderer.Renderer(Ecs);
 
     return struct {
         scene_manager: *SceneManager,
@@ -174,7 +175,7 @@ pub fn Application(comptime Game: type) type {
 
             self.ctx.world.advanceTick();
             try self.scene_manager.updateScene(&self.ctx, self.time.delta_time);
-            try renderer.renderWorld(&self.ctx);
+            try Renderer.renderWorld(&self.ctx);
         }
 
         pub fn present(self: *@This()) void {
