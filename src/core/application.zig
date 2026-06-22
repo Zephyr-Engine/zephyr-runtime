@@ -33,14 +33,12 @@ pub fn Application(comptime Game: type) type {
     const Renderer = renderer.Renderer(Ecs);
 
     return struct {
+        events: std.ArrayList(event.ZEvent) = .empty,
         scene_manager: *SceneManager,
-        window: *Window,
-        allocator: std.mem.Allocator,
-        time: Time,
-        io: std.Io,
         assets: AssetManager,
         ctx: RuntimeContext,
-        events: std.ArrayList(event.ZEvent) = .empty,
+        window: *Window,
+        time: Time,
 
         pub fn init(
             allocator: std.mem.Allocator,
@@ -67,10 +65,8 @@ pub fn Application(comptime Game: type) type {
             errdefer allocator.destroy(manager);
             app.* = @This(){
                 .scene_manager = manager,
-                .allocator = allocator,
                 .window = window,
                 .time = .init(),
-                .io = io,
                 .ctx = undefined,
                 .assets = assets,
             };
@@ -110,7 +106,7 @@ pub fn Application(comptime Game: type) type {
         }
 
         pub fn eventCallback(self: *@This(), ev: event.ZEvent) !void {
-            self.events.append(self.allocator, ev) catch |err| {
+            self.events.append(self.ctx.allocator, ev) catch |err| {
                 log.err("dropping window events because the event queue cannot grow: {}", .{err});
             };
         }
@@ -190,10 +186,10 @@ pub fn Application(comptime Game: type) type {
                 shutdown_error = err;
             };
             self.ctx.world.deinit();
-            self.events.deinit(self.allocator);
+            self.events.deinit(self.ctx.allocator);
             self.assets.deinit();
-            self.window.deinit(self.allocator);
-            self.allocator.destroy(self);
+            self.window.deinit(self.ctx.allocator);
+            self.ctx.allocator.destroy(self);
             if (shutdown_error) |err| return err;
         }
 
