@@ -31,18 +31,22 @@ pub const Quat = math.Quat;
 
 const camera = @import("scene/camera.zig");
 
-pub const ActiveCamera = camera.ActiveCamera;
+pub const Renderer = @import("graphics/renderer.zig").Renderer;
 pub const setActiveCamera = camera.setActive;
 pub const activeCamera = camera.active;
-pub const Renderer = @import("graphics/renderer.zig").Renderer;
+pub const ActiveCamera = camera.ActiveCamera;
 
 pub const components = @import("ecs/components.zig");
 pub const ecs = @import("ecs/world.zig");
 pub const GameEcs = ecs.GameEcs;
 
 const zimp = @import("zimp");
-pub const ZMesh = zimp.ZMesh;
+const zcs = @import("zcs");
+
+pub const FrameCount = zcs.FrameCount;
+pub const DeltaTime = zcs.DeltaTime;
 pub const ZShader = zimp.ZShader;
+pub const ZMesh = zimp.ZMesh;
 pub const Zatex = zimp.Zatex;
 pub const Zamat = zimp.Zamat;
 

@@ -26,8 +26,14 @@ pub fn Application(comptime Game: type) type {
     comptime if (!@hasDecl(Game, "Ecs")) {
         @compileError("Game must declare `pub const Ecs = zp.GameEcs(...)`");
     };
+    comptime if (!@hasDecl(Game, "update_schedule")) {
+        @compileError("Game must declare `pub const update_schedule = Ecs.Schedule.Spec{ ... }`");
+    };
 
     const Ecs = Game.Ecs;
+    const CommandBuffer = Ecs.CommandBuffer;
+    const Schedule = Ecs.Schedule;
+
     const RuntimeContext = runtime_context.RuntimeContext(Ecs);
     const SceneManager = scene_manager.SceneManager(Ecs);
     const Renderer = renderer.Renderer(Ecs);
@@ -37,6 +43,7 @@ pub fn Application(comptime Game: type) type {
         scene_manager: *SceneManager,
         assets: AssetManager,
         ctx: RuntimeContext,
+        command_buffer: CommandBuffer,
         window: *Window,
         time: Time,
 
@@ -68,6 +75,7 @@ pub fn Application(comptime Game: type) type {
                 .window = window,
                 .time = .init(),
                 .ctx = undefined,
+                .command_buffer = undefined,
                 .assets = assets,
             };
             app.ctx = .{
@@ -76,6 +84,7 @@ pub fn Application(comptime Game: type) type {
                 .assets = &app.assets,
                 .world = .init(allocator),
             };
+            app.command_buffer = .init(&app.ctx.world);
             try app.ctx.world.setResource(InputState, .{});
             window.setEventCallback(app, eventCallback);
 
@@ -169,8 +178,13 @@ pub fn Application(comptime Game: type) type {
                 Framebuffer.bindDefault(fb_size.width, fb_size.height);
             };
 
-            self.ctx.world.advanceTick();
             try self.scene_manager.updateScene(&self.ctx, self.time.delta_time);
+            try Schedule.tickDt(
+                &self.ctx.world,
+                &self.command_buffer,
+                self.time.delta_time,
+                Game.update_schedule,
+            );
             try Renderer.renderWorld(&self.ctx);
         }
 
@@ -185,6 +199,7 @@ pub fn Application(comptime Game: type) type {
             self.scene_manager.deinit(&self.ctx) catch |err| {
                 shutdown_error = err;
             };
+            self.command_buffer.deinit();
             self.ctx.world.deinit();
             self.events.deinit(self.ctx.allocator);
             self.assets.deinit();
