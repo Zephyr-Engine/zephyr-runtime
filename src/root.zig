@@ -32,6 +32,7 @@ pub const Quat = math.Quat;
 const camera = @import("scene/camera.zig");
 
 pub const Renderer = @import("graphics/renderer.zig").Renderer;
+pub const DebugStats = @import("graphics/debug_stats.zig").DebugStats;
 pub const setActiveCamera = camera.setActive;
 pub const activeCamera = camera.active;
 pub const ActiveCamera = camera.ActiveCamera;
@@ -68,5 +69,6 @@ test {
     _ = @import("core/runtime_context.zig");
     _ = @import("graphics/opengl/framebuffer.zig");
     _ = @import("graphics/opengl/diagnostics.zig");
+    _ = @import("graphics/debug_stats.zig");
     _ = @import("graphics/layout.zig");
 }

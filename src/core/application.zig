@@ -4,6 +4,7 @@ const Framebuffer = @import("../graphics/opengl/framebuffer.zig").Framebuffer;
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
 const RenderViewport = @import("runtime_context.zig").RenderViewport;
 const AssetRoots = @import("../assets/source.zig").AssetRoots;
+const debug_stats = @import("../graphics/debug_stats.zig");
 const runtime_context = @import("runtime_context.zig");
 const scene_manager = @import("../scene/manager.zig");
 const renderer = @import("../graphics/renderer.zig");
@@ -46,6 +47,7 @@ pub fn Application(comptime Game: type) type {
         command_buffer: CommandBuffer,
         window: *Window,
         time: Time,
+        debug_stats: debug_stats.Collector = .{},
 
         pub fn init(
             allocator: std.mem.Allocator,
@@ -178,6 +180,7 @@ pub fn Application(comptime Game: type) type {
                 Framebuffer.bindDefault(fb_size.width, fb_size.height);
             };
 
+            const cpu_start = Window.GetTime();
             try self.scene_manager.updateScene(&self.ctx, self.time.delta_time);
             try Schedule.tickDt(
                 &self.ctx.world,
@@ -185,7 +188,24 @@ pub fn Application(comptime Game: type) type {
                 self.time.delta_time,
                 Game.update_schedule,
             );
+            self.debug_stats.beginGpuTimer();
+            defer self.debug_stats.endGpuTimer();
             try Renderer.renderWorld(&self.ctx);
+            const cpu_elapsed_ms: f32 = @floatCast(@max(0, Window.GetTime() - cpu_start) * 1000);
+            self.debug_stats.recordCpuFrame(self.time.delta_time, cpu_elapsed_ms);
+        }
+
+        /// Enables or disables runtime render-stat collection for host debug UIs.
+        pub fn setDebugStatsEnabled(self: *@This(), enabled: bool) void {
+            self.debug_stats.setEnabled(enabled);
+        }
+
+        pub fn debugStatsEnabled(self: *const @This()) bool {
+            return self.debug_stats.enabled;
+        }
+
+        pub fn debugStats(self: *const @This()) ?debug_stats.DebugStats {
+            return self.debug_stats.snapshot();
         }
 
         pub fn present(self: *@This()) void {
@@ -203,6 +223,7 @@ pub fn Application(comptime Game: type) type {
             self.ctx.world.deinit();
             self.events.deinit(self.ctx.allocator);
             self.assets.deinit();
+            self.debug_stats.deinit();
             self.window.deinit(self.ctx.allocator);
             self.ctx.allocator.destroy(self);
             if (shutdown_error) |err| return err;
