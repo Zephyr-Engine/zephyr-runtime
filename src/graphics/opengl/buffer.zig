@@ -1,9 +1,9 @@
 const std = @import("std");
 
+const IndexFormat = @import("zimp").mesh.IndexFormat;
+const diagnostics = @import("diagnostics.zig");
 const c = @import("../../c.zig");
 const gl = c.glad;
-const diagnostics = @import("diagnostics.zig");
-const IndexFormat = @import("zimp").mesh.IndexFormat;
 
 pub const BufferError = error{
     BufferCreationFailed,

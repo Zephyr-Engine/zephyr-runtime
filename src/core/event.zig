@@ -1,10 +1,10 @@
 const std = @import("std");
 
 const Window = @import("window.zig").Window;
+const log = @import("log.zig");
 const c = @import("../c.zig");
 const glfw = c.glfw;
 const gl = c.glad;
-const log = @import("log.zig");
 
 pub const MouseButton = enum(u8) {
     Left = 0,

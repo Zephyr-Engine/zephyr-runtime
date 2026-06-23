@@ -1,200 +1,218 @@
 const std = @import("std");
 
-const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
-const RuntimeContext = @import("runtime_context.zig").RuntimeContext;
-const RenderViewport = @import("runtime_context.zig").RenderViewport;
-const SceneManager = @import("../scene/manager.zig").SceneManager;
 const Framebuffer = @import("../graphics/opengl/framebuffer.zig").Framebuffer;
+const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
+const RenderViewport = @import("runtime_context.zig").RenderViewport;
 const AssetRoots = @import("../assets/source.zig").AssetRoots;
-const Scene = @import("../scene/scene.zig").Scene;
-const Input = @import("input.zig").InputManager;
+const runtime_context = @import("runtime_context.zig");
+const scene_manager = @import("../scene/manager.zig");
+const renderer = @import("../graphics/renderer.zig");
+const InputManager = input.InputManager;
+const WindowParams = win.WindowParams;
 const Time = @import("time.zig").Time;
 const glfw = @import("../c.zig").glfw;
+const InputState = input.InputState;
+const input = @import("input.zig");
 const win = @import("window.zig");
-const WindowParams = win.WindowParams;
-const Window = win.Window;
 const event = @import("event.zig");
 const log = @import("log.zig");
+const Window = win.Window;
 
 pub const ApplicationError = error{
     WindowError,
 };
 
-pub const Application = struct {
-    scene_manager: *SceneManager,
-    window: *Window,
-    allocator: std.mem.Allocator,
-    time: Time,
-    io: std.Io,
-    assets: AssetManager,
-    ctx: RuntimeContext,
-    events: std.ArrayList(event.ZEvent) = .empty,
-    scene_started: bool = false,
-    event_overflow_logged: bool = false,
+pub fn Application(comptime Game: type) type {
+    comptime if (!@hasDecl(Game, "Ecs")) {
+        @compileError("Game must declare `pub const Ecs = zp.GameEcs(...)`");
+    };
+    comptime if (!@hasDecl(Game, "update_schedule")) {
+        @compileError("Game must declare `pub const update_schedule = Ecs.Schedule.Spec{ ... }`");
+    };
 
-    pub fn init(
-        allocator: std.mem.Allocator,
-        io: std.Io,
-        params: WindowParams,
-        asset_roots: AssetRoots,
-    ) !*Application {
-        const window = Window.init(allocator, params) catch |err| {
-            log.err("failed to initialize window: {}", .{err});
-            return ApplicationError.WindowError;
-        };
-        errdefer window.deinit(allocator);
+    const Ecs = Game.Ecs;
+    const CommandBuffer = Ecs.CommandBuffer;
+    const Schedule = Ecs.Schedule;
 
-        var assets = try AssetManager.initFiles(
-            allocator,
-            io,
-            asset_roots,
-        );
-        errdefer assets.deinit();
+    const RuntimeContext = runtime_context.RuntimeContext(Ecs);
+    const SceneManager = scene_manager.SceneManager(Ecs);
+    const Renderer = renderer.Renderer(Ecs);
 
-        const app = try allocator.create(Application);
-        errdefer allocator.destroy(app);
-        const scene_manager = try SceneManager.init(allocator);
-        errdefer allocator.destroy(scene_manager);
-        app.* = Application{
-            .scene_manager = scene_manager,
-            .allocator = allocator,
-            .window = window,
-            .time = .init(),
-            .io = io,
-            .ctx = undefined,
-            .assets = assets,
-        };
-        app.ctx = .{
-            .allocator = allocator,
-            .io = io,
-            .assets = &app.assets,
-        };
-        window.setEventCallback(app, eventCallback);
+    return struct {
+        events: std.ArrayList(event.ZEvent) = .empty,
+        scene_manager: *SceneManager,
+        assets: AssetManager,
+        ctx: RuntimeContext,
+        command_buffer: CommandBuffer,
+        window: *Window,
+        time: Time,
 
-        return app;
-    }
-
-    pub fn run(app: *Application) void {
-        app.start() catch |err| {
-            log.err("failed to initialize scene; terminating application run: {}", .{err});
-            return;
-        };
-
-        while (app.window.shouldCloseWindow()) {
-            _ = app.beginFrame();
-            app.processQueuedEvents() catch |err| {
-                log.err("failed to process events; terminating application run: {}", .{err});
-                return;
+        pub fn init(
+            allocator: std.mem.Allocator,
+            io: std.Io,
+            params: WindowParams,
+            asset_roots: AssetRoots,
+        ) !*@This() {
+            const window = Window.init(allocator, params) catch |err| {
+                log.err("failed to initialize window: {}", .{err});
+                return ApplicationError.WindowError;
             };
+            errdefer window.deinit(allocator);
 
-            app.update() catch |err| {
-                log.err("failed to update application; terminating application run: {}", .{err});
-                return;
+            var assets = try AssetManager.initFiles(
+                allocator,
+                io,
+                asset_roots,
+            );
+            errdefer assets.deinit();
+
+            const app = try allocator.create(@This());
+            errdefer allocator.destroy(app);
+            const manager = try SceneManager.init(allocator);
+            errdefer allocator.destroy(manager);
+            app.* = @This(){
+                .scene_manager = manager,
+                .window = window,
+                .time = .init(),
+                .ctx = undefined,
+                .command_buffer = undefined,
+                .assets = assets,
             };
-            app.present();
+            app.ctx = .{
+                .allocator = allocator,
+                .io = io,
+                .assets = &app.assets,
+                .world = .init(allocator),
+            };
+            app.command_buffer = .init(&app.ctx.world);
+            try app.ctx.world.setResource(InputState, .{});
+            window.setEventCallback(app, eventCallback);
+
+            return app;
         }
 
-        Window.HandleInput();
-    }
+        pub fn run(app: *@This()) void {
+            app.start() catch |err| {
+                log.err("failed to initialize scene; terminating application run: {}", .{err});
+                return;
+            };
 
-    pub fn eventCallback(self: *Application, ev: event.ZEvent) !void {
-        self.events.append(self.allocator, ev) catch |err| {
-            if (!self.event_overflow_logged) {
-                log.err("dropping window events because the event queue cannot grow: {}", .{err});
-                self.event_overflow_logged = true;
+            while (app.window.shouldCloseWindow()) {
+                _ = app.beginFrame();
+                app.processQueuedEvents() catch |err| {
+                    log.err("failed to process events; terminating application run: {}", .{err});
+                    return;
+                };
+
+                app.update() catch |err| {
+                    log.err("failed to update application; terminating application run: {}", .{err});
+                    return;
+                };
+                app.present();
             }
-        };
-    }
 
-    pub fn start(self: *Application) !void {
-        if (self.scene_started) return;
-        try self.scene_manager.initScene(&self.ctx);
-        self.scene_started = true;
-    }
-
-    pub fn beginFrame(self: *Application) []const event.ZEvent {
-        self.events.clearRetainingCapacity();
-        self.time.update(@floatCast(Window.GetTime()));
-        Window.HandleInput();
-        return self.events.items;
-    }
-
-    pub fn processQueuedEvents(self: *Application) !void {
-        try self.processEvents(self.events.items);
-    }
-
-    pub fn processEvents(self: *Application, events: []const event.ZEvent) !void {
-        for (events) |ev| {
-            try self.processEvent(ev);
+            Window.HandleInput();
         }
-    }
 
-    pub fn processEvent(self: *Application, ev: event.ZEvent) !void {
-        Input.Update(ev);
-        if (self.scene_started) {
+        pub fn eventCallback(self: *@This(), ev: event.ZEvent) !void {
+            self.events.append(self.ctx.allocator, ev) catch |err| {
+                log.err("dropping window events because the event queue cannot grow: {}", .{err});
+            };
+        }
+
+        pub fn start(self: *@This()) !void {
+            try self.scene_manager.initScene(&self.ctx);
+        }
+
+        pub fn beginFrame(self: *@This()) []const event.ZEvent {
+            self.events.clearRetainingCapacity();
+            self.time.update(@floatCast(Window.GetTime()));
+            Window.HandleInput();
+            return self.events.items;
+        }
+
+        pub fn processQueuedEvents(self: *@This()) !void {
+            try self.processEvents(self.events.items);
+        }
+
+        pub fn processEvents(self: *@This(), events: []const event.ZEvent) !void {
+            for (events) |ev| {
+                try self.processEvent(ev);
+            }
+        }
+
+        pub fn processEvent(self: *@This(), ev: event.ZEvent) !void {
+            InputManager.Update(ev);
+            self.ctx.world.getResource(InputState).* = InputManager.snapshot();
             try self.scene_manager.handleEvent(&self.ctx, ev);
         }
-    }
 
-    pub fn pumpAssets(self: *Application) !void {
-        try self.assets.pump();
-    }
-
-    pub fn update(self: *Application) !void {
-        try self.pumpAssets();
-        try self.renderScene(null);
-    }
-
-    pub fn renderScene(self: *Application, target: ?*Framebuffer) !void {
-        if (!self.scene_started) {
-            try self.start();
+        pub fn pumpAssets(self: *@This()) !void {
+            try self.assets.pump();
         }
 
-        var restore_default = false;
-        if (target) |framebuffer| {
-            framebuffer.bind();
-            self.ctx.render_viewport = .{
-                .width = framebuffer.width,
-                .height = framebuffer.height,
+        pub fn update(self: *@This()) !void {
+            try self.pumpAssets();
+            try self.renderScene(null);
+        }
+
+        pub fn renderScene(self: *@This(), target: ?*Framebuffer) !void {
+            var restore_default = false;
+            if (target) |framebuffer| {
+                framebuffer.bind();
+                self.ctx.render_viewport = .{
+                    .width = framebuffer.width,
+                    .height = framebuffer.height,
+                };
+                restore_default = true;
+            } else {
+                const fb_size = self.window.getFramebufferSize();
+                Framebuffer.bindDefault(fb_size.width, fb_size.height);
+                self.ctx.render_viewport = .{
+                    .width = fb_size.width,
+                    .height = fb_size.height,
+                };
+            }
+            defer if (restore_default) {
+                const fb_size = self.window.getFramebufferSize();
+                Framebuffer.bindDefault(fb_size.width, fb_size.height);
             };
-            restore_default = true;
-        } else {
-            const fb_size = self.window.getFramebufferSize();
-            Framebuffer.bindDefault(fb_size.width, fb_size.height);
-            self.ctx.render_viewport = RenderViewport{
-                .width = fb_size.width,
-                .height = fb_size.height,
+
+            try self.scene_manager.updateScene(&self.ctx, self.time.delta_time);
+            try Schedule.tickDt(
+                &self.ctx.world,
+                &self.command_buffer,
+                self.time.delta_time,
+                Game.update_schedule,
+            );
+            try Renderer.renderWorld(&self.ctx);
+        }
+
+        pub fn present(self: *@This()) void {
+            self.window.swapBuffers();
+            InputManager.Clear();
+            self.ctx.world.getResource(InputState).* = InputManager.snapshot();
+        }
+
+        pub fn deinit(self: *@This()) !void {
+            var shutdown_error: ?anyerror = null;
+            self.scene_manager.deinit(&self.ctx) catch |err| {
+                shutdown_error = err;
+            };
+            self.command_buffer.deinit();
+            self.ctx.world.deinit();
+            self.events.deinit(self.ctx.allocator);
+            self.assets.deinit();
+            self.window.deinit(self.ctx.allocator);
+            self.ctx.allocator.destroy(self);
+            if (shutdown_error) |err| return err;
+        }
+
+        pub fn pushScene(self: *@This(), comptime scene: type, is_active: bool) void {
+            self.scene_manager.addScene(scene, is_active) catch |err| {
+                log.err("failed to push scene: {}", .{err});
+                return;
             };
         }
-        defer if (restore_default) {
-            const fb_size = self.window.getFramebufferSize();
-            Framebuffer.bindDefault(fb_size.width, fb_size.height);
-        };
-
-        try self.scene_manager.updateScene(&self.ctx, self.time.delta_time);
-    }
-
-    pub fn present(self: *Application) void {
-        self.window.swapBuffers();
-        Input.Clear();
-    }
-
-    pub fn deinit(self: *Application) !void {
-        var shutdown_error: ?anyerror = null;
-        self.scene_manager.deinit(&self.ctx) catch |err| {
-            shutdown_error = err;
-        };
-        self.events.deinit(self.allocator);
-        self.assets.deinit();
-        self.window.deinit(self.allocator);
-        self.allocator.destroy(self);
-        if (shutdown_error) |err| return err;
-    }
-
-    pub fn pushScene(self: *Application, comptime scene: type, is_active: bool) void {
-        self.scene_manager.addScene(scene, is_active) catch |err| {
-            log.err("failed to push scene: {}", .{err});
-            return;
-        };
-    }
-};
+    };
+}

@@ -1,11 +1,11 @@
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
 
 const event = @import("event.zig");
+const log = @import("log.zig");
 const c = @import("../c.zig");
 const glfw = c.glfw;
 const gl = c.glad;
-const log = @import("log.zig");
 
 const macos = if (builtin.os.tag == .macos) @cImport({
     @cInclude("objc/message.h");

@@ -91,11 +91,25 @@ test "DataType reports upload metadata" {
         is_integer: bool,
     };
     const cases = [_]Case{
+        .{ .data_type = .Float, .size = 4, .components = 1, .gl_type = gl.GL_FLOAT, .is_integer = false },
+        .{ .data_type = .Float2, .size = 8, .components = 2, .gl_type = gl.GL_FLOAT, .is_integer = false },
         .{ .data_type = .Float3, .size = 12, .components = 3, .gl_type = gl.GL_FLOAT, .is_integer = false },
-        .{ .data_type = .Int4, .size = 16, .components = 4, .gl_type = gl.GL_INT, .is_integer = true },
-        .{ .data_type = .UShort4, .size = 8, .components = 4, .gl_type = gl.GL_UNSIGNED_SHORT, .is_integer = true },
+        .{ .data_type = .Float4, .size = 16, .components = 4, .gl_type = gl.GL_FLOAT, .is_integer = false },
+        .{ .data_type = .Mat3, .size = 36, .components = 9, .gl_type = gl.GL_FLOAT, .is_integer = false },
         .{ .data_type = .Mat4, .size = 64, .components = 16, .gl_type = gl.GL_FLOAT, .is_integer = false },
+        .{ .data_type = .Int, .size = 4, .components = 1, .gl_type = gl.GL_INT, .is_integer = true },
+        .{ .data_type = .Int2, .size = 8, .components = 2, .gl_type = gl.GL_INT, .is_integer = true },
+        .{ .data_type = .Int3, .size = 12, .components = 3, .gl_type = gl.GL_INT, .is_integer = true },
+        .{ .data_type = .Int4, .size = 16, .components = 4, .gl_type = gl.GL_INT, .is_integer = true },
+        .{ .data_type = .Bool, .size = 1, .components = 1, .gl_type = gl.GL_BOOL, .is_integer = false },
+        .{ .data_type = .Short2, .size = 4, .components = 2, .gl_type = gl.GL_SHORT, .is_integer = false },
+        .{ .data_type = .UShort2, .size = 4, .components = 2, .gl_type = gl.GL_UNSIGNED_SHORT, .is_integer = false },
+        .{ .data_type = .UShort4, .size = 8, .components = 4, .gl_type = gl.GL_UNSIGNED_SHORT, .is_integer = true },
+        .{ .data_type = .Half4, .size = 8, .components = 4, .gl_type = gl.GL_HALF_FLOAT, .is_integer = false },
     };
+
+    // Exhaustive: fail if a DataType variant is added without a matching case.
+    try @import("std").testing.expectEqual(@typeInfo(DataType).@"enum".fields.len, cases.len);
 
     for (cases) |case| {
         try @import("std").testing.expectEqual(case.size, case.data_type.size());

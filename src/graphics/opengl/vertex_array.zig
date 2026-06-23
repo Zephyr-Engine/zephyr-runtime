@@ -1,8 +1,9 @@
 const std = @import("std");
+
+const StreamAttribute = @import("../layout.zig").StreamAttribute;
+const buffer = @import("buffer.zig");
 const c = @import("../../c.zig");
 const gl = c.glad;
-const buffer = @import("buffer.zig");
-const StreamAttribute = @import("../layout.zig").StreamAttribute;
 
 pub const VertexArrayError = error{
     VertexArrayCreationFailed,

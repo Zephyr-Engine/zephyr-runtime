@@ -1,6 +1,7 @@
 const std = @import("std");
-const zimp = @import("zimp");
+
 const c = @import("../c.zig");
+const zimp = @import("zimp");
 const gl = c.glad;
 
 const Shader = @import("opengl/shader.zig").Shader;
