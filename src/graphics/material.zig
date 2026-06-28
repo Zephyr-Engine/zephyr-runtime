@@ -17,7 +17,7 @@ pub const Material = struct {
     pub const TextureBinding = struct {
         unit: u16,
         texture: *Texture2D,
-        slot_name_hash: u64,
+        resource_name: []const u8,
     };
 
     pub const ParamBinding = struct {
@@ -53,13 +53,11 @@ pub const Material = struct {
 
     pub fn bind(self: *const Material) void {
         self.shader.bind();
-        applyAlphaMode(self.source.alpha_mode);
+        applyAlphaMode(self.source.render_state.alpha_mode);
 
         for (self.texture_bindings) |*binding| {
             binding.texture.bind(binding.unit);
-            if (samplerUniformName(binding.slot_name_hash)) |name| {
-                self.shader.setUniform(name, @as(i32, @intCast(binding.unit)));
-            }
+            self.shader.setUniform(binding.resource_name, @as(i32, @intCast(binding.unit)));
         }
 
         for (self.param_bindings) |binding| {
@@ -129,35 +127,8 @@ fn applyAlphaMode(mode: anytype) void {
     }
 }
 
-fn samplerUniformName(slot_hash: u64) ?[]const u8 {
-    if (slot_hash == fnv1a("albedo")) return "u_albedo";
-    if (slot_hash == fnv1a("normal")) return "u_normal_map";
-    if (slot_hash == fnv1a("roughness")) return "u_roughness_map";
-    if (slot_hash == fnv1a("metallic")) return "u_metallic_map";
-    if (slot_hash == fnv1a("ao")) return "u_ao";
-    if (slot_hash == fnv1a("emissive")) return "u_emissive_map";
-    if (slot_hash == fnv1a("roughness_metallic")) return "u_roughness_metallic";
-    if (slot_hash == fnv1a("orm")) return "u_orm";
-    return null;
-}
-
 fn readF32(bytes: *const [4]u8) f32 {
     return @bitCast(std.mem.readInt(u32, bytes, .little));
-}
-
-fn fnv1a(bytes: []const u8) u64 {
-    var hash: u64 = 0xcbf29ce484222325;
-    for (bytes) |byte| {
-        hash ^= byte;
-        hash *%= 0x00000100000001B3;
-    }
-    return hash;
-}
-
-test "material sampler names are selected from stable slot hashes" {
-    try std.testing.expectEqualStrings("u_albedo", samplerUniformName(fnv1a("albedo")).?);
-    try std.testing.expectEqualStrings("u_roughness_metallic", samplerUniformName(fnv1a("roughness_metallic")).?);
-    try std.testing.expect(samplerUniformName(fnv1a("unsupported")) == null);
 }
 
 test "readF32 decodes little-endian parameter data" {

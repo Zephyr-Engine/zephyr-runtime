@@ -669,7 +669,7 @@ pub const AssetManager = struct {
         errdefer texture_bindings.deinit(self.allocator);
 
         for (material_source_ptr.texture_slots) |slot| {
-            if (slot.slot_index == std.math.maxInt(u16) or slot.cooked_path.len == 0) {
+            if (slot.cooked_path.len == 0) {
                 continue;
             }
 
@@ -683,9 +683,9 @@ pub const AssetManager = struct {
             const texture_id = try self.requestKind(.texture, texture_path);
             const texture = try self.loadedTexture(texture_id) orelse return .waiting;
             try texture_bindings.append(self.allocator, .{
-                .unit = slot.slot_index,
+                .unit = slot.shader_binding,
                 .texture = texture,
-                .slot_name_hash = slot.slot_name_hash,
+                .resource_name = slot.resource_name,
             });
         }
 
