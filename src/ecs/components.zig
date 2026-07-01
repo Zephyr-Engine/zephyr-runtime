@@ -1,9 +1,9 @@
 const std = @import("std");
 
-const uuid = @import("../assets/uuid.zig");
+const id_types = @import("../core/id/id_types.zig");
 const math = @import("../core/math.zig");
 
-const AssetId = uuid.AssetId;
+const AssetId = id_types.AssetId;
 const Mat4 = math.Mat4;
 const Quat = math.Quat;
 const Vec3 = math.Vec3;

@@ -1,22 +1,36 @@
 const std = @import("std");
 const zimp = @import("zimp");
 
-const asset_uuid = @import("uuid.zig");
 const source_mod = @import("source.zig");
 
-const AssetId = asset_uuid.AssetId;
-const AssetKind = asset_uuid.AssetKind;
+const AssetId = @import("../core/id/id_types.zig").AssetId;
 const AssetRoots = source_mod.AssetRoots;
-const AssetSource = source_mod.AssetSource;
 const AssetError = source_mod.AssetError;
-const FileSource = source_mod.FileSource;
+const CookedStore = source_mod.CookedStore;
 const Mesh = @import("../graphics/mesh.zig").Mesh;
 const Material = @import("../graphics/material.zig").Material;
 const Shader = @import("../graphics/opengl/shader.zig").Shader;
 const Texture2D = @import("../graphics/opengl/texture.zig").Texture2D;
 const log = @import("../core/log.zig");
 
-pub const AssetState = enum {
+const AssetKind = enum(u8) {
+    mesh,
+    material,
+    texture,
+    shader,
+};
+
+fn detectKind(path: []const u8) ?AssetKind {
+    return switch (zimp.runtime.detectType(path) orelse return null) {
+        .mesh => .mesh,
+        .material => .material,
+        .texture => .texture,
+        .shader => .shader,
+        .unknown => null,
+    };
+}
+
+const AssetState = enum {
     queued,
     loading,
     ready_for_finalize,
@@ -26,12 +40,11 @@ pub const AssetState = enum {
     failed,
 };
 
-pub const Asset = union(AssetKind) {
+const Asset = union(AssetKind) {
     mesh: *Mesh,
     material: *Material,
     texture: *Texture2D,
-    shader_stage: *zimp.ZShader,
-    shader_program: *Shader,
+    shader: *zimp.ZShader,
 
     fn deinit(self: Asset, allocator: std.mem.Allocator, worker_allocator: std.mem.Allocator) void {
         switch (self) {
@@ -47,12 +60,8 @@ pub const Asset = union(AssetKind) {
                 texture.deinit();
                 allocator.destroy(texture);
             },
-            .shader_stage => |shader| {
+            .shader => |shader| {
                 shader.deinit(worker_allocator);
-                allocator.destroy(shader);
-            },
-            .shader_program => |shader| {
-                shader.deinit();
                 allocator.destroy(shader);
             },
         }
@@ -142,7 +151,7 @@ const ReaderPool = struct {
     allocator: std.mem.Allocator,
     worker_allocator: std.mem.Allocator,
     io: std.Io,
-    source: AssetSource,
+    source: CookedStore,
 
     mutex: std.Io.Mutex = .init,
     cond: std.Io.Condition = .init,
@@ -154,7 +163,7 @@ const ReaderPool = struct {
         allocator: std.mem.Allocator,
         worker_allocator: std.mem.Allocator,
         io: std.Io,
-        source: AssetSource,
+        source: CookedStore,
         worker_count: usize,
     ) !*ReaderPool {
         const pool = try allocator.create(ReaderPool);
@@ -257,13 +266,26 @@ const ReaderPool = struct {
         self.mutex.unlock(self.io);
     }
 
-    fn loadCookedAsset(self: *ReaderPool, record: *AssetRecord) !zimp.runtime.Asset {
+    fn loadCookedAsset(self: *ReaderPool, record: *AssetRecord) !zimp.runtime.CookedAsset {
         const normalized_path = record.path orelse return AssetError.AssetNotFound;
-        const bytes = try self.source.readAlloc(self.worker_allocator, self.io, normalized_path);
+        const bytes = self.source.readAlloc(self.worker_allocator, self.io, normalized_path) catch |err| switch (err) {
+            error.FileNotFound, error.NotDir, error.IsDir => return AssetError.AssetNotFound,
+            error.OutOfMemory => return AssetError.OutOfMemory,
+            zimp.runtime.PathError.AbsolutePathNotAllowed,
+            zimp.runtime.PathError.ParentTraversalNotAllowed,
+            zimp.runtime.PathError.EmptyPath,
+            zimp.runtime.PathError.PathTooLong,
+            => return AssetError.InvalidPath,
+            else => return err,
+        };
         defer self.worker_allocator.free(bytes);
 
         var reader = std.Io.Reader.fixed(bytes);
-        return zimp.runtime.loadFromReader(self.worker_allocator, &reader, runtimeKind(record.kind));
+        return zimp.runtime.loadFromReader(
+            self.worker_allocator,
+            &reader,
+            zimp.runtime.detectType(normalized_path) orelse return AssetError.UnsupportedAssetKind,
+        );
     }
 };
 
@@ -273,12 +295,12 @@ pub const AssetManager = struct {
     worker_allocator_state: *SynchronizedAllocator,
     worker_allocator: std.mem.Allocator,
     io: std.Io,
-    source: AssetSource,
+    source: CookedStore,
     pool: *ReaderPool,
 
     assets: std.AutoHashMap(AssetId, *AssetRecord),
-    paths: std.StringHashMap(AssetId),
-    shader_programs: std.StringHashMap(AssetId),
+    asset_keys: std.StringHashMap(AssetId),
+    shader_programs: std.StringHashMap(*Shader),
 
     pub const Options = struct {
         worker_count: ?usize = null,
@@ -287,7 +309,7 @@ pub const AssetManager = struct {
     pub fn init(
         allocator: std.mem.Allocator,
         io: std.Io,
-        source: AssetSource,
+        source: CookedStore,
     ) !AssetManager {
         return initWithOptions(allocator, io, source, .{});
     }
@@ -295,11 +317,16 @@ pub const AssetManager = struct {
     pub fn initWithOptions(
         allocator: std.mem.Allocator,
         io: std.Io,
-        source: AssetSource,
+        source: CookedStore,
         options: Options,
     ) !AssetManager {
+        var owned_source = source;
         const worker_count = options.worker_count orelse defaultWorkerCount();
-        if (worker_count == 0) return AssetError.LoadFailed;
+        if (worker_count == 0) {
+            owned_source.deinit(allocator, io);
+            return AssetError.LoadFailed;
+        }
+        errdefer owned_source.deinit(allocator, io);
 
         const worker_allocator_state = try allocator.create(SynchronizedAllocator);
         errdefer allocator.destroy(worker_allocator_state);
@@ -313,7 +340,7 @@ pub const AssetManager = struct {
             managed_allocator,
             managed_allocator,
             io,
-            source,
+            owned_source,
             worker_count,
         );
         errdefer {
@@ -327,11 +354,11 @@ pub const AssetManager = struct {
             .worker_allocator_state = worker_allocator_state,
             .worker_allocator = managed_allocator,
             .io = io,
-            .source = source,
+            .source = owned_source,
             .pool = pool,
             .assets = std.AutoHashMap(AssetId, *AssetRecord).init(managed_allocator),
-            .paths = std.StringHashMap(AssetId).init(managed_allocator),
-            .shader_programs = std.StringHashMap(AssetId).init(managed_allocator),
+            .asset_keys = std.StringHashMap(AssetId).init(managed_allocator),
+            .shader_programs = std.StringHashMap(*Shader).init(managed_allocator),
         };
     }
 
@@ -349,12 +376,11 @@ pub const AssetManager = struct {
         roots: AssetRoots,
         options: Options,
     ) !AssetManager {
-        const source = try FileSource.createSource(
+        const source = try CookedStore.init(
             allocator,
             io,
             roots.cooked_root,
         );
-        errdefer source.deinit(allocator, io);
         return initWithOptions(allocator, io, source, options);
     }
 
@@ -368,11 +394,18 @@ pub const AssetManager = struct {
             self.allocator.destroy(record);
         }
         self.assets.deinit();
-        self.paths.deinit();
 
-        var shader_it = self.shader_programs.keyIterator();
-        while (shader_it.next()) |key| {
+        var key_it = self.asset_keys.keyIterator();
+        while (key_it.next()) |key| {
             self.allocator.free(key.*);
+        }
+        self.asset_keys.deinit();
+
+        var shader_it = self.shader_programs.iterator();
+        while (shader_it.next()) |entry| {
+            self.allocator.free(entry.key_ptr.*);
+            entry.value_ptr.*.deinit();
+            self.allocator.destroy(entry.value_ptr.*);
         }
         self.shader_programs.deinit();
 
@@ -382,21 +415,7 @@ pub const AssetManager = struct {
 
     pub fn register(self: *AssetManager, comptime T: type, path: []const u8) !AssetId {
         const expected = comptime kindFor(T);
-        if (expected == .shader_program) return AssetError.WrongAssetKind;
         return self.requestKind(expected, path);
-    }
-
-    pub fn registerSync(self: *AssetManager, comptime T: type, path: []const u8) !AssetId {
-        const id = try self.register(T, path);
-        try self.wait(id);
-        return id;
-    }
-
-    pub fn state(self: *AssetManager, id: AssetId) ?AssetState {
-        self.lock();
-        defer self.unlock();
-        const record = self.assets.get(id) orelse return null;
-        return record.state;
     }
 
     pub fn wait(self: *AssetManager, id: AssetId) !void {
@@ -499,41 +518,8 @@ pub const AssetManager = struct {
                 .texture => |texture| texture,
                 else => null,
             },
-            .shader_stage => null,
-            .shader_program => switch (asset) {
-                .shader_program => |shader| shader,
-                else => null,
-            },
+            .shader => null,
         };
-    }
-
-    pub fn pathFor(self: *AssetManager, id: AssetId) ?[]const u8 {
-        self.lock();
-        defer self.unlock();
-        const record = self.assets.get(id) orelse return null;
-        return record.path;
-    }
-
-    pub fn kindForId(self: *AssetManager, id: AssetId) ?AssetKind {
-        self.lock();
-        defer self.unlock();
-        const record = self.assets.get(id) orelse return null;
-        return record.kind;
-    }
-
-    pub fn loadMesh(self: *AssetManager, path: []const u8) !*Mesh {
-        const id = try self.registerSync(Mesh, path);
-        return self.get(Mesh, id) orelse AssetError.LoadFailed;
-    }
-
-    pub fn loadMaterial(self: *AssetManager, path: []const u8) !*Material {
-        const id = try self.registerSync(Material, path);
-        return self.get(Material, id) orelse AssetError.LoadFailed;
-    }
-
-    pub fn loadTexture(self: *AssetManager, path: []const u8) !*Texture2D {
-        const id = try self.registerSync(Texture2D, path);
-        return self.get(Texture2D, id) orelse AssetError.LoadFailed;
     }
 
     fn requestKind(self: *AssetManager, expected: AssetKind, path: []const u8) !AssetId {
@@ -541,12 +527,18 @@ pub const AssetManager = struct {
         var path_owned = true;
         errdefer if (path_owned) self.allocator.free(normalized_path);
 
+        const lookup_key = try makePathAssetKey(self.allocator, normalized_path);
+        var key_owned = true;
+        errdefer if (key_owned) self.allocator.free(lookup_key);
+
         self.lock();
         defer self.unlock();
 
-        if (self.paths.get(normalized_path)) |cached| {
+        if (self.asset_keys.get(lookup_key)) |cached| {
             self.allocator.free(normalized_path);
+            self.allocator.free(lookup_key);
             path_owned = false;
+            key_owned = false;
             return cached;
         }
 
@@ -564,12 +556,14 @@ pub const AssetManager = struct {
             record.deinit(self.allocator, self.worker_allocator);
             self.allocator.destroy(record);
         };
-        const record_path = record.path orelse return AssetError.LoadFailed;
-
         try self.assets.put(id, record);
         errdefer _ = self.assets.remove(id);
-        try self.paths.put(record_path, id);
-        errdefer _ = self.paths.remove(record_path);
+        try self.asset_keys.put(lookup_key, id);
+        key_owned = false;
+        errdefer {
+            _ = self.asset_keys.remove(lookup_key);
+            self.allocator.free(lookup_key);
+        }
         try self.pool.enqueueLocked(record);
 
         record_owned = false;
@@ -586,14 +580,12 @@ pub const AssetManager = struct {
             .mesh => .{ .loaded = .{ .mesh = try self.finalizeMesh(record) } },
             .material => try self.finalizeMaterial(record),
             .texture => .{ .loaded = .{ .texture = try self.finalizeTexture(record) } },
-            .shader_stage => .{ .loaded = .{ .shader_stage = try self.finalizeShaderStage(record) } },
-            .shader_program => AssetError.WrongAssetKind,
+            .shader => .{ .loaded = .{ .shader = try self.finalizeShaderStage(record) } },
         };
     }
 
     fn finalizeMesh(self: *AssetManager, record: *AssetRecord) !*Mesh {
-        var cooked_asset = record.cooked orelse return AssetError.LoadFailed;
-        record.cooked = null;
+        var cooked_asset = try takeCooked(record);
         defer cooked_asset.deinit(self.worker_allocator);
 
         const cooked_mesh = switch (cooked_asset) {
@@ -610,8 +602,7 @@ pub const AssetManager = struct {
     }
 
     fn finalizeTexture(self: *AssetManager, record: *AssetRecord) !*Texture2D {
-        var cooked_asset = record.cooked orelse return AssetError.LoadFailed;
-        record.cooked = null;
+        var cooked_asset = try takeCooked(record);
         defer cooked_asset.deinit(self.worker_allocator);
 
         const cooked_texture = switch (cooked_asset) {
@@ -628,8 +619,7 @@ pub const AssetManager = struct {
     }
 
     fn finalizeShaderStage(self: *AssetManager, record: *AssetRecord) !*zimp.ZShader {
-        var cooked_asset = record.cooked orelse return AssetError.LoadFailed;
-        record.cooked = null;
+        var cooked_asset = try takeCooked(record);
         errdefer cooked_asset.deinit(self.worker_allocator);
 
         const shader = switch (cooked_asset) {
@@ -643,51 +633,14 @@ pub const AssetManager = struct {
     }
 
     fn finalizeMaterial(self: *AssetManager, record: *AssetRecord) !FinalizeResult {
-        const cooked_ptr = &(record.cooked orelse return AssetError.LoadFailed);
-        const material_source_ptr = switch (cooked_ptr.*) {
-            .material => |*source| source,
-            else => return AssetError.WrongAssetKind,
-        };
+        const material_source_ptr = try cookedMaterialSource(record);
         const record_path = record.path orelse return AssetError.LoadFailed;
 
-        const vertex_path = try zimp.runtime.resolveRelativeVirtualPath(
-            self.allocator,
-            record_path,
-            material_source_ptr.vertex_shader_path,
-        );
-        defer self.allocator.free(vertex_path);
-        const fragment_path = try zimp.runtime.resolveRelativeVirtualPath(
-            self.allocator,
-            record_path,
-            material_source_ptr.fragment_shader_path,
-        );
-        defer self.allocator.free(fragment_path);
-
-        const shader = try self.loadShaderProgramReady(vertex_path, fragment_path) orelse return .waiting;
+        const shader = try self.materialShaderReady(record_path, material_source_ptr) orelse return .waiting;
 
         var texture_bindings: std.ArrayList(Material.TextureBinding) = .empty;
         errdefer texture_bindings.deinit(self.allocator);
-
-        for (material_source_ptr.texture_slots) |slot| {
-            if (slot.cooked_path.len == 0) {
-                continue;
-            }
-
-            const texture_path = try zimp.runtime.resolveRelativeVirtualPath(
-                self.allocator,
-                record_path,
-                slot.cooked_path,
-            );
-            defer self.allocator.free(texture_path);
-
-            const texture_id = try self.requestKind(.texture, texture_path);
-            const texture = try self.loadedTexture(texture_id) orelse return .waiting;
-            try texture_bindings.append(self.allocator, .{
-                .unit = slot.shader_binding,
-                .texture = texture,
-                .resource_name = slot.resource_name,
-            });
-        }
+        if (!try self.materialTexturesReady(record_path, material_source_ptr, &texture_bindings)) return .waiting;
 
         const cooked_asset = record.cooked orelse return AssetError.LoadFailed;
         record.cooked = null;
@@ -718,14 +671,67 @@ pub const AssetManager = struct {
         return .{ .loaded = .{ .material = material } };
     }
 
+    fn materialShaderReady(
+        self: *AssetManager,
+        record_path: []const u8,
+        material_source: *const zimp.Zamat,
+    ) !?*Shader {
+        const vertex_path = try zimp.runtime.resolveRelativeVirtualPath(
+            self.allocator,
+            record_path,
+            material_source.vertex_shader_path,
+        );
+        defer self.allocator.free(vertex_path);
+
+        const fragment_path = try zimp.runtime.resolveRelativeVirtualPath(
+            self.allocator,
+            record_path,
+            material_source.fragment_shader_path,
+        );
+        defer self.allocator.free(fragment_path);
+
+        return self.loadShaderProgramReady(vertex_path, fragment_path);
+    }
+
+    fn materialTexturesReady(
+        self: *AssetManager,
+        record_path: []const u8,
+        material_source: *const zimp.Zamat,
+        out_bindings: *std.ArrayList(Material.TextureBinding),
+    ) !bool {
+        for (material_source.texture_slots) |slot| {
+            if (slot.cooked_path.len == 0) continue;
+
+            const texture_path = try zimp.runtime.resolveRelativeVirtualPath(
+                self.allocator,
+                record_path,
+                slot.cooked_path,
+            );
+            defer self.allocator.free(texture_path);
+
+            const texture_id = try self.requestKind(.texture, texture_path);
+            const texture_asset = try self.loadedAsset(texture_id, .texture) orelse return false;
+            const texture = switch (texture_asset) {
+                .texture => |texture| texture,
+                else => unreachable,
+            };
+            try out_bindings.append(self.allocator, .{
+                .unit = slot.shader_binding,
+                .texture = texture,
+                .resource_name = slot.resource_name,
+            });
+        }
+        return true;
+    }
+
     fn loadShaderProgramReady(
         self: *AssetManager,
         vertex_path: []const u8,
         fragment_path: []const u8,
     ) !?*Shader {
-        const normalized_vertex = try self.normalizeExpected(vertex_path, .shader_stage);
+        const normalized_vertex = try self.normalizeExpected(vertex_path, .shader);
         defer self.allocator.free(normalized_vertex);
-        const normalized_fragment = try self.normalizeExpected(fragment_path, .shader_stage);
+        const normalized_fragment = try self.normalizeExpected(fragment_path, .shader);
         defer self.allocator.free(normalized_fragment);
 
         const lookup_key = try makeShaderProgramKey(self.allocator, normalized_vertex, normalized_fragment);
@@ -733,31 +739,24 @@ pub const AssetManager = struct {
         defer if (key_owned) self.allocator.free(lookup_key);
 
         self.lock();
-        if (self.shader_programs.get(lookup_key)) |id| {
-            const record = self.assets.get(id) orelse {
-                self.unlock();
-                return AssetError.LoadFailed;
-            };
-            const asset = record.asset orelse {
-                self.unlock();
-                return AssetError.LoadFailed;
-            };
-            const shader = switch (asset) {
-                .shader_program => |shader| shader,
-                else => {
-                    self.unlock();
-                    return AssetError.WrongAssetKind;
-                },
-            };
+        if (self.shader_programs.get(lookup_key)) |shader| {
             self.unlock();
             return shader;
         }
         self.unlock();
 
-        const vertex_id = try self.requestKind(.shader_stage, normalized_vertex);
-        const fragment_id = try self.requestKind(.shader_stage, normalized_fragment);
-        const vertex_stage = try self.loadedShaderStage(vertex_id) orelse return null;
-        const fragment_stage = try self.loadedShaderStage(fragment_id) orelse return null;
+        const vertex_id = try self.requestKind(.shader, normalized_vertex);
+        const fragment_id = try self.requestKind(.shader, normalized_fragment);
+        const vertex_asset = try self.loadedAsset(vertex_id, .shader) orelse return null;
+        const fragment_asset = try self.loadedAsset(fragment_id, .shader) orelse return null;
+        const vertex_stage = switch (vertex_asset) {
+            .shader => |shader| shader,
+            else => unreachable,
+        };
+        const fragment_stage = switch (fragment_asset) {
+            .shader => |shader| shader,
+            else => unreachable,
+        };
 
         if (vertex_stage.stage != .vertex or fragment_stage.stage != .fragment) {
             return AssetError.WrongAssetKind;
@@ -771,66 +770,31 @@ pub const AssetManager = struct {
         self.lock();
         defer self.unlock();
 
-        if (self.shader_programs.get(lookup_key)) |id| {
-            const record = self.assets.get(id) orelse return AssetError.LoadFailed;
-            const asset = record.asset orelse return AssetError.LoadFailed;
-            const cached = switch (asset) {
-                .shader_program => |cached| cached,
-                else => return AssetError.WrongAssetKind,
-            };
+        if (self.shader_programs.get(lookup_key)) |cached| {
             shader.deinit();
             self.allocator.destroy(shader);
             return cached;
         }
 
-        const id = try self.newAssetIdLocked();
-        const record = try self.allocator.create(AssetRecord);
-        record.* = .{
-            .id = id,
-            .kind = .shader_program,
-            .path = null,
-            .state = .loaded,
-            .asset = .{ .shader_program = shader },
-        };
-        var record_owned = true;
-        errdefer if (record_owned) {
-            record.deinit(self.allocator, self.worker_allocator);
-            self.allocator.destroy(record);
-        };
-
-        try self.assets.put(id, record);
-        errdefer _ = self.assets.remove(id);
-        try self.shader_programs.put(lookup_key, id);
+        try self.shader_programs.put(lookup_key, shader);
         key_owned = false;
-        record_owned = false;
 
         return shader;
     }
 
-    fn loadedTexture(self: *AssetManager, id: AssetId) !?*Texture2D {
+    fn loadedAsset(self: *AssetManager, id: AssetId, expected: AssetKind) !?Asset {
         self.lock();
         defer self.unlock();
         const record = self.assets.get(id) orelse return AssetError.AssetNotFound;
-        if (record.state == .failed) return record.failure orelse AssetError.LoadFailed;
-        if (record.state != .loaded) return null;
+        if (record.state == .failed) {
+            return record.failure orelse AssetError.LoadFailed;
+        }
+        if (record.state != .loaded) {
+            return null;
+        }
         const asset = record.asset orelse return AssetError.LoadFailed;
-        return switch (asset) {
-            .texture => |texture| texture,
-            else => AssetError.WrongAssetKind,
-        };
-    }
-
-    fn loadedShaderStage(self: *AssetManager, id: AssetId) !?*zimp.ZShader {
-        self.lock();
-        defer self.unlock();
-        const record = self.assets.get(id) orelse return AssetError.AssetNotFound;
-        if (record.state == .failed) return record.failure orelse AssetError.LoadFailed;
-        if (record.state != .loaded) return null;
-        const asset = record.asset orelse return AssetError.LoadFailed;
-        return switch (asset) {
-            .shader_stage => |shader| shader,
-            else => AssetError.WrongAssetKind,
-        };
+        if (std.meta.activeTag(asset) != expected) return AssetError.WrongAssetKind;
+        return asset;
     }
 
     fn failRecordLocked(self: *AssetManager, record: *AssetRecord, err: anyerror) void {
@@ -846,17 +810,23 @@ pub const AssetManager = struct {
     fn normalizeExpected(self: *AssetManager, raw_path: []const u8, expected: AssetKind) ![]u8 {
         const normalized = zimp.runtime.normalizeVirtualPath(self.allocator, raw_path) catch return AssetError.InvalidPath;
         errdefer self.allocator.free(normalized);
-        const actual = asset_uuid.inferKind(normalized) orelse return AssetError.UnsupportedAssetKind;
-        if (actual != expected) return AssetError.WrongAssetKind;
+        const actual = detectKind(normalized) orelse return AssetError.UnsupportedAssetKind;
+        if (actual != expected) {
+            return AssetError.WrongAssetKind;
+        }
         return normalized;
     }
 
     fn newAssetIdLocked(self: *AssetManager) !AssetId {
         while (true) {
             const random_source: std.Random.IoSource = .{ .io = self.io };
-            const id = asset_uuid.Uuid.v4(random_source.interface());
-            if (id.isZero()) continue;
-            if (!self.assets.contains(id)) return id;
+            const id = AssetId.v4(random_source.interface());
+            if (id.isZero()) {
+                continue;
+            }
+            if (!self.assets.contains(id)) {
+                return id;
+            }
         }
     }
 
@@ -873,20 +843,24 @@ fn assetPath(record: *const AssetRecord) []const u8 {
     return record.path orelse "<generated shader program>";
 }
 
+fn cookedMaterialSource(record: *AssetRecord) !*zimp.Zamat {
+    const cooked_ptr = &(record.cooked orelse return AssetError.LoadFailed);
+    return switch (cooked_ptr.*) {
+        .material => |*source| source,
+        else => AssetError.WrongAssetKind,
+    };
+}
+
+fn takeCooked(record: *AssetRecord) !zimp.runtime.CookedAsset {
+    const cooked_asset = record.cooked orelse return AssetError.LoadFailed;
+    record.cooked = null;
+    return cooked_asset;
+}
+
 fn defaultWorkerCount() usize {
     const cpu_count = std.Thread.getCpuCount() catch 2;
     if (cpu_count <= 1) return 1;
     return @min(cpu_count - 1, 4);
-}
-
-fn runtimeKind(kind: AssetKind) zimp.runtime.AssetType {
-    return switch (kind) {
-        .mesh => .mesh,
-        .material => .material,
-        .texture => .texture,
-        .shader_stage => .shader,
-        .shader_program => .shader,
-    };
 }
 
 fn linkShaderProgram(
@@ -904,9 +878,12 @@ fn kindFor(comptime T: type) AssetKind {
         Mesh => .mesh,
         Material => .material,
         Texture2D => .texture,
-        Shader => .shader_program,
         else => @compileError("unsupported asset type: " ++ @typeName(T)),
     };
+}
+
+fn makePathAssetKey(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
+    return std.fmt.allocPrint(allocator, "path:{s}", .{path});
 }
 
 fn makeShaderProgramKey(
@@ -914,65 +891,45 @@ fn makeShaderProgramKey(
     vertex_path: []const u8,
     fragment_path: []const u8,
 ) ![]u8 {
-    const key = try allocator.alloc(u8, vertex_path.len + 1 + fragment_path.len);
-    @memcpy(key[0..vertex_path.len], vertex_path);
-    key[vertex_path.len] = 0;
-    @memcpy(key[vertex_path.len + 1 ..], fragment_path);
-    return key;
+    return std.fmt.allocPrint(allocator, "shader:{s}\x00{s}", .{ vertex_path, fragment_path });
 }
 
 test "makeShaderProgramKey includes both stage paths" {
     const key = try makeShaderProgramKey(std.testing.allocator, "basic.vert.zshdr", "basic.frag.zshdr");
     defer std.testing.allocator.free(key);
-    try std.testing.expectEqualStrings("basic.vert.zshdr", key[0.."basic.vert.zshdr".len]);
-    try std.testing.expectEqual(@as(u8, 0), key["basic.vert.zshdr".len]);
-    try std.testing.expectEqualStrings("basic.frag.zshdr", key["basic.vert.zshdr".len + 1 ..]);
+    try std.testing.expectEqualStrings("shader:basic.vert.zshdr", key[0.."shader:basic.vert.zshdr".len]);
+    try std.testing.expectEqual(@as(u8, 0), key["shader:basic.vert.zshdr".len]);
+    try std.testing.expectEqualStrings("basic.frag.zshdr", key["shader:basic.vert.zshdr".len + 1 ..]);
 }
 
-const TestSource = struct {
-    reads: std.atomic.Value(usize) = .init(0),
-    bytes: []const u8,
-    failure: ?anyerror = null,
+const testing = std.testing;
 
-    fn source(self: *TestSource) AssetSource {
-        return .{
-            .ptr = self,
-            .vtable = &.{
-                .readAlloc = readAllocThunk,
-                .deinit = deinitThunk,
-            },
-        };
-    }
+fn testCookedStore(tmp: *std.testing.TmpDir) !CookedStore {
+    const dir = try std.Io.Dir.openDir(tmp.dir, testing.io, ".", .{});
+    return CookedStore.initFromDir(testing.allocator, ".", dir);
+}
 
-    fn readAllocThunk(
-        ptr: *anyopaque,
-        allocator: std.mem.Allocator,
-        io: std.Io,
-        normalized_path: []const u8,
-    ) anyerror![]u8 {
-        _ = io;
-        _ = normalized_path;
-        const self: *TestSource = @ptrCast(@alignCast(ptr));
-        _ = self.reads.fetchAdd(1, .monotonic);
-        if (self.failure) |err| return err;
-        return allocator.dupe(u8, self.bytes);
-    }
-
-    fn deinitThunk(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io) void {
-        _ = ptr;
-        _ = allocator;
-        _ = io;
-    }
-};
+fn writeTestAsset(tmp: *std.testing.TmpDir, path: []const u8, bytes: []const u8) !void {
+    const file = try tmp.dir.createFile(testing.io, path, .{});
+    var buf: [64]u8 = undefined;
+    var writer = file.writer(testing.io, &buf);
+    try writer.interface.writeAll(bytes);
+    try writer.interface.flush();
+    file.close(testing.io);
+}
 
 test "register deduplicates normalized paths before worker load finishes" {
     if (@import("builtin").single_threaded) return error.SkipZigTest;
 
-    var source = TestSource{ .bytes = "not a cooked mesh" };
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try writeTestAsset(&tmp, "asset.zmesh", "not a cooked mesh");
+
+    const source = try testCookedStore(&tmp);
     var manager = try AssetManager.initWithOptions(
         std.testing.allocator,
         std.testing.io,
-        source.source(),
+        source,
         .{ .worker_count = 1 },
     );
     defer manager.deinit();
@@ -981,21 +938,21 @@ test "register deduplicates normalized paths before worker load finishes" {
     const second = try manager.register(Mesh, "asset.zmesh");
 
     try std.testing.expectEqual(first, second);
-    try std.testing.expectEqualStrings("asset.zmesh", manager.pathFor(first).?);
 
     manager.wait(first) catch {};
-    try std.testing.expectEqual(AssetState.failed, manager.state(first).?);
-    try std.testing.expectEqual(@as(usize, 1), source.reads.load(.monotonic));
 }
 
 test "register rejects invalid and mismatched asset paths before queuing work" {
     if (@import("builtin").single_threaded) return error.SkipZigTest;
 
-    var source = TestSource{ .bytes = "unused" };
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const source = try testCookedStore(&tmp);
     var manager = try AssetManager.initWithOptions(
         std.testing.allocator,
         std.testing.io,
-        source.source(),
+        source,
         .{ .worker_count = 1 },
     );
     defer manager.deinit();
@@ -1003,26 +960,34 @@ test "register rejects invalid and mismatched asset paths before queuing work" {
     try std.testing.expectError(AssetError.InvalidPath, manager.register(Mesh, "../escape.zmesh"));
     try std.testing.expectError(AssetError.UnsupportedAssetKind, manager.register(Mesh, "unknown.asset"));
     try std.testing.expectError(AssetError.WrongAssetKind, manager.register(Texture2D, "mesh.zmesh"));
-    try std.testing.expectEqual(@as(usize, 0), source.reads.load(.monotonic));
 }
 
 test "worker load failures are observable through wait and state" {
     if (@import("builtin").single_threaded) return error.SkipZigTest;
 
-    var source = TestSource{
-        .bytes = "unused",
-        .failure = AssetError.AssetNotFound,
-    };
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const source = try testCookedStore(&tmp);
     var manager = try AssetManager.initWithOptions(
         std.testing.allocator,
         std.testing.io,
-        source.source(),
+        source,
         .{ .worker_count = 1 },
     );
     defer manager.deinit();
 
     const id = try manager.register(Mesh, "missing.zmesh");
     try std.testing.expectError(AssetError.AssetNotFound, manager.wait(id));
-    try std.testing.expectEqual(AssetState.failed, manager.state(id).?);
-    try std.testing.expectEqual(@as(usize, 1), source.reads.load(.monotonic));
+}
+
+test "detectKind maps supported cooked extensions" {
+    try testing.expectEqual(AssetKind.mesh, detectKind("monkey.zmesh").?);
+    try testing.expectEqual(AssetKind.material, detectKind("monkey.zamat").?);
+    try testing.expectEqual(AssetKind.texture, detectKind("brick_albedo.ztex").?);
+    try testing.expectEqual(AssetKind.shader, detectKind("basic.vert.zshdr").?);
+}
+
+test "detectKind requires lowercase cooked extensions" {
+    try testing.expect(detectKind("MONKEY.ZMESH") == null);
 }

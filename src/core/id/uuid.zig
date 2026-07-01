@@ -1,12 +1,8 @@
 const std = @import("std");
 const zimp = @import("zimp");
 
-pub const AssetKind = enum(u8) {
-    mesh,
-    material,
-    texture,
-    shader_stage,
-    shader_program,
+pub const ParseError = error{
+    InvalidUuid,
 };
 
 pub const Uuid = struct {
@@ -48,36 +44,49 @@ pub const Uuid = struct {
         @memcpy(out[24..36], hex[20..32]);
         return out;
     }
+
+    pub fn parse(text: []const u8) ParseError!Uuid {
+        if (text.len != 36) {
+            return ParseError.InvalidUuid;
+        }
+
+        if (text[8] != '-' or text[13] != '-' or text[18] != '-' or text[23] != '-') {
+            return ParseError.InvalidUuid;
+        }
+
+        var out: [16]u8 = undefined;
+        var out_i: usize = 0;
+        var i: usize = 0;
+        while (i < text.len) {
+            if (text[i] == '-') {
+                i += 1;
+                continue;
+            }
+            if (i + 1 >= text.len) {
+                return error.InvalidUuid;
+            }
+            const hi = try hexNibble(text[i]);
+            const lo = try hexNibble(text[i + 1]);
+            out[out_i] = (hi << 4) | lo;
+            out_i += 1;
+            i += 2;
+        }
+        if (out_i != 16) {
+            return error.InvalidUuid;
+        }
+        return .{ .bytes = out };
+    }
 };
 
-pub const AssetId = Uuid;
-
-pub const AssetRef = struct {
-    kind: AssetKind,
-    id: AssetId,
-};
-
-pub fn inferKind(path: []const u8) ?AssetKind {
-    return switch (zimp.runtime.detectType(path) orelse return null) {
-        .mesh => .mesh,
-        .material => .material,
-        .texture => .texture,
-        .shader => .shader_stage,
+fn hexNibble(c: u8) ParseError!u8 {
+    return switch (c) {
+        '0'...'9' => c - '0',
+        'a'...'f' => c - 'a' + 10,
+        else => error.InvalidUuid,
     };
 }
 
 const testing = std.testing;
-
-test "inferKind maps supported cooked extensions" {
-    try testing.expectEqual(AssetKind.mesh, inferKind("monkey.zmesh").?);
-    try testing.expectEqual(AssetKind.material, inferKind("monkey.zamat").?);
-    try testing.expectEqual(AssetKind.texture, inferKind("brick_albedo.ztex").?);
-    try testing.expectEqual(AssetKind.shader_stage, inferKind("basic.vert.zshdr").?);
-}
-
-test "inferKind requires lowercase cooked extensions" {
-    try testing.expect(inferKind("MONKEY.ZMESH") == null);
-}
 
 test "Uuid.v4 sets RFC 4122 version and variant bits" {
     var prng = std.Random.DefaultPrng.init(0);
