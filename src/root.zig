@@ -13,9 +13,6 @@ pub const ZEvent = @import("core/event.zig").ZEvent;
 pub const Mesh = @import("graphics/mesh.zig").Mesh;
 
 pub const AssetManager = @import("assets/asset_manager.zig").AssetManager;
-pub const AssetState = @import("assets/asset_manager.zig").AssetState;
-pub const AssetKind = @import("assets/asset_manager.zig").AssetKind;
-pub const AssetRef = @import("assets/asset_manager.zig").AssetRef;
 pub const AssetRoots = @import("assets/source.zig").AssetRoots;
 pub const AssetError = @import("assets/source.zig").AssetError;
 pub const AssetId = @import("core/id/id_types.zig").AssetId;

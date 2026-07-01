@@ -13,7 +13,7 @@ const Shader = @import("../graphics/opengl/shader.zig").Shader;
 const Texture2D = @import("../graphics/opengl/texture.zig").Texture2D;
 const log = @import("../core/log.zig");
 
-pub const AssetKind = enum(u8) {
+const AssetKind = enum(u8) {
     mesh,
     material,
     texture,
@@ -41,16 +41,11 @@ pub const AssetKind = enum(u8) {
     }
 };
 
-pub const AssetRef = struct {
-    kind: AssetKind,
-    id: AssetId,
-};
-
-pub fn inferKind(path: []const u8) ?AssetKind {
+fn inferKind(path: []const u8) ?AssetKind {
     return AssetKind.fromCooked(zimp.runtime.detectType(path) orelse return null);
 }
 
-pub const AssetState = enum {
+const AssetState = enum {
     queued,
     loading,
     ready_for_finalize,
@@ -60,7 +55,7 @@ pub const AssetState = enum {
     failed,
 };
 
-pub const Asset = union(AssetKind) {
+const Asset = union(AssetKind) {
     mesh: *Mesh,
     material: *Material,
     texture: *Texture2D,
@@ -434,19 +429,6 @@ pub const AssetManager = struct {
         return self.requestKind(expected, path);
     }
 
-    pub fn registerSync(self: *AssetManager, comptime T: type, path: []const u8) !AssetId {
-        const id = try self.register(T, path);
-        try self.wait(id);
-        return id;
-    }
-
-    pub fn state(self: *AssetManager, id: AssetId) ?AssetState {
-        self.lock();
-        defer self.unlock();
-        const record = self.assets.get(id) orelse return null;
-        return record.state;
-    }
-
     pub fn wait(self: *AssetManager, id: AssetId) !void {
         while (true) {
             try self.pump();
@@ -553,35 +535,6 @@ pub const AssetManager = struct {
                 else => null,
             },
         };
-    }
-
-    pub fn pathFor(self: *AssetManager, id: AssetId) ?[]const u8 {
-        self.lock();
-        defer self.unlock();
-        const record = self.assets.get(id) orelse return null;
-        return record.path;
-    }
-
-    pub fn kindForId(self: *AssetManager, id: AssetId) ?AssetKind {
-        self.lock();
-        defer self.unlock();
-        const record = self.assets.get(id) orelse return null;
-        return record.kind;
-    }
-
-    pub fn loadMesh(self: *AssetManager, path: []const u8) !*Mesh {
-        const id = try self.registerSync(Mesh, path);
-        return self.get(Mesh, id) orelse AssetError.LoadFailed;
-    }
-
-    pub fn loadMaterial(self: *AssetManager, path: []const u8) !*Material {
-        const id = try self.registerSync(Material, path);
-        return self.get(Material, id) orelse AssetError.LoadFailed;
-    }
-
-    pub fn loadTexture(self: *AssetManager, path: []const u8) !*Texture2D {
-        const id = try self.registerSync(Texture2D, path);
-        return self.get(Texture2D, id) orelse AssetError.LoadFailed;
     }
 
     fn requestKind(self: *AssetManager, expected: AssetKind, path: []const u8) !AssetId {
@@ -1030,10 +983,8 @@ test "register deduplicates normalized paths before worker load finishes" {
     const second = try manager.register(Mesh, "asset.zmesh");
 
     try std.testing.expectEqual(first, second);
-    try std.testing.expectEqualStrings("asset.zmesh", manager.pathFor(first).?);
 
     manager.wait(first) catch {};
-    try std.testing.expectEqual(AssetState.failed, manager.state(first).?);
 }
 
 test "register rejects invalid and mismatched asset paths before queuing work" {
@@ -1073,7 +1024,6 @@ test "worker load failures are observable through wait and state" {
 
     const id = try manager.register(Mesh, "missing.zmesh");
     try std.testing.expectError(AssetError.AssetNotFound, manager.wait(id));
-    try std.testing.expectEqual(AssetState.failed, manager.state(id).?);
 }
 
 test "inferKind maps supported cooked extensions" {
