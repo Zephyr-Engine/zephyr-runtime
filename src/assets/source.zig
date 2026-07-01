@@ -15,111 +15,8 @@ pub const AssetRoots = struct {
     source_root: ?[]const u8 = null,
 };
 
-pub const AssetSource = struct {
-    ptr: *anyopaque,
-    vtable: *const VTable,
-
-    pub const VTable = struct {
-        readAlloc: *const fn (
-            ptr: *anyopaque,
-            allocator: std.mem.Allocator,
-            io: std.Io,
-            normalized_path: []const u8,
-        ) anyerror![]u8,
-        deinit: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io) void,
-    };
-
-    pub fn readAlloc(
-        self: AssetSource,
-        allocator: std.mem.Allocator,
-        io: std.Io,
-        normalized_path: []const u8,
-    ) ![]u8 {
-        return self.vtable.readAlloc(self.ptr, allocator, io, normalized_path);
-    }
-
-    pub fn deinit(self: AssetSource, allocator: std.mem.Allocator, io: std.Io) void {
-        self.vtable.deinit(self.ptr, allocator, io);
-    }
-};
-
-pub const FileSource = struct {
-    root: []u8,
-    dir: std.Io.Dir,
-
-    const max_asset_bytes: usize = 512 * 1024 * 1024;
-
-    pub fn init(allocator: std.mem.Allocator, io: std.Io, root: []const u8) !FileSource {
-        const cwd = std.Io.Dir.cwd();
-        const dir = try std.Io.Dir.openDir(cwd, io, root, .{});
-        errdefer dir.close(io);
-        return initFromDir(allocator, root, dir);
-    }
-
-    pub fn initFromDir(allocator: std.mem.Allocator, root: []const u8, dir: std.Io.Dir) !FileSource {
-        const owned_root = try allocator.dupe(u8, root);
-        return .{
-            .root = owned_root,
-            .dir = dir,
-        };
-    }
-
-    pub fn createSource(
-        allocator: std.mem.Allocator,
-        io: std.Io,
-        root: []const u8,
-    ) !AssetSource {
-        const source_ptr = try allocator.create(FileSource);
-        errdefer allocator.destroy(source_ptr);
-        source_ptr.* = try FileSource.init(allocator, io, root);
-        return source_ptr.source();
-    }
-
-    pub fn source(self: *FileSource) AssetSource {
-        return .{
-            .ptr = self,
-            .vtable = &.{
-                .readAlloc = readAllocThunk,
-                .deinit = deinitThunk,
-            },
-        };
-    }
-
-    pub fn readAlloc(
-        self: *FileSource,
-        allocator: std.mem.Allocator,
-        io: std.Io,
-        normalized_path: []const u8,
-    ) ![]u8 {
-        zimp.runtime.validateVirtualPath(normalized_path) catch return AssetError.InvalidPath;
-        return self.dir.readFileAlloc(io, normalized_path, allocator, .limited(max_asset_bytes)) catch |err| switch (err) {
-            error.FileNotFound, error.NotDir, error.IsDir => AssetError.AssetNotFound,
-            error.OutOfMemory => AssetError.OutOfMemory,
-            else => err,
-        };
-    }
-
-    pub fn deinit(self: *FileSource, allocator: std.mem.Allocator, io: std.Io) void {
-        self.dir.close(io);
-        allocator.free(self.root);
-    }
-
-    fn readAllocThunk(
-        ptr: *anyopaque,
-        allocator: std.mem.Allocator,
-        io: std.Io,
-        normalized_path: []const u8,
-    ) anyerror![]u8 {
-        const self: *FileSource = @ptrCast(@alignCast(ptr));
-        return self.readAlloc(allocator, io, normalized_path);
-    }
-
-    fn deinitThunk(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io) void {
-        const self: *FileSource = @ptrCast(@alignCast(ptr));
-        self.deinit(allocator, io);
-        allocator.destroy(self);
-    }
-};
+pub const CookedStore = zimp.runtime.CookedStore;
+pub const FileSource = CookedStore;
 
 const testing = std.testing;
 
@@ -135,7 +32,7 @@ test "FileSource opens existing normalized virtual path" {
     file.close(testing.io);
 
     const dir = try std.Io.Dir.openDir(tmp.dir, testing.io, ".", .{});
-    var loose = try FileSource.initFromDir(testing.allocator, ".", dir);
+    var loose = try CookedStore.initFromDir(testing.allocator, ".", dir);
     defer loose.deinit(testing.allocator, testing.io);
 
     const bytes = try loose.readAlloc(testing.allocator, testing.io, "asset.zmesh");
@@ -148,10 +45,10 @@ test "FileSource maps missing files to AssetNotFound" {
     defer tmp.cleanup();
 
     const dir = try std.Io.Dir.openDir(tmp.dir, testing.io, ".", .{});
-    var loose = try FileSource.initFromDir(testing.allocator, ".", dir);
+    var loose = try CookedStore.initFromDir(testing.allocator, ".", dir);
     defer loose.deinit(testing.allocator, testing.io);
 
-    try testing.expectError(AssetError.AssetNotFound, loose.readAlloc(testing.allocator, testing.io, "missing.zmesh"));
+    try testing.expectError(error.FileNotFound, loose.readAlloc(testing.allocator, testing.io, "missing.zmesh"));
 }
 
 test "FileSource rejects paths outside the asset root" {
@@ -159,8 +56,8 @@ test "FileSource rejects paths outside the asset root" {
     defer tmp.cleanup();
 
     const dir = try std.Io.Dir.openDir(tmp.dir, testing.io, ".", .{});
-    var loose = try FileSource.initFromDir(testing.allocator, ".", dir);
+    var loose = try CookedStore.initFromDir(testing.allocator, ".", dir);
     defer loose.deinit(testing.allocator, testing.io);
 
-    try testing.expectError(AssetError.InvalidPath, loose.readAlloc(testing.allocator, testing.io, "../outside.zmesh"));
+    try testing.expectError(zimp.runtime.PathError.ParentTraversalNotAllowed, loose.readAlloc(testing.allocator, testing.io, "../outside.zmesh"));
 }
