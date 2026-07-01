@@ -7,11 +7,14 @@ pub const Mesh = @import("graphics/mesh.zig").Mesh;
 pub const ZEvent = @import("core/event.zig").ZEvent;
 pub const Window = @import("core/window.zig").Window;
 pub const Input = @import("core/input.zig").InputManager;
+pub const CursorKind = @import("core/window.zig").CursorKind;
 pub const Material = @import("graphics/material.zig").Material;
 pub const Shader = @import("graphics/opengl/shader.zig").Shader;
 pub const Application = @import("core/application.zig").Application;
 pub const Texture = @import("graphics/opengl/texture.zig").Texture2D;
 pub const RuntimeContext = @import("core/runtime_context.zig").RuntimeContext;
+pub const RenderViewport = @import("core/runtime_context.zig").RenderViewport;
+pub const Framebuffer = @import("graphics/opengl/frame_buffer.zig").FrameBuffer;
 pub const VertexArray = @import("graphics/opengl/vertex_array.zig").VertexArray;
 
 pub const AssetManager = @import("assets/asset_manager.zig").AssetManager;
@@ -58,4 +61,5 @@ test {
     _ = @import("assets/asset_manager.zig");
     _ = @import("core/runtime_context.zig");
     _ = @import("scene/editor_camera.zig");
+    _ = @import("graphics/opengl/frame_buffer.zig");
 }

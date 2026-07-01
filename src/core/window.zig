@@ -11,6 +11,19 @@ pub const WindowError = error{
     MemoryError,
 };
 
+pub const WindowSize = struct {
+    width: u32,
+    height: u32,
+};
+
+pub const CursorKind = enum {
+    arrow,
+    hand,
+    text,
+    resize_x,
+    resize_y,
+};
+
 pub const WindowData = struct {
     width: u32,
     height: u32,
@@ -20,6 +33,7 @@ pub const WindowParams = struct {
     width: ?u32,
     height: ?u32,
     title: []const u8,
+    msaa_samples: u32 = 4,
 };
 
 fn getDefaultWidth() u32 {
@@ -43,6 +57,11 @@ pub const Window = struct {
     data: WindowData,
     event_fn: *const fn (*anyopaque, event.ZEvent) anyerror!void = undefined,
     event_ctx: *anyopaque = undefined,
+    arrow_cursor: ?*glfw.GLFWcursor = null,
+    hand_cursor: ?*glfw.GLFWcursor = null,
+    text_cursor: ?*glfw.GLFWcursor = null,
+    resize_x_cursor: ?*glfw.GLFWcursor = null,
+    resize_y_cursor: ?*glfw.GLFWcursor = null,
 
     pub fn init(allocator: std.mem.Allocator, params: WindowParams) WindowError!*Window {
         if (glfw.glfwInit() == 0) {
@@ -54,6 +73,9 @@ pub const Window = struct {
         glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MAJOR, 3);
         glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MINOR, 3);
         glfw.glfwWindowHint(glfw.GLFW_OPENGL_PROFILE, glfw.GLFW_OPENGL_CORE_PROFILE);
+        if (params.msaa_samples > 1) {
+            glfw.glfwWindowHint(glfw.GLFW_SAMPLES, @intCast(params.msaa_samples));
+        }
 
         const title = allocator.dupeZ(u8, params.title) catch |err| {
             std.log.err("Failed to duplicate window title: {}", .{err});
@@ -79,6 +101,9 @@ pub const Window = struct {
             std.log.err("Failed to load glad", .{});
             return WindowError.ContextLoadFailed;
         }
+        if (params.msaa_samples > 1) {
+            gl.glEnable(gl.GL_MULTISAMPLE);
+        }
 
         const win = allocator.create(Window) catch |err| {
             std.log.err("Failed to allocate Window: {}", .{err});
@@ -91,6 +116,11 @@ pub const Window = struct {
                 .width = width,
                 .height = height,
             },
+            .arrow_cursor = glfw.glfwCreateStandardCursor(glfw.GLFW_ARROW_CURSOR),
+            .hand_cursor = glfw.glfwCreateStandardCursor(glfw.GLFW_HAND_CURSOR),
+            .text_cursor = glfw.glfwCreateStandardCursor(glfw.GLFW_IBEAM_CURSOR),
+            .resize_x_cursor = glfw.glfwCreateStandardCursor(glfw.GLFW_HRESIZE_CURSOR),
+            .resize_y_cursor = glfw.glfwCreateStandardCursor(glfw.GLFW_VRESIZE_CURSOR),
         };
 
         var fb_width: c_int = undefined;
@@ -99,6 +129,48 @@ pub const Window = struct {
         gl.glViewport(0, 0, fb_width, fb_height);
 
         return win;
+    }
+
+    pub fn getWindowSize(self: *const Window) WindowSize {
+        var width: c_int = 0;
+        var height: c_int = 0;
+        glfw.glfwGetWindowSize(self.window, &width, &height);
+        return .{
+            .width = @intCast(@max(1, width)),
+            .height = @intCast(@max(1, height)),
+        };
+    }
+
+    pub fn getFramebufferSize(self: *const Window) WindowSize {
+        var width: c_int = 0;
+        var height: c_int = 0;
+        glfw.glfwGetFramebufferSize(self.window, &width, &height);
+        return .{
+            .width = @intCast(@max(1, width)),
+            .height = @intCast(@max(1, height)),
+        };
+    }
+
+    pub fn getContentScale(self: *const Window) struct { x: f32, y: f32 } {
+        var x_scale: f32 = 1;
+        var y_scale: f32 = 1;
+        glfw.glfwGetWindowContentScale(self.window, &x_scale, &y_scale);
+        return .{ .x = x_scale, .y = y_scale };
+    }
+
+    pub fn setCursor(self: *Window, cursor: CursorKind) void {
+        const handle = switch (cursor) {
+            .arrow => self.arrow_cursor,
+            .hand => self.hand_cursor,
+            .text => self.text_cursor,
+            .resize_x => self.resize_x_cursor,
+            .resize_y => self.resize_y_cursor,
+        };
+        glfw.glfwSetCursor(self.window, handle);
+    }
+
+    pub fn getProcAddress(name: [*:0]const u8) ?*const anyopaque {
+        return @ptrCast(glfw.glfwGetProcAddress(name));
     }
 
     pub fn setEventCallback(self: *Window, context: anytype, comptime callback: fn (@TypeOf(context), event.ZEvent) anyerror!void) void {
@@ -154,8 +226,13 @@ pub const Window = struct {
     }
 
     pub fn deinit(self: *Window, allocator: std.mem.Allocator) void {
-        glfw.glfwTerminate();
+        if (self.arrow_cursor) |cursor| glfw.glfwDestroyCursor(cursor);
+        if (self.hand_cursor) |cursor| glfw.glfwDestroyCursor(cursor);
+        if (self.text_cursor) |cursor| glfw.glfwDestroyCursor(cursor);
+        if (self.resize_x_cursor) |cursor| glfw.glfwDestroyCursor(cursor);
+        if (self.resize_y_cursor) |cursor| glfw.glfwDestroyCursor(cursor);
         glfw.glfwDestroyWindow(self.window);
+        glfw.glfwTerminate();
         allocator.destroy(self);
     }
 };
