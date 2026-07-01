@@ -17,24 +17,25 @@ pub const AssetKind = enum(u8) {
     mesh,
     material,
     texture,
-    shader_stage,
+    shader,
     shader_program,
 
-    fn fromCooked(kind: zimp.runtime.AssetKind) AssetKind {
+    fn fromCooked(kind: zimp.runtime.AssetType) ?AssetKind {
         return switch (kind) {
             .mesh => .mesh,
             .material => .material,
             .texture => .texture,
-            .shader_stage => .shader_stage,
+            .shader => .shader,
+            .unknown => null,
         };
     }
 
-    fn cooked(self: AssetKind) ?zimp.runtime.AssetKind {
+    fn cooked(self: AssetKind) ?zimp.runtime.AssetType {
         return switch (self) {
             .mesh => .mesh,
             .material => .material,
             .texture => .texture,
-            .shader_stage => .shader_stage,
+            .shader => .shader,
             .shader_program => null,
         };
     }
@@ -46,7 +47,7 @@ pub const AssetRef = struct {
 };
 
 pub fn inferKind(path: []const u8) ?AssetKind {
-    return AssetKind.fromCooked(zimp.runtime.inferKind(path) orelse return null);
+    return AssetKind.fromCooked(zimp.runtime.detectType(path) orelse return null);
 }
 
 pub const AssetState = enum {
@@ -63,7 +64,7 @@ pub const Asset = union(AssetKind) {
     mesh: *Mesh,
     material: *Material,
     texture: *Texture2D,
-    shader_stage: *zimp.ZShader,
+    shader: *zimp.ZShader,
     shader_program: *Shader,
 
     fn deinit(self: Asset, allocator: std.mem.Allocator, worker_allocator: std.mem.Allocator) void {
@@ -80,7 +81,7 @@ pub const Asset = union(AssetKind) {
                 texture.deinit();
                 allocator.destroy(texture);
             },
-            .shader_stage => |shader| {
+            .shader => |shader| {
                 shader.deinit(worker_allocator);
                 allocator.destroy(shader);
             },
@@ -305,7 +306,7 @@ const ReaderPool = struct {
         defer self.worker_allocator.free(bytes);
 
         var reader = std.Io.Reader.fixed(bytes);
-        return zimp.runtime.loadCooked(
+        return zimp.runtime.loadFromReader(
             self.worker_allocator,
             &reader,
             record.kind.cooked() orelse return AssetError.WrongAssetKind,
@@ -546,7 +547,7 @@ pub const AssetManager = struct {
                 .texture => |texture| texture,
                 else => null,
             },
-            .shader_stage => null,
+            .shader => null,
             .shader_program => switch (asset) {
                 .shader_program => |shader| shader,
                 else => null,
@@ -641,7 +642,7 @@ pub const AssetManager = struct {
             .mesh => .{ .loaded = .{ .mesh = try self.finalizeMesh(record) } },
             .material => try self.finalizeMaterial(record),
             .texture => .{ .loaded = .{ .texture = try self.finalizeTexture(record) } },
-            .shader_stage => .{ .loaded = .{ .shader_stage = try self.finalizeShaderStage(record) } },
+            .shader => .{ .loaded = .{ .shader = try self.finalizeShaderStage(record) } },
             .shader_program => AssetError.WrongAssetKind,
         };
     }
@@ -791,9 +792,9 @@ pub const AssetManager = struct {
         vertex_path: []const u8,
         fragment_path: []const u8,
     ) !?*Shader {
-        const normalized_vertex = try self.normalizeExpected(vertex_path, .shader_stage);
+        const normalized_vertex = try self.normalizeExpected(vertex_path, .shader);
         defer self.allocator.free(normalized_vertex);
-        const normalized_fragment = try self.normalizeExpected(fragment_path, .shader_stage);
+        const normalized_fragment = try self.normalizeExpected(fragment_path, .shader);
         defer self.allocator.free(normalized_fragment);
 
         const lookup_key = try makeShaderProgramKey(self.allocator, normalized_vertex, normalized_fragment);
@@ -811,16 +812,16 @@ pub const AssetManager = struct {
         }
         self.unlock();
 
-        const vertex_id = try self.requestKind(.shader_stage, normalized_vertex);
-        const fragment_id = try self.requestKind(.shader_stage, normalized_fragment);
-        const vertex_asset = try self.loadedAsset(vertex_id, .shader_stage) orelse return null;
-        const fragment_asset = try self.loadedAsset(fragment_id, .shader_stage) orelse return null;
+        const vertex_id = try self.requestKind(.shader, normalized_vertex);
+        const fragment_id = try self.requestKind(.shader, normalized_fragment);
+        const vertex_asset = try self.loadedAsset(vertex_id, .shader) orelse return null;
+        const fragment_asset = try self.loadedAsset(fragment_id, .shader) orelse return null;
         const vertex_stage = switch (vertex_asset) {
-            .shader_stage => |shader| shader,
+            .shader => |shader| shader,
             else => unreachable,
         };
         const fragment_stage = switch (fragment_asset) {
-            .shader_stage => |shader| shader,
+            .shader => |shader| shader,
             else => unreachable,
         };
 
@@ -1079,7 +1080,7 @@ test "inferKind maps supported cooked extensions" {
     try testing.expectEqual(AssetKind.mesh, inferKind("monkey.zmesh").?);
     try testing.expectEqual(AssetKind.material, inferKind("monkey.zamat").?);
     try testing.expectEqual(AssetKind.texture, inferKind("brick_albedo.ztex").?);
-    try testing.expectEqual(AssetKind.shader_stage, inferKind("basic.vert.zshdr").?);
+    try testing.expectEqual(AssetKind.shader, inferKind("basic.vert.zshdr").?);
 }
 
 test "inferKind requires lowercase cooked extensions" {
