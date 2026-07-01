@@ -1,11 +1,9 @@
 const std = @import("std");
 const zimp = @import("zimp");
 
-const asset_uuid = @import("uuid.zig");
 const source_mod = @import("source.zig");
 
-const AssetId = asset_uuid.AssetId;
-const AssetKind = asset_uuid.AssetKind;
+const AssetId = @import("../core/id/id_types.zig").AssetId;
 const AssetRoots = source_mod.AssetRoots;
 const AssetSource = source_mod.AssetSource;
 const AssetError = source_mod.AssetError;
@@ -15,6 +13,28 @@ const Material = @import("../graphics/material.zig").Material;
 const Shader = @import("../graphics/opengl/shader.zig").Shader;
 const Texture2D = @import("../graphics/opengl/texture.zig").Texture2D;
 const log = @import("../core/log.zig");
+
+pub const AssetKind = enum(u8) {
+    mesh,
+    material,
+    texture,
+    shader_stage,
+    shader_program,
+};
+
+pub const AssetRef = struct {
+    kind: AssetKind,
+    id: AssetId,
+};
+
+pub fn inferKind(path: []const u8) ?AssetKind {
+    return switch (zimp.runtime.detectType(path) orelse return null) {
+        .mesh => .mesh,
+        .material => .material,
+        .texture => .texture,
+        .shader => .shader_stage,
+    };
+}
 
 pub const AssetState = enum {
     queued,
@@ -811,8 +831,12 @@ pub const AssetManager = struct {
         self.lock();
         defer self.unlock();
         const record = self.assets.get(id) orelse return AssetError.AssetNotFound;
-        if (record.state == .failed) return record.failure orelse AssetError.LoadFailed;
-        if (record.state != .loaded) return null;
+        if (record.state == .failed) {
+            return record.failure orelse AssetError.LoadFailed;
+        }
+        if (record.state != .loaded) {
+            return null;
+        }
         const asset = record.asset orelse return AssetError.LoadFailed;
         return switch (asset) {
             .texture => |texture| texture,
@@ -824,8 +848,12 @@ pub const AssetManager = struct {
         self.lock();
         defer self.unlock();
         const record = self.assets.get(id) orelse return AssetError.AssetNotFound;
-        if (record.state == .failed) return record.failure orelse AssetError.LoadFailed;
-        if (record.state != .loaded) return null;
+        if (record.state == .failed) {
+            return record.failure orelse AssetError.LoadFailed;
+        }
+        if (record.state != .loaded) {
+            return null;
+        }
         const asset = record.asset orelse return AssetError.LoadFailed;
         return switch (asset) {
             .shader_stage => |shader| shader,
@@ -846,17 +874,23 @@ pub const AssetManager = struct {
     fn normalizeExpected(self: *AssetManager, raw_path: []const u8, expected: AssetKind) ![]u8 {
         const normalized = zimp.runtime.normalizeVirtualPath(self.allocator, raw_path) catch return AssetError.InvalidPath;
         errdefer self.allocator.free(normalized);
-        const actual = asset_uuid.inferKind(normalized) orelse return AssetError.UnsupportedAssetKind;
-        if (actual != expected) return AssetError.WrongAssetKind;
+        const actual = inferKind(normalized) orelse return AssetError.UnsupportedAssetKind;
+        if (actual != expected) {
+            return AssetError.WrongAssetKind;
+        }
         return normalized;
     }
 
     fn newAssetIdLocked(self: *AssetManager) !AssetId {
         while (true) {
             const random_source: std.Random.IoSource = .{ .io = self.io };
-            const id = asset_uuid.Uuid.v4(random_source.interface());
-            if (id.isZero()) continue;
-            if (!self.assets.contains(id)) return id;
+            const id = AssetId.v4(random_source.interface());
+            if (id.isZero()) {
+                continue;
+            }
+            if (!self.assets.contains(id)) {
+                return id;
+            }
         }
     }
 
@@ -965,6 +999,8 @@ const TestSource = struct {
     }
 };
 
+const testing = std.testing;
+
 test "register deduplicates normalized paths before worker load finishes" {
     if (@import("builtin").single_threaded) return error.SkipZigTest;
 
@@ -1025,4 +1061,15 @@ test "worker load failures are observable through wait and state" {
     try std.testing.expectError(AssetError.AssetNotFound, manager.wait(id));
     try std.testing.expectEqual(AssetState.failed, manager.state(id).?);
     try std.testing.expectEqual(@as(usize, 1), source.reads.load(.monotonic));
+}
+
+test "inferKind maps supported cooked extensions" {
+    try testing.expectEqual(AssetKind.mesh, inferKind("monkey.zmesh").?);
+    try testing.expectEqual(AssetKind.material, inferKind("monkey.zamat").?);
+    try testing.expectEqual(AssetKind.texture, inferKind("brick_albedo.ztex").?);
+    try testing.expectEqual(AssetKind.shader_stage, inferKind("basic.vert.zshdr").?);
+}
+
+test "inferKind requires lowercase cooked extensions" {
+    try testing.expect(inferKind("MONKEY.ZMESH") == null);
 }

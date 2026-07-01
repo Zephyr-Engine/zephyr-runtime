@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const uuid = @import("../assets/uuid.zig");
+const uuid = @import("../core/id/uuid.zig");
 const math = @import("../core/math.zig");
 
 const AssetId = uuid.AssetId;

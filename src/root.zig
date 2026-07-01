@@ -14,12 +14,12 @@ pub const Mesh = @import("graphics/mesh.zig").Mesh;
 
 pub const AssetManager = @import("assets/asset_manager.zig").AssetManager;
 pub const AssetState = @import("assets/asset_manager.zig").AssetState;
+pub const AssetKind = @import("assets/asset_manager.zig").AssetKind;
+pub const AssetRef = @import("assets/asset_manager.zig").AssetRef;
 pub const AssetRoots = @import("assets/source.zig").AssetRoots;
 pub const AssetError = @import("assets/source.zig").AssetError;
-pub const AssetKind = @import("assets/uuid.zig").AssetKind;
-pub const AssetRef = @import("assets/uuid.zig").AssetRef;
-pub const AssetId = @import("assets/uuid.zig").AssetId;
-pub const Uuid = @import("assets/uuid.zig").Uuid;
+pub const AssetId = @import("core/id/uuid.zig").AssetId;
+pub const Uuid = @import("core/id/uuid.zig").Uuid;
 
 const math = @import("core/math.zig");
 pub const Vec3 = math.Vec3;
@@ -59,7 +59,7 @@ test {
     _ = @import("core/event.zig");
     _ = @import("core/input.zig");
     _ = @import("scene/scene.zig");
-    _ = @import("assets/uuid.zig");
+    _ = @import("core/id/uuid.zig");
     _ = @import("scene/camera.zig");
     _ = @import("scene/manager.zig");
     _ = @import("assets/source.zig");
