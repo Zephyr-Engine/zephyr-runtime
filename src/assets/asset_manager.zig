@@ -18,31 +18,16 @@ const AssetKind = enum(u8) {
     material,
     texture,
     shader,
-    shader_program,
-
-    fn fromCooked(kind: zimp.runtime.AssetType) ?AssetKind {
-        return switch (kind) {
-            .mesh => .mesh,
-            .material => .material,
-            .texture => .texture,
-            .shader => .shader,
-            .unknown => null,
-        };
-    }
-
-    fn cooked(self: AssetKind) ?zimp.runtime.AssetType {
-        return switch (self) {
-            .mesh => .mesh,
-            .material => .material,
-            .texture => .texture,
-            .shader => .shader,
-            .shader_program => null,
-        };
-    }
 };
 
-fn inferKind(path: []const u8) ?AssetKind {
-    return AssetKind.fromCooked(zimp.runtime.detectType(path) orelse return null);
+fn detectKind(path: []const u8) ?AssetKind {
+    return switch (zimp.runtime.detectType(path) orelse return null) {
+        .mesh => .mesh,
+        .material => .material,
+        .texture => .texture,
+        .shader => .shader,
+        .unknown => null,
+    };
 }
 
 const AssetState = enum {
@@ -60,7 +45,6 @@ const Asset = union(AssetKind) {
     material: *Material,
     texture: *Texture2D,
     shader: *zimp.ZShader,
-    shader_program: *Shader,
 
     fn deinit(self: Asset, allocator: std.mem.Allocator, worker_allocator: std.mem.Allocator) void {
         switch (self) {
@@ -78,10 +62,6 @@ const Asset = union(AssetKind) {
             },
             .shader => |shader| {
                 shader.deinit(worker_allocator);
-                allocator.destroy(shader);
-            },
-            .shader_program => |shader| {
-                shader.deinit();
                 allocator.destroy(shader);
             },
         }
@@ -304,7 +284,7 @@ const ReaderPool = struct {
         return zimp.runtime.loadFromReader(
             self.worker_allocator,
             &reader,
-            record.kind.cooked() orelse return AssetError.WrongAssetKind,
+            zimp.runtime.detectType(normalized_path) orelse return AssetError.UnsupportedAssetKind,
         );
     }
 };
@@ -320,6 +300,7 @@ pub const AssetManager = struct {
 
     assets: std.AutoHashMap(AssetId, *AssetRecord),
     asset_keys: std.StringHashMap(AssetId),
+    shader_programs: std.StringHashMap(*Shader),
 
     pub const Options = struct {
         worker_count: ?usize = null,
@@ -377,6 +358,7 @@ pub const AssetManager = struct {
             .pool = pool,
             .assets = std.AutoHashMap(AssetId, *AssetRecord).init(managed_allocator),
             .asset_keys = std.StringHashMap(AssetId).init(managed_allocator),
+            .shader_programs = std.StringHashMap(*Shader).init(managed_allocator),
         };
     }
 
@@ -419,13 +401,20 @@ pub const AssetManager = struct {
         }
         self.asset_keys.deinit();
 
+        var shader_it = self.shader_programs.iterator();
+        while (shader_it.next()) |entry| {
+            self.allocator.free(entry.key_ptr.*);
+            entry.value_ptr.*.deinit();
+            self.allocator.destroy(entry.value_ptr.*);
+        }
+        self.shader_programs.deinit();
+
         self.source.deinit(self.allocator, self.io);
         self.backing_allocator.destroy(self.worker_allocator_state);
     }
 
     pub fn register(self: *AssetManager, comptime T: type, path: []const u8) !AssetId {
         const expected = comptime kindFor(T);
-        if (expected == .shader_program) return AssetError.WrongAssetKind;
         return self.requestKind(expected, path);
     }
 
@@ -530,10 +519,6 @@ pub const AssetManager = struct {
                 else => null,
             },
             .shader => null,
-            .shader_program => switch (asset) {
-                .shader_program => |shader| shader,
-                else => null,
-            },
         };
     }
 
@@ -596,7 +581,6 @@ pub const AssetManager = struct {
             .material => try self.finalizeMaterial(record),
             .texture => .{ .loaded = .{ .texture = try self.finalizeTexture(record) } },
             .shader => .{ .loaded = .{ .shader = try self.finalizeShaderStage(record) } },
-            .shader_program => AssetError.WrongAssetKind,
         };
     }
 
@@ -755,13 +739,9 @@ pub const AssetManager = struct {
         defer if (key_owned) self.allocator.free(lookup_key);
 
         self.lock();
-        if (self.asset_keys.get(lookup_key)) |id| {
+        if (self.shader_programs.get(lookup_key)) |shader| {
             self.unlock();
-            const asset = try self.loadedAsset(id, .shader_program) orelse return null;
-            return switch (asset) {
-                .shader_program => |shader| shader,
-                else => unreachable,
-            };
+            return shader;
         }
         self.unlock();
 
@@ -790,38 +770,14 @@ pub const AssetManager = struct {
         self.lock();
         defer self.unlock();
 
-        if (self.asset_keys.get(lookup_key)) |id| {
-            const record = self.assets.get(id) orelse return AssetError.LoadFailed;
-            const asset = record.asset orelse return AssetError.LoadFailed;
-            const cached = switch (asset) {
-                .shader_program => |cached| cached,
-                else => return AssetError.WrongAssetKind,
-            };
+        if (self.shader_programs.get(lookup_key)) |cached| {
             shader.deinit();
             self.allocator.destroy(shader);
             return cached;
         }
 
-        const id = try self.newAssetIdLocked();
-        const record = try self.allocator.create(AssetRecord);
-        record.* = .{
-            .id = id,
-            .kind = .shader_program,
-            .path = null,
-            .state = .loaded,
-            .asset = .{ .shader_program = shader },
-        };
-        var record_owned = true;
-        errdefer if (record_owned) {
-            record.deinit(self.allocator, self.worker_allocator);
-            self.allocator.destroy(record);
-        };
-
-        try self.assets.put(id, record);
-        errdefer _ = self.assets.remove(id);
-        try self.asset_keys.put(lookup_key, id);
+        try self.shader_programs.put(lookup_key, shader);
         key_owned = false;
-        record_owned = false;
 
         return shader;
     }
@@ -854,7 +810,7 @@ pub const AssetManager = struct {
     fn normalizeExpected(self: *AssetManager, raw_path: []const u8, expected: AssetKind) ![]u8 {
         const normalized = zimp.runtime.normalizeVirtualPath(self.allocator, raw_path) catch return AssetError.InvalidPath;
         errdefer self.allocator.free(normalized);
-        const actual = inferKind(normalized) orelse return AssetError.UnsupportedAssetKind;
+        const actual = detectKind(normalized) orelse return AssetError.UnsupportedAssetKind;
         if (actual != expected) {
             return AssetError.WrongAssetKind;
         }
@@ -922,7 +878,6 @@ fn kindFor(comptime T: type) AssetKind {
         Mesh => .mesh,
         Material => .material,
         Texture2D => .texture,
-        Shader => .shader_program,
         else => @compileError("unsupported asset type: " ++ @typeName(T)),
     };
 }
@@ -1026,13 +981,13 @@ test "worker load failures are observable through wait and state" {
     try std.testing.expectError(AssetError.AssetNotFound, manager.wait(id));
 }
 
-test "inferKind maps supported cooked extensions" {
-    try testing.expectEqual(AssetKind.mesh, inferKind("monkey.zmesh").?);
-    try testing.expectEqual(AssetKind.material, inferKind("monkey.zamat").?);
-    try testing.expectEqual(AssetKind.texture, inferKind("brick_albedo.ztex").?);
-    try testing.expectEqual(AssetKind.shader, inferKind("basic.vert.zshdr").?);
+test "detectKind maps supported cooked extensions" {
+    try testing.expectEqual(AssetKind.mesh, detectKind("monkey.zmesh").?);
+    try testing.expectEqual(AssetKind.material, detectKind("monkey.zamat").?);
+    try testing.expectEqual(AssetKind.texture, detectKind("brick_albedo.ztex").?);
+    try testing.expectEqual(AssetKind.shader, detectKind("basic.vert.zshdr").?);
 }
 
-test "inferKind requires lowercase cooked extensions" {
-    try testing.expect(inferKind("MONKEY.ZMESH") == null);
+test "detectKind requires lowercase cooked extensions" {
+    try testing.expect(detectKind("MONKEY.ZMESH") == null);
 }
