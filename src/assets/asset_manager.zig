@@ -266,15 +266,15 @@ const ReaderPool = struct {
         self.mutex.unlock(self.io);
     }
 
-    fn loadCookedAsset(self: *ReaderPool, record: *AssetRecord) !zimp.runtime.CookedAsset {
+    fn loadCookedAsset(self: *ReaderPool, record: *AssetRecord) !zimp.runtime.Asset {
         const normalized_path = record.path orelse return AssetError.AssetNotFound;
         const bytes = self.source.readAlloc(self.worker_allocator, self.io, normalized_path) catch |err| switch (err) {
             error.FileNotFound, error.NotDir, error.IsDir => return AssetError.AssetNotFound,
             error.OutOfMemory => return AssetError.OutOfMemory,
-            zimp.runtime.PathError.AbsolutePathNotAllowed,
-            zimp.runtime.PathError.ParentTraversalNotAllowed,
-            zimp.runtime.PathError.EmptyPath,
-            zimp.runtime.PathError.PathTooLong,
+            zimp.path.Error.AbsolutePathNotAllowed,
+            zimp.path.Error.ParentTraversalNotAllowed,
+            zimp.path.Error.EmptyPath,
+            zimp.path.Error.PathTooLong,
             => return AssetError.InvalidPath,
             else => return err,
         };
@@ -676,14 +676,14 @@ pub const AssetManager = struct {
         record_path: []const u8,
         material_source: *const zimp.Zamat,
     ) !?*Shader {
-        const vertex_path = try zimp.runtime.resolveRelativeVirtualPath(
+        const vertex_path = try zimp.path.resolveRelativeVirtual(
             self.allocator,
             record_path,
             material_source.vertex_shader_path,
         );
         defer self.allocator.free(vertex_path);
 
-        const fragment_path = try zimp.runtime.resolveRelativeVirtualPath(
+        const fragment_path = try zimp.path.resolveRelativeVirtual(
             self.allocator,
             record_path,
             material_source.fragment_shader_path,
@@ -702,7 +702,7 @@ pub const AssetManager = struct {
         for (material_source.texture_slots) |slot| {
             if (slot.cooked_path.len == 0) continue;
 
-            const texture_path = try zimp.runtime.resolveRelativeVirtualPath(
+            const texture_path = try zimp.path.resolveRelativeVirtual(
                 self.allocator,
                 record_path,
                 slot.cooked_path,
@@ -808,7 +808,7 @@ pub const AssetManager = struct {
     }
 
     fn normalizeExpected(self: *AssetManager, raw_path: []const u8, expected: AssetKind) ![]u8 {
-        const normalized = zimp.runtime.normalizeVirtualPath(self.allocator, raw_path) catch return AssetError.InvalidPath;
+        const normalized = zimp.path.normalizeVirtual(self.allocator, raw_path) catch return AssetError.InvalidPath;
         errdefer self.allocator.free(normalized);
         const actual = detectKind(normalized) orelse return AssetError.UnsupportedAssetKind;
         if (actual != expected) {
@@ -851,7 +851,7 @@ fn cookedMaterialSource(record: *AssetRecord) !*zimp.Zamat {
     };
 }
 
-fn takeCooked(record: *AssetRecord) !zimp.runtime.CookedAsset {
+fn takeCooked(record: *AssetRecord) !zimp.runtime.Asset {
     const cooked_asset = record.cooked orelse return AssetError.LoadFailed;
     record.cooked = null;
     return cooked_asset;
