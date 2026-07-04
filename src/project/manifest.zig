@@ -11,6 +11,7 @@ const DEFAULT_SCENES_DIR = ".zephyr/scenes";
 const DEFAULT_NAME = "Untitled Project";
 const DEFAULT_GENERATED_DIR = ".zephyr";
 const DEFAULT_FORMAT = "zephyr.proj";
+pub const default_manifest_path = DEFAULT_GENERATED_DIR ++ "/" ++ DEFAULT_FORMAT;
 
 pub const ProjectManifest = struct {
     format: []const u8 = DEFAULT_FORMAT,
@@ -30,6 +31,13 @@ pub const ProjectManifest = struct {
         const cwd = std.Io.Dir.cwd();
         const dir = try cwd.openDir(io, ".", .{});
         defer dir.close(io);
+
+        return loadFromDir(allocator, io, dir, normalized_path);
+    }
+
+    pub fn loadFromDir(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, file: []const u8) !ProjectManifest {
+        const normalized_path = try path.normalizeVirtual(allocator, file);
+        defer allocator.free(normalized_path);
 
         try path.validateVirtual(normalized_path);
         const bytes = try dir.readFileAlloc(io, normalized_path, allocator, .limited(4096));
