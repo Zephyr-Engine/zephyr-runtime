@@ -5,16 +5,17 @@ const path = @import("zimp").path;
 const ProjectId = @import("../core/id/id_types.zig").ProjectId;
 
 const MANIFEST_VERSION: u32 = 1;
-const DEFAULT_FORMAT = "zephyr.proj";
-const DEFAULT_ASSETS_DIR = "assets";
-const DEFAULT_SCENES_DIR = "scenes";
-const DEFAULT_GENERATED_DIR = ".zephyr";
 const DEFAULT_COOKED_ASSETS_DIR = ".zephyr/cooked";
+const DEFAULT_ASSETS_DIR = ".zephyr/assets";
+const DEFAULT_SCENES_DIR = ".zephyr/scenes";
+const DEFAULT_NAME = "Untitled Project";
+const DEFAULT_GENERATED_DIR = ".zephyr";
+const DEFAULT_FORMAT = "zephyr.proj";
 
 pub const ProjectManifest = struct {
     format: []const u8 = DEFAULT_FORMAT,
     version: u32 = MANIFEST_VERSION,
-    name: []const u8,
+    name: []const u8 = DEFAULT_NAME,
     project_id: ProjectId,
     assets_dir: []const u8 = DEFAULT_ASSETS_DIR,
     scenes_dir: []const u8 = DEFAULT_SCENES_DIR,
@@ -40,6 +41,7 @@ pub const ProjectManifest = struct {
     }
 
     pub fn deinit(self: ProjectManifest, allocator: std.mem.Allocator) void {
+        freeIfNotDefault(allocator, self.name, DEFAULT_NAME);
         freeIfNotDefault(allocator, self.format, DEFAULT_FORMAT);
         freeIfNotDefault(allocator, self.assets_dir, DEFAULT_ASSETS_DIR);
         freeIfNotDefault(allocator, self.scenes_dir, DEFAULT_SCENES_DIR);
@@ -48,6 +50,14 @@ pub const ProjectManifest = struct {
         if (self.default_scene) |default_scene| {
             allocator.free(default_scene);
         }
+    }
+
+    pub fn assetsPath(self: *const ProjectManifest) []const u8 {
+        return self.assets_dir;
+    }
+
+    pub fn cookedAssetsPath(self: *const ProjectManifest) []const u8 {
+        return self.cooked_assets_dir;
     }
 
     pub fn save(self: *const ProjectManifest, allocator: std.mem.Allocator, io: std.Io, root_dir: std.Io.Dir) !void {
@@ -93,6 +103,8 @@ test "ProjectManifest.save writes generated manifest file" {
     const parsed = try std.json.parseFromSlice(ProjectManifest, testing.allocator, bytes, .{});
     defer parsed.deinit();
     try testing.expectEqualStrings(".zephyr", parsed.value.generated_dir);
+    try testing.expectEqualStrings(".zephyr/assets", parsed.value.assets_dir);
+    try testing.expectEqualStrings(".zephyr/cooked", parsed.value.cooked_assets_dir);
     try testing.expectEqualStrings("zephyr.proj", parsed.value.format);
     try testing.expect(parsed.value.project_id.eql(ProjectId.zero));
 }
@@ -100,6 +112,7 @@ test "ProjectManifest.save writes generated manifest file" {
 test "ProjectManifest parses project_id from canonical UUID text" {
     const bytes =
         \\{
+        \\  "name": "Test Project",
         \\  "project_id": "00000000-0000-0000-0000-000000000000"
         \\}
     ;
@@ -121,6 +134,7 @@ test "ProjectManifest.deinit frees strings allocated during leaky parsing" {
     const bytes =
         \\{
         \\  "format": "custom.proj",
+        \\  "name": "Test Project",
         \\  "project_id": "00000000-0000-0000-0000-000000000000",
         \\  "assets_dir": "game-assets",
         \\  "scenes_dir": "game-scenes",
@@ -137,4 +151,16 @@ test "ProjectManifest.deinit frees strings allocated during leaky parsing" {
 
     try testing.expectEqualStrings("custom.proj", manifest.format);
     try testing.expectEqualStrings("game-scenes/main.scene", manifest.default_scene.?);
+}
+
+test "ProjectManifest path helpers expose configured asset roots" {
+    const manifest: ProjectManifest = .{
+        .name = "Test Project",
+        .project_id = ProjectId.zero,
+        .assets_dir = "game-assets",
+        .cooked_assets_dir = ".cache/cooked",
+    };
+
+    try testing.expectEqualStrings("game-assets", manifest.assetsPath());
+    try testing.expectEqualStrings(".cache/cooked", manifest.cookedAssetsPath());
 }

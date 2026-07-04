@@ -18,29 +18,29 @@ pub fn create(allocator: std.mem.Allocator, io: std.Io, opts: CreateProjectOptio
         .name = opts.name,
     };
 
-    const generated_dir = root_dir.createDirPathOpen(io, manifest.generated_dir, .{}) catch |err| {
+    root_dir.createDirPath(io, manifest.generated_dir) catch |err| {
         log.err("Failed to create root manifest directory: {}", .{err});
-        return;
+        return err;
     };
 
-    generated_dir.createDir(io, manifest.assets_dir, .default_dir) catch |err| {
+    root_dir.createDirPath(io, manifest.assets_dir) catch |err| {
         log.err("Failed to create assets directory: {}", .{err});
-        return;
+        return err;
     };
 
-    generated_dir.createDir(io, manifest.scenes_dir, .default_dir) catch |err| {
+    root_dir.createDirPath(io, manifest.scenes_dir) catch |err| {
         log.err("Failed to create scenes directory: {}", .{err});
-        return;
+        return err;
     };
 
-    generated_dir.createDir(io, manifest.cooked_assets_dir, .default_dir) catch |err| {
+    root_dir.createDirPath(io, manifest.cooked_assets_dir) catch |err| {
         log.err("Failed to create cooked assets directory: {}", .{err});
-        return;
+        return err;
     };
 
-    manifest.save(allocator, io, generated_dir) catch |err| {
+    manifest.save(allocator, io, root_dir) catch |err| {
         log.err("Failed to save manifest: {}", .{err});
-        return;
+        return err;
     };
 
     return manifest;
