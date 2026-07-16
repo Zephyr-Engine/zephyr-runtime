@@ -13,7 +13,6 @@ pub const ZEvent = @import("core/event.zig").ZEvent;
 pub const Mesh = @import("graphics/mesh.zig").Mesh;
 
 pub const AssetManager = @import("assets/asset_manager.zig").AssetManager;
-pub const AssetRoots = @import("assets/source.zig").AssetRoots;
 pub const AssetError = @import("assets/source.zig").AssetError;
 pub const AssetId = @import("core/id/id_types.zig").AssetId;
 pub const Uuid = @import("core/id/uuid.zig").Uuid;
@@ -27,6 +26,10 @@ pub const Mat2 = math.Mat2;
 pub const Quat = math.Quat;
 
 const camera = @import("scene/camera.zig");
+
+pub const ProjectManifest = @import("project/manifest.zig").ProjectManifest;
+pub const Project = @import("project/manifest.zig").Project;
+pub const openProject = @import("project/open.zig").open;
 
 pub const Renderer = @import("graphics/renderer.zig").Renderer;
 pub const DebugStats = @import("graphics/debug_stats.zig").DebugStats;
@@ -68,4 +71,5 @@ test {
     _ = @import("graphics/opengl/diagnostics.zig");
     _ = @import("graphics/debug_stats.zig");
     _ = @import("graphics/layout.zig");
+    _ = @import("project/manifest.zig");
 }

@@ -45,6 +45,30 @@ pub const Uuid = struct {
         return out;
     }
 
+    pub fn jsonParse(allocator: std.mem.Allocator, source: anytype, options: std.json.ParseOptions) !Uuid {
+        const token = try source.nextAllocMax(allocator, .alloc_if_needed, options.max_value_len.?);
+        return switch (token) {
+            .string => |text| parse(text) catch error.UnexpectedToken,
+            .allocated_string => |text| {
+                defer allocator.free(text);
+                return parse(text) catch error.UnexpectedToken;
+            },
+            else => error.UnexpectedToken,
+        };
+    }
+
+    pub fn jsonParseFromValue(_: std.mem.Allocator, source: std.json.Value, _: std.json.ParseOptions) !Uuid {
+        return switch (source) {
+            .string => |text| parse(text) catch error.UnexpectedToken,
+            else => error.UnexpectedToken,
+        };
+    }
+
+    pub fn jsonStringify(self: Uuid, writer: anytype) !void {
+        const text = self.toString();
+        try writer.write(text[0..]);
+    }
+
     pub fn parse(text: []const u8) ParseError!Uuid {
         if (text.len != 36) {
             return ParseError.InvalidUuid;
@@ -117,4 +141,25 @@ test "Uuid equality and zero detection use all bytes" {
     try testing.expect(zero.isZero());
     try testing.expect(!zero.eql(non_zero));
     try testing.expect(!non_zero.isZero());
+}
+
+test "Uuid JSON round-trips as canonical text" {
+    const id = Uuid.fromBytes(.{
+        0x12, 0x34, 0x56, 0x78,
+        0x9a, 0xbc, 0x4d, 0xef,
+        0x80, 0x12, 0x34, 0x56,
+        0x78, 0x9a, 0xbc, 0xde,
+    });
+
+    const bytes = try std.json.Stringify.valueAlloc(testing.allocator, id, .{});
+    defer testing.allocator.free(bytes);
+    try testing.expectEqualStrings("\"12345678-9abc-4def-8012-3456789abcde\"", bytes);
+
+    const parsed = try std.json.parseFromSlice(Uuid, testing.allocator, bytes, .{});
+    defer parsed.deinit();
+    try testing.expect(parsed.value.eql(id));
+}
+
+test "Uuid JSON parsing rejects non-string values" {
+    try testing.expectError(error.UnexpectedToken, std.json.parseFromSliceLeaky(Uuid, testing.allocator, "{\"bytes\":[]}", .{}));
 }
