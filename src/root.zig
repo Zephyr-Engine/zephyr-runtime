@@ -29,7 +29,7 @@ const camera = @import("scene/camera.zig");
 
 pub const ProjectManifest = @import("project/manifest.zig").ProjectManifest;
 pub const Project = @import("project/manifest.zig").Project;
-pub const createProject = @import("project/create.zig").create;
+pub const openProject = @import("project/open.zig").open;
 
 pub const Renderer = @import("graphics/renderer.zig").Renderer;
 pub const DebugStats = @import("graphics/debug_stats.zig").DebugStats;
