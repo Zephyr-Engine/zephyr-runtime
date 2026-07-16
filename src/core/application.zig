@@ -1,10 +1,9 @@
 const std = @import("std");
 
 const Framebuffer = @import("../graphics/opengl/framebuffer.zig").Framebuffer;
-const ProjectManifest = @import("../project/manifest.zig").ProjectManifest;
+const Project = @import("../project/manifest.zig").Project;
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
 const RenderViewport = @import("runtime_context.zig").RenderViewport;
-const AssetRoots = @import("../assets/source.zig").AssetRoots;
 const debug_stats = @import("../graphics/debug_stats.zig");
 const runtime_context = @import("runtime_context.zig");
 const scene_manager = @import("../scene/manager.zig");
@@ -54,7 +53,7 @@ pub fn Application(comptime Game: type) type {
             allocator: std.mem.Allocator,
             io: std.Io,
             params: WindowParams,
-            manifest: ProjectManifest,
+            project: *const Project,
         ) !*@This() {
             const window = Window.init(allocator, params) catch |err| {
                 log.err("failed to initialize window: {}", .{err});
@@ -62,13 +61,10 @@ pub fn Application(comptime Game: type) type {
             };
             errdefer window.deinit(allocator);
 
-            var assets = try AssetManager.initFiles(
+            var assets = try AssetManager.init(
                 allocator,
                 io,
-                .{
-                    .cooked_root = manifest.cookedAssetsPath(),
-                    .source_root = manifest.assetsPath(),
-                },
+                project,
             );
             errdefer assets.deinit();
 

@@ -10,13 +10,7 @@ pub const AssetError = error{
     OutOfMemory,
 };
 
-pub const AssetRoots = struct {
-    cooked_root: []const u8,
-    source_root: ?[]const u8 = null,
-};
-
 pub const CookedStore = zimp.runtime.CookedStore;
-pub const FileSource = CookedStore;
 
 const testing = std.testing;
 

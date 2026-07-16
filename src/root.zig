@@ -13,7 +13,6 @@ pub const ZEvent = @import("core/event.zig").ZEvent;
 pub const Mesh = @import("graphics/mesh.zig").Mesh;
 
 pub const AssetManager = @import("assets/asset_manager.zig").AssetManager;
-pub const AssetRoots = @import("assets/source.zig").AssetRoots;
 pub const AssetError = @import("assets/source.zig").AssetError;
 pub const AssetId = @import("core/id/id_types.zig").AssetId;
 pub const Uuid = @import("core/id/uuid.zig").Uuid;
@@ -29,6 +28,7 @@ pub const Quat = math.Quat;
 const camera = @import("scene/camera.zig");
 
 pub const ProjectManifest = @import("project/manifest.zig").ProjectManifest;
+pub const Project = @import("project/manifest.zig").Project;
 pub const createProject = @import("project/create.zig").create;
 
 pub const Renderer = @import("graphics/renderer.zig").Renderer;

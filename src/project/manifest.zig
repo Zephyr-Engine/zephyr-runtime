@@ -86,6 +86,16 @@ pub const ProjectManifest = struct {
     }
 };
 
+pub const Project = struct {
+    manifest: ProjectManifest,
+    root_dir: std.Io.Dir,
+
+    pub fn deinit(self: *Project, allocator: std.mem.Allocator, io: std.Io) void {
+        self.manifest.deinit(allocator);
+        self.root_dir.close(io);
+    }
+};
+
 fn freeIfNotDefault(allocator: std.mem.Allocator, value: []const u8, default_value: []const u8) void {
     if (value.ptr != default_value.ptr) {
         allocator.free(value);

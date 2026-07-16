@@ -4,9 +4,9 @@ const zimp = @import("zimp");
 const source_mod = @import("source.zig");
 
 const AssetId = @import("../core/id/id_types.zig").AssetId;
-const AssetRoots = source_mod.AssetRoots;
 const AssetError = source_mod.AssetError;
 const CookedStore = source_mod.CookedStore;
+const Project = @import("../project/manifest.zig").Project;
 const Mesh = @import("../graphics/mesh.zig").Mesh;
 const Material = @import("../graphics/material.zig").Material;
 const Shader = @import("../graphics/opengl/shader.zig").Shader;
@@ -302,30 +302,24 @@ pub const AssetManager = struct {
     asset_keys: std.StringHashMap(AssetId),
     shader_programs: std.StringHashMap(*Shader),
 
-    pub const Options = struct {
-        worker_count: ?usize = null,
-    };
-
     pub fn init(
         allocator: std.mem.Allocator,
         io: std.Io,
-        source: CookedStore,
+        project: *const Project,
     ) !AssetManager {
-        return initWithOptions(allocator, io, source, .{});
-    }
+        const cooked_root = try zimp.path.normalizeVirtual(allocator, project.manifest.cookedAssetsPath());
+        defer allocator.free(cooked_root);
 
-    pub fn initWithOptions(
-        allocator: std.mem.Allocator,
-        io: std.Io,
-        source: CookedStore,
-        options: Options,
-    ) !AssetManager {
+        const cooked_dir = try std.Io.Dir.openDir(project.root_dir, io, cooked_root, .{});
+        errdefer cooked_dir.close(io);
+
+        const source = try CookedStore.initFromDir(
+            allocator,
+            cooked_root,
+            cooked_dir,
+        );
         var owned_source = source;
-        const worker_count = options.worker_count orelse defaultWorkerCount();
-        if (worker_count == 0) {
-            owned_source.deinit(allocator, io);
-            return AssetError.LoadFailed;
-        }
+        const worker_count = defaultWorkerCount();
         errdefer owned_source.deinit(allocator, io);
 
         const worker_allocator_state = try allocator.create(SynchronizedAllocator);
@@ -360,28 +354,6 @@ pub const AssetManager = struct {
             .asset_keys = std.StringHashMap(AssetId).init(managed_allocator),
             .shader_programs = std.StringHashMap(*Shader).init(managed_allocator),
         };
-    }
-
-    pub fn initFiles(
-        allocator: std.mem.Allocator,
-        io: std.Io,
-        roots: AssetRoots,
-    ) !AssetManager {
-        return initFilesWithOptions(allocator, io, roots, .{});
-    }
-
-    pub fn initFilesWithOptions(
-        allocator: std.mem.Allocator,
-        io: std.Io,
-        roots: AssetRoots,
-        options: Options,
-    ) !AssetManager {
-        const source = try CookedStore.init(
-            allocator,
-            io,
-            roots.cooked_root,
-        );
-        return initWithOptions(allocator, io, source, options);
     }
 
     pub fn deinit(self: *AssetManager) void {
@@ -904,18 +876,46 @@ test "makeShaderProgramKey includes both stage paths" {
 
 const testing = std.testing;
 
-fn testCookedStore(tmp: *std.testing.TmpDir) !CookedStore {
-    const dir = try std.Io.Dir.openDir(tmp.dir, testing.io, ".", .{});
-    return CookedStore.initFromDir(testing.allocator, ".", dir);
+fn testProject(tmp: *std.testing.TmpDir) !Project {
+    try tmp.dir.createDirPath(testing.io, ".zephyr/cooked");
+    return .{
+        .manifest = .{ .project_id = .zero },
+        .root_dir = try std.Io.Dir.openDir(tmp.dir, testing.io, ".", .{}),
+    };
 }
 
 fn writeTestAsset(tmp: *std.testing.TmpDir, path: []const u8, bytes: []const u8) !void {
-    const file = try tmp.dir.createFile(testing.io, path, .{});
+    try tmp.dir.createDirPath(testing.io, ".zephyr/cooked");
+    const cooked_path = try std.fmt.allocPrint(testing.allocator, ".zephyr/cooked/{s}", .{path});
+    defer testing.allocator.free(cooked_path);
+
+    const file = try tmp.dir.createFile(testing.io, cooked_path, .{});
     var buf: [64]u8 = undefined;
     var writer = file.writer(testing.io, &buf);
     try writer.interface.writeAll(bytes);
     try writer.interface.flush();
     file.close(testing.io);
+}
+
+test "init opens cooked assets from project root" {
+    if (@import("builtin").single_threaded) return error.SkipZigTest;
+
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try tmp.dir.createDirPath(testing.io, ".zephyr/cooked");
+
+    var project = try testProject(&tmp);
+    defer project.deinit(testing.allocator, testing.io);
+
+    var manager = try AssetManager.init(
+        testing.allocator,
+        testing.io,
+        &project,
+    );
+    defer manager.deinit();
+
+    try testing.expectEqualStrings(".zephyr/cooked", manager.source.root);
 }
 
 test "register deduplicates normalized paths before worker load finishes" {
@@ -925,12 +925,13 @@ test "register deduplicates normalized paths before worker load finishes" {
     defer tmp.cleanup();
     try writeTestAsset(&tmp, "asset.zmesh", "not a cooked mesh");
 
-    const source = try testCookedStore(&tmp);
-    var manager = try AssetManager.initWithOptions(
+    var project = try testProject(&tmp);
+    defer project.deinit(testing.allocator, testing.io);
+
+    var manager = try AssetManager.init(
         std.testing.allocator,
         std.testing.io,
-        source,
-        .{ .worker_count = 1 },
+        &project,
     );
     defer manager.deinit();
 
@@ -948,12 +949,13 @@ test "register rejects invalid and mismatched asset paths before queuing work" {
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
 
-    const source = try testCookedStore(&tmp);
-    var manager = try AssetManager.initWithOptions(
+    var project = try testProject(&tmp);
+    defer project.deinit(testing.allocator, testing.io);
+
+    var manager = try AssetManager.init(
         std.testing.allocator,
         std.testing.io,
-        source,
-        .{ .worker_count = 1 },
+        &project,
     );
     defer manager.deinit();
 
@@ -968,12 +970,13 @@ test "worker load failures are observable through wait and state" {
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
 
-    const source = try testCookedStore(&tmp);
-    var manager = try AssetManager.initWithOptions(
+    var project = try testProject(&tmp);
+    defer project.deinit(testing.allocator, testing.io);
+
+    var manager = try AssetManager.init(
         std.testing.allocator,
         std.testing.io,
-        source,
-        .{ .worker_count = 1 },
+        &project,
     );
     defer manager.deinit();
 
