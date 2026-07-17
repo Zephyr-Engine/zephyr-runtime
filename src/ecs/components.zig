@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const id_types = @import("../core/id/id_types.zig");
+const id_types = @import("zimp").id.types;
 const math = @import("../core/math.zig");
 
 const AssetId = id_types.AssetId;

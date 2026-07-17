@@ -17,12 +17,12 @@
             .hash = "zlm-0.1.0-LoZ6yDawAADMopilIe9MDzer0UqmruCy_PuhNv4OMc7c",
         },
         .zimp = .{
-            .url = "git+https://github.com/Zephyr-Engine/zimp.git#c985afa5ee41c525202b1842e983891efb85cf82",
-            .hash = "zimp-0.0.0-jO8AWp4aDwDnpkJrR_oFAxgy79EZb2ERTVIHg0910GT9",
+            .url = "git+https://github.com/Zephyr-Engine/zimp.git#c83572037bd5349c2108585dee2b860fd727895b",
+            .hash = "zimp-0.0.0-jO8AWkuSEAD_XRV7z7S1xdIWtS_BpRZckUBThXhRNfdn",
         },
         .zcs = .{
-            .url = "git+https://github.com/Zephyr-Engine/zcs.git#f0a6ed9a16a5b0f3939302cd4d4a22340bf6fb5d",
-            .hash = "zcs-0.0.0-ypv9m14TAgD0uJ4613Y_vnJXUiSdggqWI4lFXtHeW4n0",
+            .url = "git+https://github.com/Zephyr-Engine/zcs.git#88ffa0b46cd4f88b72044591d8d36b570a9995ce",
+            .hash = "zcs-0.0.0-ypv9m5sgAgAFUCWCLflK-iHR9e68_93BLuPI87jgLIar",
         },
     },
     .paths = .{

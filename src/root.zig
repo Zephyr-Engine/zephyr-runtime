@@ -14,8 +14,13 @@ pub const Mesh = @import("graphics/mesh.zig").Mesh;
 
 pub const AssetManager = @import("assets/asset_manager.zig").AssetManager;
 pub const AssetError = @import("assets/source.zig").AssetError;
-pub const AssetId = @import("core/id/id_types.zig").AssetId;
-pub const Uuid = @import("core/id/uuid.zig").Uuid;
+pub const Uuid = zimp.Uuid;
+pub const ProjectId = zimp.ProjectId;
+pub const AssetId = zimp.AssetId;
+pub const SceneId = zimp.SceneId;
+pub const SceneEntityId = zimp.SceneEntityId;
+pub const ComponentTypeId = zimp.ComponentTypeId;
+pub const SchemaId = zimp.SchemaId;
 
 const math = @import("core/math.zig");
 pub const Vec3 = math.Vec3;
@@ -27,9 +32,11 @@ pub const Quat = math.Quat;
 
 const camera = @import("scene/camera.zig");
 
-pub const ProjectManifest = @import("project/manifest.zig").ProjectManifest;
-pub const Project = @import("project/manifest.zig").Project;
+pub const ProjectManifest = zimp.ProjectManifest;
+pub const Project = @import("project/project.zig").Project;
 pub const openProject = @import("project/open.zig").open;
+
+pub const SceneEntityMap = @import("scene/entity_map.zig").SceneEntityMap;
 
 pub const Renderer = @import("graphics/renderer.zig").Renderer;
 pub const DebugStats = @import("graphics/debug_stats.zig").DebugStats;
@@ -59,10 +66,11 @@ test {
     _ = @import("core/event.zig");
     _ = @import("core/input.zig");
     _ = @import("scene/scene.zig");
-    _ = @import("core/id/uuid.zig");
+    _ = @import("scene/entity_map.zig");
     _ = @import("scene/camera.zig");
     _ = @import("scene/manager.zig");
     _ = @import("assets/source.zig");
+    _ = @import("assets/manifest.zig");
     _ = @import("ecs/components.zig");
     _ = @import("assets/asset_manager.zig");
     _ = @import("core/runtime_context.zig");
@@ -71,5 +79,6 @@ test {
     _ = @import("graphics/opengl/diagnostics.zig");
     _ = @import("graphics/debug_stats.zig");
     _ = @import("graphics/layout.zig");
-    _ = @import("project/manifest.zig");
+    _ = @import("project/project.zig");
+    _ = @import("project/open.zig");
 }
