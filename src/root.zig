@@ -36,8 +36,6 @@ pub const ProjectManifest = zimp.ProjectManifest;
 pub const Project = @import("project/project.zig").Project;
 pub const openProject = @import("project/open.zig").open;
 
-pub const SceneEntityMap = @import("scene/entity_map.zig").SceneEntityMap;
-
 pub const Renderer = @import("graphics/renderer.zig").Renderer;
 pub const DebugStats = @import("graphics/debug_stats.zig").DebugStats;
 pub const setActiveCamera = camera.setActive;
