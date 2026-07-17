@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const Framebuffer = @import("../graphics/opengl/framebuffer.zig").Framebuffer;
-const Project = @import("../project/manifest.zig").Project;
+const Project = @import("../project/project.zig").Project;
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
 const RenderViewport = @import("runtime_context.zig").RenderViewport;
 const debug_stats = @import("../graphics/debug_stats.zig");

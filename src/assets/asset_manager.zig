@@ -3,31 +3,21 @@ const zimp = @import("zimp");
 
 const source_mod = @import("source.zig");
 
-const AssetId = @import("../core/id/id_types.zig").AssetId;
+const AssetId = @import("zimp").AssetId;
 const AssetError = source_mod.AssetError;
 const CookedStore = source_mod.CookedStore;
-const Project = @import("../project/manifest.zig").Project;
+const RuntimeAssetManifest = @import("manifest.zig").RuntimeAssetManifest;
+const Project = @import("../project/project.zig").Project;
 const Mesh = @import("../graphics/mesh.zig").Mesh;
 const Material = @import("../graphics/material.zig").Material;
 const Shader = @import("../graphics/opengl/shader.zig").Shader;
 const Texture2D = @import("../graphics/opengl/texture.zig").Texture2D;
 const log = @import("../core/log.zig");
 
-const AssetKind = enum(u8) {
-    mesh,
-    material,
-    texture,
-    shader,
-};
+const AssetKind = zimp.AssetKind;
 
 fn detectKind(path: []const u8) ?AssetKind {
-    return switch (zimp.runtime.detectType(path) orelse return null) {
-        .mesh => .mesh,
-        .material => .material,
-        .texture => .texture,
-        .shader => .shader,
-        .unknown => null,
-    };
+    return AssetKind.fromAssetType(zimp.runtime.detectType(path) orelse return null);
 }
 
 const AssetState = enum {
@@ -42,9 +32,9 @@ const AssetState = enum {
 
 const Asset = union(AssetKind) {
     mesh: *Mesh,
-    material: *Material,
     texture: *Texture2D,
-    shader: *zimp.ZShader,
+    shader_stage: *zimp.ZShader,
+    material: *Material,
 
     fn deinit(self: Asset, allocator: std.mem.Allocator, worker_allocator: std.mem.Allocator) void {
         switch (self) {
@@ -60,7 +50,7 @@ const Asset = union(AssetKind) {
                 texture.deinit();
                 allocator.destroy(texture);
             },
-            .shader => |shader| {
+            .shader_stage => |shader| {
                 shader.deinit(worker_allocator);
                 allocator.destroy(shader);
             },
@@ -301,6 +291,10 @@ pub const AssetManager = struct {
     assets: std.AutoHashMap(AssetId, *AssetRecord),
     asset_keys: std.StringHashMap(AssetId),
     shader_programs: std.StringHashMap(*Shader),
+    /// Durable id <-> cooked path mapping from `assets.zmanifest`. The
+    /// manifest is required: every asset id the runtime hands out is the
+    /// durable id the cook assigned.
+    manifest: RuntimeAssetManifest,
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -312,6 +306,17 @@ pub const AssetManager = struct {
 
         const cooked_dir = try std.Io.Dir.openDir(project.root_dir, io, cooked_root, .{});
         errdefer cooked_dir.close(io);
+
+        var manifest = RuntimeAssetManifest.loadFromDir(
+            allocator,
+            io,
+            project.root_dir,
+            project.manifest.assetManifestPath(),
+        ) catch |err| {
+            log.err("failed to load asset manifest '{s}': {s}. Cook the project (zimp cook --project) first", .{ project.manifest.assetManifestPath(), @errorName(err) });
+            return err;
+        };
+        errdefer manifest.deinit();
 
         const source = try CookedStore.initFromDir(
             allocator,
@@ -353,6 +358,7 @@ pub const AssetManager = struct {
             .assets = std.AutoHashMap(AssetId, *AssetRecord).init(managed_allocator),
             .asset_keys = std.StringHashMap(AssetId).init(managed_allocator),
             .shader_programs = std.StringHashMap(*Shader).init(managed_allocator),
+            .manifest = manifest,
         };
     }
 
@@ -382,12 +388,29 @@ pub const AssetManager = struct {
         self.shader_programs.deinit();
 
         self.source.deinit(self.allocator, self.io);
+        self.manifest.deinit();
         self.backing_allocator.destroy(self.worker_allocator_state);
     }
 
     pub fn register(self: *AssetManager, comptime T: type, path: []const u8) !AssetId {
         const expected = comptime kindFor(T);
         return self.requestKind(expected, path);
+    }
+
+    /// Register an asset by its durable id from `assets.zmanifest`. This is
+    /// the data-driven path scene instantiation uses: scene files store
+    /// AssetIds, never paths.
+    pub fn registerId(self: *AssetManager, comptime T: type, id: AssetId) !AssetId {
+        const expected = comptime kindFor(T);
+        return self.requestKindById(expected, id);
+    }
+
+    fn requestKindById(self: *AssetManager, expected: AssetKind, id: AssetId) !AssetId {
+        const entry = self.manifest.byId(id) orelse return AssetError.AssetNotFound;
+        if (entry.kind != expected) return AssetError.WrongAssetKind;
+        // Delegates to path registration: the path resolves back to this
+        // same durable id and dedupes on the path key.
+        return self.requestKind(expected, entry.cooked_path);
     }
 
     pub fn wait(self: *AssetManager, id: AssetId) !void {
@@ -490,7 +513,7 @@ pub const AssetManager = struct {
                 .texture => |texture| texture,
                 else => null,
             },
-            .shader => null,
+            .shader_stage => null,
         };
     }
 
@@ -514,7 +537,7 @@ pub const AssetManager = struct {
             return cached;
         }
 
-        const id = try self.newAssetIdLocked();
+        const id = try self.resolveIdLocked(expected, normalized_path);
         const record = try self.allocator.create(AssetRecord);
         record.* = .{
             .id = id,
@@ -552,7 +575,7 @@ pub const AssetManager = struct {
             .mesh => .{ .loaded = .{ .mesh = try self.finalizeMesh(record) } },
             .material => try self.finalizeMaterial(record),
             .texture => .{ .loaded = .{ .texture = try self.finalizeTexture(record) } },
-            .shader => .{ .loaded = .{ .shader = try self.finalizeShaderStage(record) } },
+            .shader_stage => .{ .loaded = .{ .shader_stage = try self.finalizeShaderStage(record) } },
         };
     }
 
@@ -594,6 +617,8 @@ pub const AssetManager = struct {
         var cooked_asset = try takeCooked(record);
         errdefer cooked_asset.deinit(self.worker_allocator);
 
+        // `cooked_asset` is zimp.runtime.Asset (the cooked-file union), whose
+        // shader variant is named `.shader`.
         const shader = switch (cooked_asset) {
             .shader => |stage| stage,
             else => return AssetError.WrongAssetKind,
@@ -701,9 +726,9 @@ pub const AssetManager = struct {
         vertex_path: []const u8,
         fragment_path: []const u8,
     ) !?*Shader {
-        const normalized_vertex = try self.normalizeExpected(vertex_path, .shader);
+        const normalized_vertex = try self.normalizeExpected(vertex_path, .shader_stage);
         defer self.allocator.free(normalized_vertex);
-        const normalized_fragment = try self.normalizeExpected(fragment_path, .shader);
+        const normalized_fragment = try self.normalizeExpected(fragment_path, .shader_stage);
         defer self.allocator.free(normalized_fragment);
 
         const lookup_key = try makeShaderProgramKey(self.allocator, normalized_vertex, normalized_fragment);
@@ -717,16 +742,16 @@ pub const AssetManager = struct {
         }
         self.unlock();
 
-        const vertex_id = try self.requestKind(.shader, normalized_vertex);
-        const fragment_id = try self.requestKind(.shader, normalized_fragment);
-        const vertex_asset = try self.loadedAsset(vertex_id, .shader) orelse return null;
-        const fragment_asset = try self.loadedAsset(fragment_id, .shader) orelse return null;
+        const vertex_id = try self.requestKind(.shader_stage, normalized_vertex);
+        const fragment_id = try self.requestKind(.shader_stage, normalized_fragment);
+        const vertex_asset = try self.loadedAsset(vertex_id, .shader_stage) orelse return null;
+        const fragment_asset = try self.loadedAsset(fragment_id, .shader_stage) orelse return null;
         const vertex_stage = switch (vertex_asset) {
-            .shader => |shader| shader,
+            .shader_stage => |shader| shader,
             else => unreachable,
         };
         const fragment_stage = switch (fragment_asset) {
-            .shader => |shader| shader,
+            .shader_stage => |shader| shader,
             else => unreachable,
         };
 
@@ -789,17 +814,16 @@ pub const AssetManager = struct {
         return normalized;
     }
 
-    fn newAssetIdLocked(self: *AssetManager) !AssetId {
-        while (true) {
-            const random_source: std.Random.IoSource = .{ .io = self.io };
-            const id = AssetId.v4(random_source.interface());
-            if (id.isZero()) {
-                continue;
-            }
-            if (!self.assets.contains(id)) {
-                return id;
-            }
-        }
+    /// Resolve the durable id for a (kind, normalized cooked path)
+    /// registration. Every registrable asset must be in the manifest —
+    /// there are no ephemeral ids.
+    fn resolveIdLocked(self: *AssetManager, expected: AssetKind, normalized_path: []const u8) !AssetId {
+        const entry = self.manifest.byCookedPath(normalized_path) orelse {
+            log.err("asset '{s}' is not in the asset manifest; recook the project (zimp cook --project)", .{normalized_path});
+            return AssetError.AssetNotFound;
+        };
+        if (entry.kind != expected) return AssetError.WrongAssetKind;
+        return entry.id;
     }
 
     fn lock(self: *AssetManager) void {
@@ -876,8 +900,20 @@ test "makeShaderProgramKey includes both stage paths" {
 
 const testing = std.testing;
 
+const mesh_manifest_id = AssetId.parseComptime("3f2a77f1-9c44-4b7e-9b1a-2f6c1d8e5a01");
+
+/// Test project with a manifest covering the cooked paths the tests
+/// register (the manifest is mandatory — ids always come from it).
 fn testProject(tmp: *std.testing.TmpDir) !Project {
     try tmp.dir.createDirPath(testing.io, ".zephyr/cooked");
+
+    var fixture = try zimp.manifest.model.testManifest(testing.allocator, &.{
+        .{ .id = "3f2a77f1-9c44-4b7e-9b1a-2f6c1d8e5a01", .source_path = "meshes/asset.glb", .cooked_path = "asset.zmesh" },
+        .{ .id = "b7e9b1a2-f6c1-4d8e-9a01-3f2a77f19c44", .source_path = "meshes/missing.glb", .cooked_path = "missing.zmesh" },
+    });
+    defer fixture.deinit();
+    try zimp.manifest.codec.writeToDir(testing.allocator, testing.io, tmp.dir, ".zephyr/assets.zmanifest", &fixture);
+
     return .{
         .manifest = .{ .project_id = .zero },
         .root_dir = try std.Io.Dir.openDir(tmp.dir, testing.io, ".", .{}),
@@ -984,11 +1020,56 @@ test "worker load failures are observable through wait and state" {
     try std.testing.expectError(AssetError.AssetNotFound, manager.wait(id));
 }
 
+test "register resolves the durable id from the asset manifest" {
+    if (@import("builtin").single_threaded) return error.SkipZigTest;
+
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try writeTestAsset(&tmp, "asset.zmesh", "not a cooked mesh");
+
+    var project = try testProject(&tmp);
+    defer project.deinit(testing.allocator, testing.io);
+
+    var manager = try AssetManager.init(testing.allocator, testing.io, &project);
+    defer manager.deinit();
+
+    // Path registration returns the manifest id, not a random one.
+    const id = try manager.register(Mesh, "./asset.zmesh");
+    try testing.expect(id.eql(mesh_manifest_id));
+
+    // Id registration resolves the cooked path and dedupes to the same record.
+    const by_id = try manager.registerId(Mesh, mesh_manifest_id);
+    try testing.expect(by_id.eql(id));
+
+    // Kind mismatches, unknown ids, and unmanifested paths are rejected.
+    try testing.expectError(AssetError.WrongAssetKind, manager.registerId(Texture2D, mesh_manifest_id));
+    try testing.expectError(AssetError.AssetNotFound, manager.registerId(Mesh, AssetId.parseComptime("8c1d6602-b3f4-4910-9c44-4b7e9b1a2f6c")));
+    try testing.expectError(AssetError.AssetNotFound, manager.register(Mesh, "unmanifested.zmesh"));
+
+    manager.wait(id) catch {};
+}
+
+test "init fails without an asset manifest" {
+    if (@import("builtin").single_threaded) return error.SkipZigTest;
+
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDirPath(testing.io, ".zephyr/cooked");
+
+    var project: Project = .{
+        .manifest = .{ .project_id = .zero },
+        .root_dir = try std.Io.Dir.openDir(tmp.dir, testing.io, ".", .{}),
+    };
+    defer project.deinit(testing.allocator, testing.io);
+
+    try testing.expectError(error.FileNotFound, AssetManager.init(testing.allocator, testing.io, &project));
+}
+
 test "detectKind maps supported cooked extensions" {
     try testing.expectEqual(AssetKind.mesh, detectKind("monkey.zmesh").?);
     try testing.expectEqual(AssetKind.material, detectKind("monkey.zamat").?);
     try testing.expectEqual(AssetKind.texture, detectKind("brick_albedo.ztex").?);
-    try testing.expectEqual(AssetKind.shader, detectKind("basic.vert.zshdr").?);
+    try testing.expectEqual(AssetKind.shader_stage, detectKind("basic.vert.zshdr").?);
 }
 
 test "detectKind requires lowercase cooked extensions" {

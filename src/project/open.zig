@@ -1,9 +1,9 @@
 const std = @import("std");
 const zimp = @import("zimp");
 
-const project_manifest = @import("manifest.zig");
-const ProjectManifest = project_manifest.ProjectManifest;
-const Project = project_manifest.Project;
+const manifest_mod = zimp.project.manifest;
+const ProjectManifest = zimp.ProjectManifest;
+const Project = @import("project.zig").Project;
 
 pub const OpenProjectOptions = struct {
     root_path: []const u8,
@@ -21,7 +21,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, opts: OpenProjectOptions) 
         allocator,
         io,
         root_dir,
-        project_manifest.default_manifest_path,
+        manifest_mod.default_manifest_path,
     );
     errdefer manifest.deinit(allocator);
 
@@ -45,7 +45,7 @@ test "open loads manifest from absolute project root" {
 
     const manifest: ProjectManifest = .{
         .name = "Opened Project",
-        .project_id = .zero,
+        .project_id = .parseComptime("bf5a424f-e93e-4977-9a7a-0c522318dfdc"),
     };
     try manifest.save(testing.allocator, testing.io, tmp.dir);
 
@@ -59,5 +59,5 @@ test "open loads manifest from absolute project root" {
     defer project.deinit(testing.allocator, testing.io);
 
     try testing.expectEqualStrings("Opened Project", project.manifest.name);
-    try testing.expect(project.manifest.project_id.eql(.zero));
+    try testing.expect(project.manifest.project_id.eql(.parseComptime("bf5a424f-e93e-4977-9a7a-0c522318dfdc")));
 }
