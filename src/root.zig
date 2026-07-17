@@ -64,7 +64,6 @@ test {
     _ = @import("core/event.zig");
     _ = @import("core/input.zig");
     _ = @import("scene/scene.zig");
-    _ = @import("scene/entity_map.zig");
     _ = @import("scene/camera.zig");
     _ = @import("scene/manager.zig");
     _ = @import("assets/source.zig");
