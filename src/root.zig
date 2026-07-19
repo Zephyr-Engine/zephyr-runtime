@@ -68,6 +68,8 @@ test {
     _ = @import("scene/scene.zig");
     _ = @import("scene/camera.zig");
     _ = @import("scene/manager.zig");
+    _ = @import("scene/component_codec.zig");
+    _ = @import("scene/derive_schema.zig");
     _ = @import("assets/source.zig");
     _ = @import("assets/manifest.zig");
     _ = @import("ecs/components.zig");
