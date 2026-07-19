@@ -31,6 +31,8 @@ pub const Mat2 = math.Mat2;
 pub const Quat = math.Quat;
 
 const camera = @import("scene/camera.zig");
+const component_codec = @import("scene/component_codec.zig");
+const derive_schema = @import("scene/derive_schema.zig");
 
 pub const ProjectManifest = zimp.ProjectManifest;
 pub const Project = @import("project/project.zig").Project;
