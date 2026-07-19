@@ -30,9 +30,14 @@ pub const Mat3 = math.Mat3;
 pub const Mat2 = math.Mat2;
 pub const Quat = math.Quat;
 
-const camera = @import("scene/camera.zig");
 const component_codec = @import("scene/component_codec.zig");
+const schema_registry = @import("scene/schema_registry.zig");
 const derive_schema = @import("scene/derive_schema.zig");
+const camera = @import("scene/camera.zig");
+
+pub const setActiveCamera = camera.setActive;
+pub const activeCamera = camera.active;
+pub const ActiveCamera = camera.ActiveCamera;
 
 pub const ProjectManifest = zimp.ProjectManifest;
 pub const Project = @import("project/project.zig").Project;
@@ -40,9 +45,6 @@ pub const openProject = @import("project/open.zig").open;
 
 pub const Renderer = @import("graphics/renderer.zig").Renderer;
 pub const DebugStats = @import("graphics/debug_stats.zig").DebugStats;
-pub const setActiveCamera = camera.setActive;
-pub const activeCamera = camera.active;
-pub const ActiveCamera = camera.ActiveCamera;
 
 pub const components = @import("ecs/components.zig");
 pub const ecs = @import("ecs/world.zig");
