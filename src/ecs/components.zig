@@ -1,17 +1,40 @@
 const std = @import("std");
 
 const id_types = @import("zimp").id.types;
+const scene = @import("zimp").scene;
+
 const math = @import("../core/math.zig");
+const SchemaRegistry = @import("../scene/schema_registry.zig").SchemaRegistry;
 
 const AssetId = id_types.AssetId;
 const Mat4 = math.Mat4;
 const Quat = math.Quat;
 const Vec3 = math.Vec3;
 
+pub fn registerComponents(comptime Ecs: type, registry: *SchemaRegistry(Ecs)) !void {
+    try registry.registerMany(&.{
+        TransformComponent,
+        MeshRenderComponent,
+        CameraComponent,
+    });
+}
+
 pub const TransformComponent = struct {
     rotation: Quat = Quat.identity,
     position: Vec3 = Vec3.zero,
     scale: Vec3 = Vec3.one,
+
+    pub const schema_meta = scene.SchemaMeta{
+        .id = "7fb84f38-52b6-4fd9-8c2f-fbd08c7a9001",
+        .name = "zephyr.runtime.transform",
+        .display_name = "Transform",
+        .version = 1,
+        .fields = &.{
+            .{ .name = "position", .number = 1, .display_name = "Position" },
+            .{ .name = "rotation", .number = 2, .display_name = "Rotation" },
+            .{ .name = "scale", .number = 3, .display_name = "Scale" },
+        },
+    };
 
     pub fn modelMatrix(self: *const TransformComponent) Mat4 {
         return Mat4.createScale(self.scale.x, self.scale.y, self.scale.z)
@@ -35,12 +58,47 @@ pub const TransformComponent = struct {
 pub const MeshRenderComponent = struct {
     material: AssetId,
     mesh: AssetId,
+
+    pub const schema_meta = scene.SchemaMeta{
+        .id = "7fb84f38-52b6-4fd9-8c2f-fbd08c7a9002",
+        .name = "zephyr.runtime.mesh.render",
+        .display_name = "Mesh Renderer",
+        .version = 1,
+        .fields = &.{
+            .{
+                .name = "mesh",
+                .number = 1,
+                .display_name = "Mesh",
+                .kind_override = .{ .asset_ref = .mesh },
+                .default_override = .{ .asset_ref = AssetId.zero },
+            },
+            .{
+                .name = "material",
+                .number = 2,
+                .display_name = "Material",
+                .kind_override = .{ .asset_ref = .material },
+                .default_override = .{ .asset_ref = AssetId.zero },
+            },
+        },
+    };
 };
 
 pub const CameraComponent = struct {
     fov: f32 = std.math.pi / 4.0,
     far: f32 = 1000.0,
     near: f32 = 0.1,
+
+    pub const schema_meta = scene.SchemaMeta{
+        .id = "7fb84f38-52b6-4fd9-8c2f-fbd08c7a9003",
+        .name = "zephyr.runtime.camera",
+        .display_name = "Camera",
+        .version = 1,
+        .fields = &.{
+            .{ .name = "fov", .number = 1, .display_name = "Field Of View", .editor = .{ .min = 0.01, .max = 3.1, .slider = true } },
+            .{ .name = "near", .number = 2, .display_name = "Near Plane", .editor = .{ .min = 0.001 } },
+            .{ .name = "far", .number = 3, .display_name = "Far Plane", .editor = .{ .min = 0.01 } },
+        },
+    };
 
     pub fn projectionMatrix(self: *const CameraComponent, aspect: f32) Mat4 {
         return Mat4.createPerspective(self.fov, aspect, self.near, self.far);

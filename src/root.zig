@@ -30,9 +30,16 @@ pub const Mat3 = math.Mat3;
 pub const Mat2 = math.Mat2;
 pub const Quat = math.Quat;
 
-const component_codec = @import("scene/component_codec.zig");
-const schema_registry = @import("scene/schema_registry.zig");
-const derive_schema = @import("scene/derive_schema.zig");
+pub const scene_schema = struct {
+    pub const ComponentCodec = @import("scene/component_codec.zig").ComponentCodec;
+    pub const CodecError = @import("scene/component_codec.zig").CodecError;
+    pub const SchemaRegistry = @import("scene/schema_registry.zig").SchemaRegistry;
+    pub const SchemaMeta = zimp.scene.SchemaMeta;
+    // pub const registerEngineSchemas = @import("scene/schema_registry.zig").registerEngineSchemas;
+    pub const deriveSchema = @import("scene/derive_schema.zig").deriveSchema;
+    pub const deriveCodec = @import("scene/derive_schema.zig").deriveCodec;
+};
+
 const camera = @import("scene/camera.zig");
 
 pub const setActiveCamera = camera.setActive;
@@ -72,6 +79,7 @@ test {
     _ = @import("scene/manager.zig");
     _ = @import("scene/component_codec.zig");
     _ = @import("scene/derive_schema.zig");
+    _ = @import("scene/schema_registry.zig");
     _ = @import("assets/source.zig");
     _ = @import("assets/manifest.zig");
     _ = @import("ecs/components.zig");

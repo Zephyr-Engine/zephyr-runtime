@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const registerComponents = @import("../ecs/components.zig").registerComponents;
+const SchemaRegistry = @import("../scene/schema_registry.zig").SchemaRegistry;
 const Framebuffer = @import("../graphics/opengl/framebuffer.zig").Framebuffer;
 const Project = @import("../project/project.zig").Project;
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
@@ -60,6 +62,10 @@ pub fn Application(comptime Game: type) type {
                 return ApplicationError.WindowError;
             };
             errdefer window.deinit(allocator);
+
+            var registry = SchemaRegistry(Ecs).init(allocator);
+            defer registry.deinit();
+            try registerComponents(Ecs, &registry);
 
             var assets = try AssetManager.init(
                 allocator,
