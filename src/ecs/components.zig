@@ -4,20 +4,11 @@ const id_types = @import("zimp").id.types;
 const scene = @import("zimp").scene;
 
 const math = @import("../core/math.zig");
-const SchemaRegistry = @import("../scene/schema_registry.zig").SchemaRegistry;
 
 const AssetId = id_types.AssetId;
 const Mat4 = math.Mat4;
 const Quat = math.Quat;
 const Vec3 = math.Vec3;
-
-pub fn registerComponents(comptime Ecs: type, registry: *SchemaRegistry(Ecs)) !void {
-    try registry.registerMany(&.{
-        TransformComponent,
-        MeshRenderComponent,
-        CameraComponent,
-    });
-}
 
 pub const TransformComponent = struct {
     rotation: Quat = Quat.identity,

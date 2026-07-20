@@ -35,7 +35,6 @@ pub const scene_schema = struct {
     pub const CodecError = @import("scene/component_codec.zig").CodecError;
     pub const SchemaRegistry = @import("scene/schema_registry.zig").SchemaRegistry;
     pub const SchemaMeta = zimp.scene.SchemaMeta;
-    // pub const registerEngineSchemas = @import("scene/schema_registry.zig").registerEngineSchemas;
     pub const deriveSchema = @import("scene/derive_schema.zig").deriveSchema;
     pub const deriveCodec = @import("scene/derive_schema.zig").deriveCodec;
 };

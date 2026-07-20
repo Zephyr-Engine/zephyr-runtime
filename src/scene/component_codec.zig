@@ -19,10 +19,10 @@ pub fn ComponentCodec(comptime Ecs: type) type {
 
         attachDefault: *const fn (*Ecs.World, zcs.EntityID, std.mem.Allocator) anyerror!void,
         attach: *const fn (*Ecs.World, zcs.EntityID, std.mem.Allocator, SceneComponentData) anyerror!void,
-        detach: *const fn (*Ecs.World, zcs.EntityID) anyerror!void,
+        detach: *const fn (*Ecs.World, zcs.EntityID, std.mem.Allocator) anyerror!void,
 
         readDocument: *const fn (*Ecs.World, zcs.EntityID, std.mem.Allocator) anyerror!SceneComponentData,
-        writeField: *const fn (*Ecs.World, zcs.EntityID, u32, Value) anyerror!void,
+        writeField: *const fn (*Ecs.World, zcs.EntityID, std.mem.Allocator, u32, Value) anyerror!void,
     };
 }
 
@@ -71,7 +71,7 @@ fn attach(world: *TestEcs.World, entity: zcs.EntityID, _: std.mem.Allocator, dat
     world.last_component = data.component;
 }
 
-fn detach(world: *TestEcs.World, entity: zcs.EntityID) !void {
+fn detach(world: *TestEcs.World, entity: zcs.EntityID, _: std.mem.Allocator) !void {
     world.detached += 1;
     world.last_entity = entity;
 }
@@ -88,7 +88,7 @@ fn readDocument(world: *TestEcs.World, entity: zcs.EntityID, allocator: std.mem.
     };
 }
 
-fn writeField(world: *TestEcs.World, entity: zcs.EntityID, _: u32, value: Value) !void {
+fn writeField(world: *TestEcs.World, entity: zcs.EntityID, _: std.mem.Allocator, _: u32, value: Value) !void {
     world.written_fields += 1;
     world.last_entity = entity;
     world.last_value = value;
@@ -123,7 +123,7 @@ test "ComponentCodec stores schema and dispatches callbacks" {
     try testing.expectEqual(@as(u32, 1), world.attached);
     try testing.expect(world.last_component.eql(test_component_id));
 
-    try codec.writeField(&world, entity, 1, .{ .i32 = -4 });
+    try codec.writeField(&world, entity, testing.allocator, 1, .{ .i32 = -4 });
     try testing.expectEqual(@as(u32, 1), world.written_fields);
     try testing.expectEqual(Value{ .i32 = -4 }, world.last_value);
 
@@ -134,7 +134,7 @@ test "ComponentCodec stores schema and dispatches callbacks" {
     try testing.expectEqual(@as(usize, 1), read.fields.len);
     try testing.expectEqual(Value{ .bool = true }, read.fields[0].value);
 
-    try codec.detach(&world, entity);
+    try codec.detach(&world, entity, testing.allocator);
     try testing.expectEqual(@as(u32, 1), world.detached);
     try testing.expect(world.last_entity.eql(entity));
 }

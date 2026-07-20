@@ -178,6 +178,7 @@ fn fakeContext() TestRuntimeContext {
         .allocator = std.testing.allocator,
         .io = undefined,
         .assets = undefined,
+        .schemas = undefined,
         .world = undefined,
     };
 }

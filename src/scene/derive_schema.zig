@@ -78,6 +78,20 @@ fn fromValue(comptime FT: type, comptime kind: std.meta.Tag(FieldKind), value: V
     };
 }
 
+fn fromValueOwned(allocator: std.mem.Allocator, comptime FT: type, comptime kind: std.meta.Tag(FieldKind), value: Value) !FT {
+    if (comptime kind == .string) {
+        if (!valueKindMatches(value, kind)) {
+            return error.ValueKindMismatch;
+        }
+        if (comptime FT != []const u8) {
+            @compileError("string fields must be []const u8");
+        }
+        return try allocator.dupe(u8, value.string);
+    }
+
+    return fromValue(FT, kind, value);
+}
+
 fn structFieldDefault(comptime sf: std.builtin.Type.StructField) ?sf.type {
     const ptr = sf.default_value_ptr orelse return null;
     return @as(*const sf.type, @ptrCast(@alignCast(ptr))).*;
@@ -182,41 +196,84 @@ pub fn deriveCodec(comptime Ecs: type, comptime T: type) ComponentCodec(Ecs) {
     const pfs = comptime PersistedField.Fields(T);
 
     const Impl = struct {
-        fn defaultInstance() T {
-            var t: T = undefined;
-            inline for (@typeInfo(T).@"struct".fields) |sf| {
-                if (comptime structFieldDefault(sf)) |d| {
-                    @field(t, sf.name) = d;
-                } else {
-                    inline for (pfs) |pf| {
-                        if (comptime std.mem.eql(u8, pf.name, sf.name)) {
-                            @field(t, sf.name) = fromValue(
-                                sf.type,
-                                comptime std.meta.activeTag(pf.kind),
-                                pf.meta.default_override.?,
-                            ) catch unreachable;
-                        }
-                    }
+        fn deinitOwnedFields(instance: *T, allocator: std.mem.Allocator) void {
+            inline for (pfs) |pf| {
+                if (comptime std.meta.activeTag(pf.kind) == .string) {
+                    allocator.free(@field(instance.*, pf.name));
+                    @field(instance.*, pf.name) = &.{};
                 }
+            }
+        }
+
+        fn defaultInstance(allocator: std.mem.Allocator) !T {
+            var t: T = undefined;
+            inline for (pfs) |pf| {
+                if (comptime std.meta.activeTag(pf.kind) == .string) {
+                    @field(t, pf.name) = &.{};
+                }
+            }
+            errdefer deinitOwnedFields(&t, allocator);
+
+            inline for (pfs) |pf| {
+                const default_value = dv: {
+                    if (comptime structFieldDefault(pf.sf)) |raw| {
+                        break :dv toValue(comptime std.meta.activeTag(pf.kind), raw);
+                    }
+
+                    if (pf.meta.default_override) |v| {
+                        break :dv v;
+                    }
+
+                    @compileError(@typeName(T) ++ "." ++ pf.name ++
+                        ": no Zig default value and no default_override in schema_meta");
+                };
+
+                @field(t, pf.name) = try fromValueOwned(
+                    allocator,
+                    pf.sf.type,
+                    comptime std.meta.activeTag(pf.kind),
+                    default_value,
+                );
             }
 
             return t;
         }
 
-        fn attachDefault(world: *Ecs.World, entity: zcs.EntityID, _: std.mem.Allocator) !void {
-            try world.addComponent(entity, T, defaultInstance());
+        fn attachDefault(world: *Ecs.World, entity: zcs.EntityID, allocator: std.mem.Allocator) !void {
+            const old_instance = if (world.getComponent(entity, T)) |comp| comp.* else null;
+            var instance = try defaultInstance(allocator);
+            errdefer deinitOwnedFields(&instance, allocator);
+
+            try world.addComponent(entity, T, instance);
+            if (world.getComponent(entity, T) == null) {
+                deinitOwnedFields(&instance, allocator);
+                return;
+            }
+
+            if (old_instance) |old| {
+                var owned = old;
+                deinitOwnedFields(&owned, allocator);
+            }
         }
 
-        fn attach(world: *Ecs.World, entity: zcs.EntityID, _: std.mem.Allocator, data: zimp.scene.SceneComponentData) !void {
-            var instance = defaultInstance();
+        fn attach(world: *Ecs.World, entity: zcs.EntityID, allocator: std.mem.Allocator, data: zimp.scene.SceneComponentData) !void {
+            const old_instance = if (world.getComponent(entity, T)) |comp| comp.* else null;
+            var instance = try defaultInstance(allocator);
+            errdefer deinitOwnedFields(&instance, allocator);
+
             for (data.fields) |sf| {
                 const applied = inline for (pfs) |pf| {
                     if (pf.number == sf.number) {
-                        @field(instance, pf.name) = try fromValue(
+                        const field_value = try fromValueOwned(
+                            allocator,
                             pf.sf.type,
                             comptime std.meta.activeTag(pf.kind),
                             sf.value,
                         );
+                        if (comptime std.meta.activeTag(pf.kind) == .string) {
+                            allocator.free(@field(instance, pf.name));
+                        }
+                        @field(instance, pf.name) = field_value;
                         break true;
                     }
                 } else false;
@@ -227,10 +284,22 @@ pub fn deriveCodec(comptime Ecs: type, comptime T: type) ComponentCodec(Ecs) {
             }
 
             try world.addComponent(entity, T, instance);
+            if (world.getComponent(entity, T) == null) {
+                deinitOwnedFields(&instance, allocator);
+                return;
+            }
+
+            if (old_instance) |old| {
+                var owned = old;
+                deinitOwnedFields(&owned, allocator);
+            }
         }
 
-        fn detach(world: *Ecs.World, entity: zcs.EntityID) !void {
+        fn detach(world: *Ecs.World, entity: zcs.EntityID, allocator: std.mem.Allocator) !void {
+            const comp = world.getComponent(entity, T) orelse return;
+            var old = comp.*;
             try world.removeComponent(entity, T);
+            deinitOwnedFields(&old, allocator);
         }
 
         fn readDocument(world: *Ecs.World, entity: zcs.EntityID, allocator: std.mem.Allocator) !zimp.scene.SceneComponentData {
@@ -254,15 +323,20 @@ pub fn deriveCodec(comptime Ecs: type, comptime T: type) ComponentCodec(Ecs) {
             return .{ .component = schema.id, .fields = fields };
         }
 
-        fn writeField(world: *Ecs.World, entity: zcs.EntityID, number: u32, value: zimp.scene.Value) !void {
+        fn writeField(world: *Ecs.World, entity: zcs.EntityID, allocator: std.mem.Allocator, number: u32, value: zimp.scene.Value) !void {
             const comp = world.getComponent(entity, T) orelse return codec.CodecError.ComponentMissing;
             inline for (pfs) |pf| {
                 if (pf.number == number) {
-                    @field(comp.*, pf.name) = try fromValue(
+                    const field_value = try fromValueOwned(
+                        allocator,
                         pf.sf.type,
                         comptime std.meta.activeTag(pf.kind),
                         value,
                     );
+                    if (comptime std.meta.activeTag(pf.kind) == .string) {
+                        allocator.free(@field(comp.*, pf.name));
+                    }
+                    @field(comp.*, pf.name) = field_value;
                     return;
                 }
             }
@@ -457,7 +531,7 @@ test "deriveCodec attaches default component and detaches it" {
 
     try expectSchemaFixtureDefaults(world.getComponent(entity, SchemaFixture).?);
 
-    try derived.detach(&world, entity);
+    try derived.detach(&world, entity, testing.allocator);
     try testing.expect(world.getComponent(entity, SchemaFixture) == null);
 }
 
@@ -495,8 +569,11 @@ test "deriveCodec attaches document data over component defaults" {
     try testing.expectEqual(math.Vec3.new(6, 7, 8), actual.position);
     try testing.expectEqual(math.Quat.identity, actual.rotation);
     try testing.expectEqualStrings("document", actual.label);
+    try testing.expect(actual.label.ptr != fields[7].value.string.ptr);
     try testing.expect(actual.target.eql(target));
     try testing.expect(actual.material.eql(material));
+
+    try derived.detach(&world, entity, testing.allocator);
 }
 
 test "deriveCodec writes fields and reads scene component data" {
@@ -506,14 +583,16 @@ test "deriveCodec writes fields and reads scene component data" {
 
     const entity = try world.spawn();
     try derived.attachDefault(&world, entity, testing.allocator);
-    try derived.writeField(&world, entity, 1, .{ .bool = false });
-    try derived.writeField(&world, entity, 6, .{ .vec3 = .{ 9, 8, 7 } });
-    try derived.writeField(&world, entity, 8, .{ .string = "updated" });
+    try derived.writeField(&world, entity, testing.allocator, 1, .{ .bool = false });
+    try derived.writeField(&world, entity, testing.allocator, 6, .{ .vec3 = .{ 9, 8, 7 } });
+    const update_value = Value{ .string = "updated" };
+    try derived.writeField(&world, entity, testing.allocator, 8, update_value);
 
     const live = world.getComponent(entity, SchemaFixture).?;
     try testing.expectEqual(false, live.enabled);
     try testing.expectEqual(math.Vec3.new(9, 8, 7), live.position);
     try testing.expectEqualStrings("updated", live.label);
+    try testing.expect(live.label.ptr != update_value.string.ptr);
 
     var data = try derived.readDocument(&world, entity, testing.allocator);
     defer data.deinit(testing.allocator);
@@ -530,6 +609,10 @@ test "deriveCodec writes fields and reads scene component data" {
     try derived.attach(&world, clone, testing.allocator, data);
     const cloned = world.getComponent(clone, SchemaFixture).?;
     try expectSchemaFixtureEqual(live, cloned);
+    try testing.expect(cloned.label.ptr != data.fields[7].value.string.ptr);
+
+    try derived.detach(&world, clone, testing.allocator);
+    try derived.detach(&world, entity, testing.allocator);
 }
 
 test "deriveCodec reports missing components and invalid document fields" {
@@ -538,7 +621,7 @@ test "deriveCodec reports missing components and invalid document fields" {
     defer world.deinit();
 
     const entity = try world.spawn();
-    try testing.expectError(codec.CodecError.ComponentMissing, derived.writeField(&world, entity, 1, .{ .bool = false }));
+    try testing.expectError(codec.CodecError.ComponentMissing, derived.writeField(&world, entity, testing.allocator, 1, .{ .bool = false }));
     try testing.expectError(codec.CodecError.ComponentMissing, derived.readDocument(&world, entity, testing.allocator));
 
     var unknown_fields = [_]zimp.scene.SceneField{.{ .number = 99, .value = .{ .bool = false } }};
@@ -554,6 +637,7 @@ test "deriveCodec reports missing components and invalid document fields" {
     }));
 
     try derived.attachDefault(&world, entity, testing.allocator);
-    try testing.expectError(codec.CodecError.UnknownFieldNumber, derived.writeField(&world, entity, 99, .{ .bool = false }));
-    try testing.expectError(codec.CodecError.ValueKindMismatch, derived.writeField(&world, entity, 1, .{ .i32 = 1 }));
+    defer derived.detach(&world, entity, testing.allocator) catch {};
+    try testing.expectError(codec.CodecError.UnknownFieldNumber, derived.writeField(&world, entity, testing.allocator, 99, .{ .bool = false }));
+    try testing.expectError(codec.CodecError.ValueKindMismatch, derived.writeField(&world, entity, testing.allocator, 1, .{ .i32 = 1 }));
 }

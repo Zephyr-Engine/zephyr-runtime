@@ -33,6 +33,15 @@ pub fn SchemaRegistry(comptime Ecs: type) type {
             }
         }
 
+        pub fn registerFromEcs(self: *Self) !void {
+            inline for (0..Ecs.component_count) |i| {
+                const Component = Ecs.componentType(i);
+                if (@hasDecl(Component, "schema_meta")) {
+                    try self.register(Component);
+                }
+            }
+        }
+
         pub fn register(self: *Self, comptime Component: type) !void {
             const codec = comptime deriveCodec(Ecs, Component);
             try zimp.scene.validateSchema(codec.schema);
@@ -229,6 +238,31 @@ test "SchemaRegistry computes descriptor and schema hash from sorted schemas" {
     try testing.expectEqual(@as(usize, 2), descriptor.components.len);
     try testing.expect(descriptor.components[0].id.eql(ComponentTypeId.parseComptime(RegistryComponentB.schema_meta.id)));
     try testing.expect(descriptor.components[1].id.eql(ComponentTypeId.parseComptime(RegistryComponentA.schema_meta.id)));
+}
+
+const RuntimeOnlyComponent = struct {
+    ticks: u32 = 0,
+};
+
+const DerivedEcs = @import("../ecs/world.zig").GameEcs(&.{
+    RegistryComponentA,
+    RuntimeOnlyComponent,
+});
+
+test "registerFromEcs registers engine and annotated components, skips runtime-only ones" {
+    const Registry = SchemaRegistry(DerivedEcs);
+    var registry = Registry.init(testing.allocator);
+    defer registry.deinit();
+
+    try registry.registerFromEcs();
+
+    // Three engine components plus RegistryComponentA; RuntimeOnlyComponent
+    // has no schema_meta and must be skipped.
+    try testing.expectEqual(@as(usize, 4), registry.codecs.count());
+    try testing.expect(registry.getByName("zephyr.runtime.transform") != null);
+    try testing.expect(registry.getByName("zephyr.runtime.mesh.render") != null);
+    try testing.expect(registry.getByName("zephyr.runtime.camera") != null);
+    try testing.expect(registry.getByName("RegistryComponentA") != null);
 }
 
 test "SchemaRegistry validates derived schemas before insertion" {
