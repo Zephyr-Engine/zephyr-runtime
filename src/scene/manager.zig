@@ -145,6 +145,7 @@ fn testContext(assets: *AssetManager) TestRuntimeContext {
         .allocator = std.testing.allocator,
         .io = std.testing.io,
         .assets = assets,
+        .schemas = undefined,
         .world = .init(std.testing.allocator),
     };
 }

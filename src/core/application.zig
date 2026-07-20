@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const SchemaRegistry = @import("../scene/schema_registry.zig").SchemaRegistry;
 const Framebuffer = @import("../graphics/opengl/framebuffer.zig").Framebuffer;
 const Project = @import("../project/project.zig").Project;
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
@@ -42,6 +43,7 @@ pub fn Application(comptime Game: type) type {
     return struct {
         events: std.ArrayList(event.ZEvent) = .empty,
         scene_manager: *SceneManager,
+        schemas: SchemaRegistry(Ecs),
         assets: AssetManager,
         ctx: RuntimeContext,
         command_buffer: CommandBuffer,
@@ -74,16 +76,21 @@ pub fn Application(comptime Game: type) type {
             errdefer allocator.destroy(manager);
             app.* = @This(){
                 .scene_manager = manager,
+                .schemas = SchemaRegistry(Ecs).init(allocator),
                 .window = window,
                 .time = .init(),
                 .ctx = undefined,
                 .command_buffer = undefined,
                 .assets = assets,
             };
+            errdefer app.schemas.deinit();
+            try app.schemas.registerFromEcs();
+
             app.ctx = .{
                 .allocator = allocator,
                 .io = io,
                 .assets = &app.assets,
+                .schemas = &app.schemas,
                 .world = .init(allocator),
             };
             app.command_buffer = .init(&app.ctx.world);
@@ -222,6 +229,7 @@ pub fn Application(comptime Game: type) type {
             self.command_buffer.deinit();
             self.ctx.world.deinit();
             self.events.deinit(self.ctx.allocator);
+            self.schemas.deinit();
             self.assets.deinit();
             self.debug_stats.deinit();
             self.window.deinit(self.ctx.allocator);
