@@ -160,6 +160,7 @@ pub fn Application(comptime Game: type) type {
 
         pub fn update(self: *@This()) !void {
             try self.pumpAssets();
+            try self.renderScene(null);
         }
 
         pub fn renderScene(self: *@This(), target: ?*Framebuffer) !void {
