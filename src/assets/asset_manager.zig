@@ -36,7 +36,7 @@ const Asset = union(AssetKind) {
     shader_stage: *zimp.ZShader,
     material: *Material,
 
-    fn deinit(self: Asset, allocator: std.mem.Allocator, worker_allocator: std.mem.Allocator) void {
+    fn deinit(self: Asset, allocator: std.mem.Allocator) void {
         switch (self) {
             .mesh => |mesh| {
                 mesh.deinit();
@@ -51,7 +51,7 @@ const Asset = union(AssetKind) {
                 allocator.destroy(texture);
             },
             .shader_stage => |shader| {
-                shader.deinit(worker_allocator);
+                shader.deinit(allocator);
                 allocator.destroy(shader);
             },
         }
@@ -70,14 +70,13 @@ const AssetRecord = struct {
     fn deinit(
         self: *AssetRecord,
         allocator: std.mem.Allocator,
-        worker_allocator: std.mem.Allocator,
     ) void {
         if (self.asset) |asset| {
-            asset.deinit(allocator, worker_allocator);
+            asset.deinit(allocator);
             self.asset = null;
         }
         if (self.cooked) |*cooked| {
-            cooked.deinit(worker_allocator);
+            cooked.deinit(allocator);
             self.cooked = null;
         }
         if (self.path) |path| {
@@ -139,7 +138,6 @@ const LoadJob = struct {
 
 const ReaderPool = struct {
     allocator: std.mem.Allocator,
-    worker_allocator: std.mem.Allocator,
     io: std.Io,
     source: CookedStore,
 
@@ -151,7 +149,6 @@ const ReaderPool = struct {
 
     fn create(
         allocator: std.mem.Allocator,
-        worker_allocator: std.mem.Allocator,
         io: std.Io,
         source: CookedStore,
         worker_count: usize,
@@ -161,7 +158,6 @@ const ReaderPool = struct {
 
         pool.* = .{
             .allocator = allocator,
-            .worker_allocator = worker_allocator,
             .io = io,
             .source = source,
         };
@@ -258,7 +254,7 @@ const ReaderPool = struct {
 
     fn loadCookedAsset(self: *ReaderPool, record: *AssetRecord) !zimp.runtime.Asset {
         const normalized_path = record.path orelse return AssetError.AssetNotFound;
-        const bytes = self.source.readAlloc(self.worker_allocator, self.io, normalized_path) catch |err| switch (err) {
+        const bytes = self.source.readAlloc(self.allocator, self.io, normalized_path) catch |err| switch (err) {
             error.FileNotFound, error.NotDir, error.IsDir => return AssetError.AssetNotFound,
             error.OutOfMemory => return AssetError.OutOfMemory,
             zimp.path.Error.AbsolutePathNotAllowed,
@@ -268,11 +264,11 @@ const ReaderPool = struct {
             => return AssetError.InvalidPath,
             else => return err,
         };
-        defer self.worker_allocator.free(bytes);
+        defer self.allocator.free(bytes);
 
         var reader = std.Io.Reader.fixed(bytes);
         return zimp.runtime.loadFromReader(
-            self.worker_allocator,
+            self.allocator,
             &reader,
             zimp.runtime.detectType(normalized_path) orelse return AssetError.UnsupportedAssetKind,
         );
@@ -280,10 +276,8 @@ const ReaderPool = struct {
 };
 
 pub const AssetManager = struct {
-    backing_allocator: std.mem.Allocator,
     allocator: std.mem.Allocator,
-    worker_allocator_state: *SynchronizedAllocator,
-    worker_allocator: std.mem.Allocator,
+    allocator_state: *SynchronizedAllocator,
     io: std.Io,
     source: CookedStore,
     pool: *ReaderPool,
@@ -327,16 +321,15 @@ pub const AssetManager = struct {
         const worker_count = defaultWorkerCount();
         errdefer owned_source.deinit(allocator, io);
 
-        const worker_allocator_state = try allocator.create(SynchronizedAllocator);
-        errdefer allocator.destroy(worker_allocator_state);
-        worker_allocator_state.* = .{
+        const allocator_state = try allocator.create(SynchronizedAllocator);
+        errdefer allocator.destroy(allocator_state);
+        allocator_state.* = .{
             .child = allocator,
             .io = io,
         };
-        const managed_allocator = worker_allocator_state.allocator();
+        const managed_allocator = allocator_state.allocator();
 
         const pool = try ReaderPool.create(
-            managed_allocator,
             managed_allocator,
             io,
             owned_source,
@@ -344,14 +337,12 @@ pub const AssetManager = struct {
         );
         errdefer {
             pool.destroy();
-            allocator.destroy(worker_allocator_state);
+            allocator.destroy(allocator_state);
         }
 
         return .{
-            .backing_allocator = allocator,
             .allocator = managed_allocator,
-            .worker_allocator_state = worker_allocator_state,
-            .worker_allocator = managed_allocator,
+            .allocator_state = allocator_state,
             .io = io,
             .source = owned_source,
             .pool = pool,
@@ -368,7 +359,7 @@ pub const AssetManager = struct {
         var assets_it = self.assets.valueIterator();
         while (assets_it.next()) |record_ptr| {
             const record = record_ptr.*;
-            record.deinit(self.allocator, self.worker_allocator);
+            record.deinit(self.allocator);
             self.allocator.destroy(record);
         }
         self.assets.deinit();
@@ -389,7 +380,7 @@ pub const AssetManager = struct {
 
         self.source.deinit(self.allocator, self.io);
         self.manifest.deinit();
-        self.backing_allocator.destroy(self.worker_allocator_state);
+        self.allocator_state.child.destroy(self.allocator_state);
     }
 
     pub fn register(self: *AssetManager, comptime T: type, path: []const u8) !AssetId {
@@ -407,7 +398,10 @@ pub const AssetManager = struct {
 
     fn requestKindById(self: *AssetManager, expected: AssetKind, id: AssetId) !AssetId {
         const entry = self.manifest.byId(id) orelse return AssetError.AssetNotFound;
-        if (entry.kind != expected) return AssetError.WrongAssetKind;
+        if (entry.kind != expected) {
+            return AssetError.WrongAssetKind;
+        }
+
         // Delegates to path registration: the path resolves back to this
         // same durable id and dedupes on the path key.
         return self.requestKind(expected, entry.cooked_path);
@@ -548,7 +542,7 @@ pub const AssetManager = struct {
         path_owned = false;
         var record_owned = true;
         errdefer if (record_owned) {
-            record.deinit(self.allocator, self.worker_allocator);
+            record.deinit(self.allocator);
             self.allocator.destroy(record);
         };
         try self.assets.put(id, record);
@@ -581,7 +575,7 @@ pub const AssetManager = struct {
 
     fn finalizeMesh(self: *AssetManager, record: *AssetRecord) !*Mesh {
         var cooked_asset = try takeCooked(record);
-        defer cooked_asset.deinit(self.worker_allocator);
+        defer cooked_asset.deinit(self.allocator);
 
         const cooked_mesh = switch (cooked_asset) {
             .mesh => |mesh| mesh,
@@ -598,7 +592,7 @@ pub const AssetManager = struct {
 
     fn finalizeTexture(self: *AssetManager, record: *AssetRecord) !*Texture2D {
         var cooked_asset = try takeCooked(record);
-        defer cooked_asset.deinit(self.worker_allocator);
+        defer cooked_asset.deinit(self.allocator);
 
         const cooked_texture = switch (cooked_asset) {
             .texture => |texture| texture,
@@ -615,7 +609,7 @@ pub const AssetManager = struct {
 
     fn finalizeShaderStage(self: *AssetManager, record: *AssetRecord) !*zimp.ZShader {
         var cooked_asset = try takeCooked(record);
-        errdefer cooked_asset.deinit(self.worker_allocator);
+        errdefer cooked_asset.deinit(self.allocator);
 
         // `cooked_asset` is zimp.runtime.Asset (the cooked-file union), whose
         // shader variant is named `.shader`.
@@ -796,7 +790,7 @@ pub const AssetManager = struct {
 
     fn failRecordLocked(self: *AssetManager, record: *AssetRecord, err: anyerror) void {
         if (record.cooked) |*cooked| {
-            cooked.deinit(self.worker_allocator);
+            cooked.deinit(self.allocator);
             record.cooked = null;
         }
         record.failure = err;
