@@ -37,6 +37,7 @@ pub const scene_schema = struct {
     pub const SchemaMeta = zimp.scene.SchemaMeta;
     pub const deriveSchema = @import("scene/derive_schema.zig").deriveSchema;
     pub const deriveCodec = @import("scene/derive_schema.zig").deriveCodec;
+    pub const SceneRuntimeInstance = @import("scene/runtime_instance.zig").SceneRuntimeInstance;
 };
 
 const camera = @import("scene/camera.zig");

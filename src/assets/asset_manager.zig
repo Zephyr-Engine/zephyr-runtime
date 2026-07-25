@@ -868,6 +868,7 @@ fn kindFor(comptime T: type) AssetKind {
         Mesh => .mesh,
         Material => .material,
         Texture2D => .texture,
+        zimp.ZShader => .shader_stage,
         else => @compileError("unsupported asset type: " ++ @typeName(T)),
     };
 }
