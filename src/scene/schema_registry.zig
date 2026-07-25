@@ -240,6 +240,7 @@ test "SchemaRegistry computes descriptor and schema hash from sorted schemas" {
     try testing.expect(descriptor.components[1].id.eql(ComponentTypeId.parseComptime(RegistryComponentA.schema_meta.id)));
 }
 
+
 const RuntimeOnlyComponent = struct {
     ticks: u32 = 0,
 };
