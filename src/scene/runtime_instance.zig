@@ -32,9 +32,10 @@ pub fn SceneRuntimeInstance(comptime Ecs: type) type {
         }
 
         pub fn deinit(self: *@This(), world: *Ecs.World) void {
-            for (self.scene_to_runtime.values()) |entity| {
-                if (world.isAlive(entity)) {
-                    world.despawn(entity);
+            var entities = self.scene_to_runtime.valueIterator();
+            while (entities.next()) |entity| {
+                if (world.isAlive(entity.*)) {
+                    world.despawn(entity.*);
                 }
             }
             self.scene_to_runtime.deinit();
@@ -48,7 +49,7 @@ pub fn SceneRuntimeInstance(comptime Ecs: type) type {
         pub fn spawnEntities(self: *@This(), world: *World, registry: *const Registry, assets: *AssetManager, scene: *const zimp.scene.SceneDocument) !void {
             for (scene.entities) |entity_data| {
                 const entity = try world.spawn();
-                errdefer world.destroy(entity);
+                errdefer world.despawn(entity);
 
                 try self.scene_to_runtime.put(entity_data.id, entity);
                 try self.runtime_to_scene.put(entity, entity_data.id);
@@ -57,7 +58,7 @@ pub fn SceneRuntimeInstance(comptime Ecs: type) type {
             for (scene.entities) |entity_data| {
                 const entity = try self.resolve(entity_data.id);
                 for (entity_data.components) |component_data| {
-                    const codec = try registry.get(component_data.type_id) orelse return error.UnknownComponent;
+                    const codec = registry.get(component_data.type_id) orelse return error.UnknownComponent;
                     try codec.attach(world, entity, self.allocator, component_data.asData());
 
                     for (component_data.fields) |field| {
@@ -82,7 +83,7 @@ pub fn SceneRuntimeInstance(comptime Ecs: type) type {
 
             if (scene.active_camera) |camera_id| {
                 const runtime_camera = try self.resolve(camera_id);
-                setActiveCamera(world, runtime_camera);
+                try setActiveCamera(world, runtime_camera);
             }
         }
 

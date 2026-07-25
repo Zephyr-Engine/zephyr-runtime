@@ -31,13 +31,19 @@ pub const Mat2 = math.Mat2;
 pub const Quat = math.Quat;
 
 pub const scene_schema = struct {
-    pub const ComponentCodec = @import("scene/component_codec.zig").ComponentCodec;
-    pub const CodecError = @import("scene/component_codec.zig").CodecError;
-    pub const SchemaRegistry = @import("scene/schema_registry.zig").SchemaRegistry;
-    pub const SchemaMeta = zimp.scene.SchemaMeta;
-    pub const deriveSchema = @import("scene/derive_schema.zig").deriveSchema;
-    pub const deriveCodec = @import("scene/derive_schema.zig").deriveCodec;
     pub const SceneRuntimeInstance = @import("scene/runtime_instance.zig").SceneRuntimeInstance;
+    pub const ComponentCodec = @import("scene/component_codec.zig").ComponentCodec;
+    pub const SchemaRegistry = @import("scene/schema_registry.zig").SchemaRegistry;
+    pub const CodecError = @import("scene/component_codec.zig").CodecError;
+    pub const SchemaMeta = zimp.scene.SchemaMeta;
+
+    const derive_schema = @import("scene/derive_schema.zig");
+    pub const deriveCodec = derive_schema.deriveCodec;
+    pub const deriveSchema = derive_schema.deriveSchema;
+
+    const loader = @import("scene/loader.zig");
+    pub const loadSceneFile = loader.loadSceneFile;
+    pub const loadDefaultScene = loader.loadDefaultScene;
 };
 
 const camera = @import("scene/camera.zig");
@@ -74,9 +80,7 @@ test {
     _ = @import("core/math.zig");
     _ = @import("core/event.zig");
     _ = @import("core/input.zig");
-    _ = @import("scene/scene.zig");
     _ = @import("scene/camera.zig");
-    _ = @import("scene/manager.zig");
     _ = @import("scene/component_codec.zig");
     _ = @import("scene/derive_schema.zig");
     _ = @import("scene/schema_registry.zig");

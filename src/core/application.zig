@@ -1,13 +1,13 @@
 const std = @import("std");
 
 const SchemaRegistry = @import("../scene/schema_registry.zig").SchemaRegistry;
+const LoadedScene = @import("../scene/loader.zig").LoadedScene;
 const Framebuffer = @import("../graphics/opengl/framebuffer.zig").Framebuffer;
 const Project = @import("../project/project.zig").Project;
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
 const RenderViewport = @import("runtime_context.zig").RenderViewport;
 const debug_stats = @import("../graphics/debug_stats.zig");
 const runtime_context = @import("runtime_context.zig");
-const scene_manager = @import("../scene/manager.zig");
 const renderer = @import("../graphics/renderer.zig");
 const InputManager = input.InputManager;
 const WindowParams = win.WindowParams;
@@ -37,12 +37,10 @@ pub fn Application(comptime Game: type) type {
     const Schedule = Ecs.Schedule;
 
     const RuntimeContext = runtime_context.RuntimeContext(Ecs);
-    const SceneManager = scene_manager.SceneManager(Ecs);
     const Renderer = renderer.Renderer(Ecs);
 
     return struct {
         events: std.ArrayList(event.ZEvent) = .empty,
-        scene_manager: *SceneManager,
         schemas: SchemaRegistry(Ecs),
         assets: AssetManager,
         ctx: RuntimeContext,
@@ -50,6 +48,7 @@ pub fn Application(comptime Game: type) type {
         window: *Window,
         time: Time,
         debug_stats: debug_stats.Collector = .{},
+        active_scene: ?LoadedScene(Ecs),
 
         pub fn init(
             allocator: std.mem.Allocator,
@@ -72,15 +71,13 @@ pub fn Application(comptime Game: type) type {
 
             const app = try allocator.create(@This());
             errdefer allocator.destroy(app);
-            const manager = try SceneManager.init(allocator);
-            errdefer allocator.destroy(manager);
             app.* = @This(){
-                .scene_manager = manager,
                 .schemas = SchemaRegistry(Ecs).init(allocator),
                 .window = window,
                 .time = .init(),
                 .ctx = undefined,
                 .command_buffer = undefined,
+                .active_scene = null,
                 .assets = assets,
             };
             errdefer app.schemas.deinit();
@@ -91,6 +88,7 @@ pub fn Application(comptime Game: type) type {
                 .io = io,
                 .assets = &app.assets,
                 .schemas = &app.schemas,
+                .project = project,
                 .world = .init(allocator),
             };
             app.command_buffer = .init(&app.ctx.world);
@@ -130,7 +128,8 @@ pub fn Application(comptime Game: type) type {
         }
 
         pub fn start(self: *@This()) !void {
-            try self.scene_manager.initScene(&self.ctx);
+            self.active_scene = try LoadedScene(Ecs).loadDefaultScene(&self.ctx);
+            try self.active_scene.?.start(&self.ctx);
         }
 
         pub fn beginFrame(self: *@This()) []const event.ZEvent {
@@ -153,7 +152,6 @@ pub fn Application(comptime Game: type) type {
         pub fn processEvent(self: *@This(), ev: event.ZEvent) !void {
             InputManager.Update(ev);
             self.ctx.world.getResource(InputState).* = InputManager.snapshot();
-            try self.scene_manager.handleEvent(&self.ctx, ev);
         }
 
         pub fn pumpAssets(self: *@This()) !void {
@@ -188,7 +186,6 @@ pub fn Application(comptime Game: type) type {
             };
 
             const cpu_start = Window.GetTime();
-            try self.scene_manager.updateScene(&self.ctx, self.time.delta_time);
             try Schedule.tickDt(
                 &self.ctx.world,
                 &self.command_buffer,
@@ -222,11 +219,10 @@ pub fn Application(comptime Game: type) type {
         }
 
         pub fn deinit(self: *@This()) !void {
-            var shutdown_error: ?anyerror = null;
-            self.scene_manager.deinit(&self.ctx) catch |err| {
-                shutdown_error = err;
-            };
             self.command_buffer.deinit();
+            if (self.active_scene) |*active_scene| {
+                active_scene.deinit(&self.ctx.world);
+            }
             self.ctx.world.deinit();
             self.events.deinit(self.ctx.allocator);
             self.schemas.deinit();
@@ -234,14 +230,6 @@ pub fn Application(comptime Game: type) type {
             self.debug_stats.deinit();
             self.window.deinit(self.ctx.allocator);
             self.ctx.allocator.destroy(self);
-            if (shutdown_error) |err| return err;
-        }
-
-        pub fn pushScene(self: *@This(), comptime scene: type, is_active: bool) void {
-            self.scene_manager.addScene(scene, is_active) catch |err| {
-                log.err("failed to push scene: {}", .{err});
-                return;
-            };
         }
     };
 }

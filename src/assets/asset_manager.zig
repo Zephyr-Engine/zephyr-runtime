@@ -383,11 +383,6 @@ pub const AssetManager = struct {
         self.allocator_state.child.destroy(self.allocator_state);
     }
 
-    pub fn register(self: *AssetManager, comptime T: type, path: []const u8) !AssetId {
-        const expected = comptime kindFor(T);
-        return self.requestKind(expected, path);
-    }
-
     /// Register an asset by its durable id from `assets.zmanifest`. This is
     /// the data-driven path scene instantiation uses: scene files store
     /// AssetIds, never paths.
@@ -897,8 +892,7 @@ const testing = std.testing;
 
 const mesh_manifest_id = AssetId.parseComptime("3f2a77f1-9c44-4b7e-9b1a-2f6c1d8e5a01");
 
-/// Test project with a manifest covering the cooked paths the tests
-/// register (the manifest is mandatory — ids always come from it).
+/// Test project with a manifest covering the cooked assets the tests load.
 fn testProject(tmp: *std.testing.TmpDir) !Project {
     try tmp.dir.createDirPath(testing.io, ".zephyr/cooked");
 
@@ -913,19 +907,6 @@ fn testProject(tmp: *std.testing.TmpDir) !Project {
         .manifest = .{ .project_id = .zero },
         .root_dir = try std.Io.Dir.openDir(tmp.dir, testing.io, ".", .{}),
     };
-}
-
-fn writeTestAsset(tmp: *std.testing.TmpDir, path: []const u8, bytes: []const u8) !void {
-    try tmp.dir.createDirPath(testing.io, ".zephyr/cooked");
-    const cooked_path = try std.fmt.allocPrint(testing.allocator, ".zephyr/cooked/{s}", .{path});
-    defer testing.allocator.free(cooked_path);
-
-    const file = try tmp.dir.createFile(testing.io, cooked_path, .{});
-    var buf: [64]u8 = undefined;
-    var writer = file.writer(testing.io, &buf);
-    try writer.interface.writeAll(bytes);
-    try writer.interface.flush();
-    file.close(testing.io);
 }
 
 test "init opens cooked assets from project root" {
@@ -949,13 +930,11 @@ test "init opens cooked assets from project root" {
     try testing.expectEqualStrings(".zephyr/cooked", manager.source.root);
 }
 
-test "register deduplicates normalized paths before worker load finishes" {
+test "registerId deduplicates requests before worker load finishes" {
     if (@import("builtin").single_threaded) return error.SkipZigTest;
 
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
-    try writeTestAsset(&tmp, "asset.zmesh", "not a cooked mesh");
-
     var project = try testProject(&tmp);
     defer project.deinit(testing.allocator, testing.io);
 
@@ -966,33 +945,12 @@ test "register deduplicates normalized paths before worker load finishes" {
     );
     defer manager.deinit();
 
-    const first = try manager.register(Mesh, "./asset.zmesh");
-    const second = try manager.register(Mesh, "asset.zmesh");
+    const first = try manager.registerId(Mesh, mesh_manifest_id);
+    const second = try manager.registerId(Mesh, mesh_manifest_id);
 
     try std.testing.expectEqual(first, second);
 
     manager.wait(first) catch {};
-}
-
-test "register rejects invalid and mismatched asset paths before queuing work" {
-    if (@import("builtin").single_threaded) return error.SkipZigTest;
-
-    var tmp = testing.tmpDir(.{});
-    defer tmp.cleanup();
-
-    var project = try testProject(&tmp);
-    defer project.deinit(testing.allocator, testing.io);
-
-    var manager = try AssetManager.init(
-        std.testing.allocator,
-        std.testing.io,
-        &project,
-    );
-    defer manager.deinit();
-
-    try std.testing.expectError(AssetError.InvalidPath, manager.register(Mesh, "../escape.zmesh"));
-    try std.testing.expectError(AssetError.UnsupportedAssetKind, manager.register(Mesh, "unknown.asset"));
-    try std.testing.expectError(AssetError.WrongAssetKind, manager.register(Texture2D, "mesh.zmesh"));
 }
 
 test "worker load failures are observable through wait and state" {
@@ -1011,35 +969,31 @@ test "worker load failures are observable through wait and state" {
     );
     defer manager.deinit();
 
-    const id = try manager.register(Mesh, "missing.zmesh");
+    const id = try manager.registerId(Mesh, AssetId.parseComptime("b7e9b1a2-f6c1-4d8e-9a01-3f2a77f19c44"));
     try std.testing.expectError(AssetError.AssetNotFound, manager.wait(id));
 }
 
-test "register resolves the durable id from the asset manifest" {
+test "registerId resolves the durable id from the asset manifest" {
     if (@import("builtin").single_threaded) return error.SkipZigTest;
 
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
-    try writeTestAsset(&tmp, "asset.zmesh", "not a cooked mesh");
-
     var project = try testProject(&tmp);
     defer project.deinit(testing.allocator, testing.io);
 
     var manager = try AssetManager.init(testing.allocator, testing.io, &project);
     defer manager.deinit();
 
-    // Path registration returns the manifest id, not a random one.
-    const id = try manager.register(Mesh, "./asset.zmesh");
+    const id = try manager.registerId(Mesh, mesh_manifest_id);
     try testing.expect(id.eql(mesh_manifest_id));
 
-    // Id registration resolves the cooked path and dedupes to the same record.
+    // Repeated id registration dedupes to the same record.
     const by_id = try manager.registerId(Mesh, mesh_manifest_id);
     try testing.expect(by_id.eql(id));
 
-    // Kind mismatches, unknown ids, and unmanifested paths are rejected.
+    // Kind mismatches and unknown ids are rejected.
     try testing.expectError(AssetError.WrongAssetKind, manager.registerId(Texture2D, mesh_manifest_id));
     try testing.expectError(AssetError.AssetNotFound, manager.registerId(Mesh, AssetId.parseComptime("8c1d6602-b3f4-4910-9c44-4b7e9b1a2f6c")));
-    try testing.expectError(AssetError.AssetNotFound, manager.register(Mesh, "unmanifested.zmesh"));
 
     manager.wait(id) catch {};
 }
