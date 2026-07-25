@@ -1,7 +1,8 @@
 const std = @import("std");
 
-const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
 const SchemaRegistry = @import("../scene/schema_registry.zig").SchemaRegistry;
+const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
+const Project = @import("../project/project.zig").Project;
 
 pub const RenderViewport = struct {
     width: u32 = 1,
@@ -17,6 +18,7 @@ pub fn RuntimeContext(comptime Ecs: type) type {
         allocator: std.mem.Allocator,
         io: std.Io,
         assets: *AssetManager,
+        project: *const Project,
         schemas: *const SchemaRegistry(Ecs),
         render_viewport: RenderViewport = .{},
         world: Ecs.World,
