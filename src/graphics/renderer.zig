@@ -55,8 +55,11 @@ pub fn Renderer(comptime Ecs: type) type {
                 material.bind();
                 material.setUniform("u_view", view);
                 material.setUniform("u_projection", projection);
-                material.setUniform("u_model", transform.modelMatrix());
-                mesh.draw();
+                const entity_transform = transform.modelMatrix();
+                for (mesh.parts) |*part| {
+                    material.setUniform("u_model", part.transform.mul(entity_transform));
+                    part.draw();
+                }
             }
         }
     };

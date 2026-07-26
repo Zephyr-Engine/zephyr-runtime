@@ -17,7 +17,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, opts: OpenProjectOptions) 
     const root_dir = try std.Io.Dir.openDirAbsolute(io, opts.root_path, .{});
     errdefer root_dir.close(io);
 
-    const manifest = try ProjectManifest.loadFromDir(
+    var manifest = try ProjectManifest.loadFromDir(
         allocator,
         io,
         root_dir,

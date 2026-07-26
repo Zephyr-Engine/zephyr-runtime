@@ -579,7 +579,7 @@ pub const AssetManager = struct {
 
         const mesh = try self.allocator.create(Mesh);
         errdefer self.allocator.destroy(mesh);
-        mesh.* = try Mesh.loadFromZMesh(cooked_mesh);
+        mesh.* = try Mesh.loadFromZMesh(self.allocator, cooked_mesh);
         errdefer mesh.deinit();
 
         return mesh;
@@ -620,13 +620,12 @@ pub const AssetManager = struct {
 
     fn finalizeMaterial(self: *AssetManager, record: *AssetRecord) !FinalizeResult {
         const material_source_ptr = try cookedMaterialSource(record);
-        const record_path = record.path orelse return AssetError.LoadFailed;
 
-        const shader = try self.materialShaderReady(record_path, material_source_ptr) orelse return .waiting;
+        const shader = try self.materialShaderReady(material_source_ptr) orelse return .waiting;
 
         var texture_bindings: std.ArrayList(Material.TextureBinding) = .empty;
         errdefer texture_bindings.deinit(self.allocator);
-        if (!try self.materialTexturesReady(record_path, material_source_ptr, &texture_bindings)) return .waiting;
+        if (!try self.materialTexturesReady(material_source_ptr, &texture_bindings)) return .waiting;
 
         const cooked_asset = record.cooked orelse return AssetError.LoadFailed;
         record.cooked = null;
@@ -659,21 +658,12 @@ pub const AssetManager = struct {
 
     fn materialShaderReady(
         self: *AssetManager,
-        record_path: []const u8,
         material_source: *const zimp.Zamat,
     ) !?*Shader {
-        const vertex_path = try zimp.path.resolveRelativeVirtual(
-            self.allocator,
-            record_path,
-            material_source.vertex_shader_path,
-        );
+        const vertex_path = try materialDependencyPath(self.allocator, material_source.vertex_shader_path);
         defer self.allocator.free(vertex_path);
 
-        const fragment_path = try zimp.path.resolveRelativeVirtual(
-            self.allocator,
-            record_path,
-            material_source.fragment_shader_path,
-        );
+        const fragment_path = try materialDependencyPath(self.allocator, material_source.fragment_shader_path);
         defer self.allocator.free(fragment_path);
 
         return self.loadShaderProgramReady(vertex_path, fragment_path);
@@ -681,18 +671,13 @@ pub const AssetManager = struct {
 
     fn materialTexturesReady(
         self: *AssetManager,
-        record_path: []const u8,
         material_source: *const zimp.Zamat,
         out_bindings: *std.ArrayList(Material.TextureBinding),
     ) !bool {
         for (material_source.texture_slots) |slot| {
             if (slot.cooked_path.len == 0) continue;
 
-            const texture_path = try zimp.path.resolveRelativeVirtual(
-                self.allocator,
-                record_path,
-                slot.cooked_path,
-            );
+            const texture_path = try materialDependencyPath(self.allocator, slot.cooked_path);
             defer self.allocator.free(texture_path);
 
             const texture_id = try self.requestKind(.texture, texture_path);
@@ -828,6 +813,12 @@ fn assetPath(record: *const AssetRecord) []const u8 {
     return record.path orelse "<generated shader program>";
 }
 
+/// Dependencies serialized in a cooked material are virtual paths rooted at
+/// the cooked asset directory, not paths relative to the material itself.
+fn materialDependencyPath(allocator: std.mem.Allocator, serialized_path: []const u8) ![]u8 {
+    return zimp.path.normalizeVirtual(allocator, serialized_path);
+}
+
 fn cookedMaterialSource(record: *AssetRecord) !*zimp.Zamat {
     const cooked_ptr = &(record.cooked orelse return AssetError.LoadFailed);
     return switch (cooked_ptr.*) {
@@ -890,7 +881,24 @@ test "makeShaderProgramKey includes both stage paths" {
 
 const testing = std.testing;
 
+test "cooked material dependencies remain project-root paths" {
+    const shader_path = try materialDependencyPath(testing.allocator, "shaders/basic.vert.zshdr");
+    defer testing.allocator.free(shader_path);
+    try testing.expectEqualStrings("shaders/basic.vert.zshdr", shader_path);
+
+    const texture_path = try materialDependencyPath(testing.allocator, "textures/brick.ztex");
+    defer testing.allocator.free(texture_path);
+    try testing.expectEqualStrings("textures/brick.ztex", texture_path);
+}
+
 const mesh_manifest_id = AssetId.parseComptime("3f2a77f1-9c44-4b7e-9b1a-2f6c1d8e5a01");
+
+fn testProjectManifest() !zimp.ProjectManifest {
+    const source: zimp.ProjectManifest = .{
+        .project_id = .parseComptime("bf5a424f-e93e-4977-9a7a-0c522318dfdc"),
+    };
+    return source.cloneOwned(testing.allocator);
+}
 
 /// Test project with a manifest covering the cooked assets the tests load.
 fn testProject(tmp: *std.testing.TmpDir) !Project {
@@ -904,7 +912,7 @@ fn testProject(tmp: *std.testing.TmpDir) !Project {
     try zimp.manifest.codec.writeToDir(testing.allocator, testing.io, tmp.dir, ".zephyr/assets.zmanifest", &fixture);
 
     return .{
-        .manifest = .{ .project_id = .zero },
+        .manifest = try testProjectManifest(),
         .root_dir = try std.Io.Dir.openDir(tmp.dir, testing.io, ".", .{}),
     };
 }
@@ -1006,7 +1014,7 @@ test "init fails without an asset manifest" {
     try tmp.dir.createDirPath(testing.io, ".zephyr/cooked");
 
     var project: Project = .{
-        .manifest = .{ .project_id = .zero },
+        .manifest = try testProjectManifest(),
         .root_dir = try std.Io.Dir.openDir(tmp.dir, testing.io, ".", .{}),
     };
     defer project.deinit(testing.allocator, testing.io);
