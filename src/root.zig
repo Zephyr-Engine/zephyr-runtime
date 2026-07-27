@@ -18,10 +18,11 @@ pub const Framebuffer = @import("graphics/opengl/frame_buffer.zig").FrameBuffer;
 pub const VertexArray = @import("graphics/opengl/vertex_array.zig").VertexArray;
 
 pub const AssetManager = @import("assets/asset_manager.zig").AssetManager;
-pub const AssetKind = @import("assets/uuid.zig").AssetKind;
-pub const AssetId = @import("assets/uuid.zig").AssetId;
-pub const AssetRef = @import("assets/uuid.zig").AssetRef;
-pub const Uuid = @import("assets/uuid.zig").Uuid;
+pub const AssetRef = @import("assets/asset_manager.zig").AssetRef;
+pub const AssetKind = zimp.AssetKind;
+pub const AssetId = zimp.AssetId;
+pub const Uuid = zimp.Uuid;
+
 pub const AssetRoots = @import("assets/source.zig").AssetRoots;
 pub const AssetError = @import("assets/source.zig").AssetError;
 
@@ -56,7 +57,6 @@ test {
     _ = @import("scene/manager.zig");
     _ = @import("scene/camera.zig");
     _ = @import("core/runtime_context.zig");
-    _ = @import("assets/uuid.zig");
     _ = @import("assets/source.zig");
     _ = @import("assets/asset_manager.zig");
     _ = @import("core/runtime_context.zig");

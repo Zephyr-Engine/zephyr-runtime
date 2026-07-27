@@ -91,7 +91,7 @@ pub const FileSource = struct {
         io: std.Io,
         normalized_path: []const u8,
     ) ![]u8 {
-        zimp.runtime.validateVirtualPath(normalized_path) catch return AssetError.InvalidPath;
+        zimp.path.validateVirtual(normalized_path) catch return AssetError.InvalidPath;
         return self.dir.readFileAlloc(io, normalized_path, allocator, .limited(max_asset_bytes)) catch |err| switch (err) {
             error.FileNotFound, error.NotDir, error.IsDir => AssetError.AssetNotFound,
             error.OutOfMemory => AssetError.OutOfMemory,

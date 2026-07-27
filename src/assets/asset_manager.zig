@@ -1,11 +1,10 @@
 const std = @import("std");
 const zimp = @import("zimp");
 
-const asset_uuid = @import("uuid.zig");
 const source_mod = @import("source.zig");
 
-const AssetId = asset_uuid.AssetId;
-const AssetKind = asset_uuid.AssetKind;
+const AssetId = zimp.AssetId;
+const AssetKind = zimp.AssetKind;
 const AssetRoots = source_mod.AssetRoots;
 const AssetSource = source_mod.AssetSource;
 const AssetError = source_mod.AssetError;
@@ -15,12 +14,16 @@ const Material = @import("../graphics/material.zig").Material;
 const Shader = @import("../graphics/opengl/shader.zig").Shader;
 const Texture2D = @import("../graphics/opengl/texture.zig").Texture2D;
 
+pub const AssetRef = struct {
+    kind: AssetKind,
+    id: AssetId,
+};
+
 pub const Asset = union(AssetKind) {
     mesh: *Mesh,
-    material: *Material,
     texture: *Texture2D,
     shader_stage: void,
-    shader_program: *Shader,
+    material: *Material,
 
     fn deinit(self: Asset, allocator: std.mem.Allocator) void {
         switch (self) {
@@ -37,10 +40,6 @@ pub const Asset = union(AssetKind) {
                 allocator.destroy(texture);
             },
             .shader_stage => {},
-            .shader_program => |shader| {
-                shader.deinit();
-                allocator.destroy(shader);
-            },
         }
     }
 };
@@ -57,7 +56,7 @@ pub const AssetManager = struct {
     assets: std.AutoHashMap(AssetId, Asset),
     paths: std.StringHashMap(AssetId),
     path_keys: std.AutoHashMap(AssetId, PathKey),
-    shader_programs: std.StringHashMap(AssetId),
+    shader_programs: std.StringHashMap(*Shader),
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -71,7 +70,7 @@ pub const AssetManager = struct {
             .assets = std.AutoHashMap(AssetId, Asset).init(allocator),
             .paths = std.StringHashMap(AssetId).init(allocator),
             .path_keys = std.AutoHashMap(AssetId, PathKey).init(allocator),
-            .shader_programs = std.StringHashMap(AssetId).init(allocator),
+            .shader_programs = std.StringHashMap(*Shader).init(allocator),
         };
     }
 
@@ -102,9 +101,11 @@ pub const AssetManager = struct {
         self.path_keys.deinit();
         self.paths.deinit();
 
-        var shader_it = self.shader_programs.keyIterator();
+        var shader_it = self.shader_programs.iterator();
         while (shader_it.next()) |key| {
-            self.allocator.free(key.*);
+            key.value_ptr.*.deinit();
+            self.allocator.destroy(key.value_ptr.*);
+            self.allocator.free(key.key_ptr.*);
         }
         self.shader_programs.deinit();
 
@@ -151,10 +152,6 @@ pub const AssetManager = struct {
                 else => null,
             },
             .shader_stage => null,
-            .shader_program => switch (asset) {
-                .shader_program => |shader| shader,
-                else => null,
-            },
         };
     }
 
@@ -190,7 +187,6 @@ pub const AssetManager = struct {
             .material => .{ .material = try self.createMaterial(normalized_path) },
             .texture => .{ .texture = try self.createTexture(normalized_path) },
             .shader_stage => AssetError.WrongAssetKind,
-            .shader_program => AssetError.WrongAssetKind,
         };
     }
 
@@ -204,7 +200,7 @@ pub const AssetManager = struct {
 
         const mesh = try self.allocator.create(Mesh);
         errdefer self.allocator.destroy(mesh);
-        mesh.* = try Mesh.loadFromZMesh(cooked_mesh);
+        mesh.* = try Mesh.loadFromZmesh(self.allocator, cooked_mesh);
         errdefer mesh.deinit();
 
         return mesh;
@@ -219,16 +215,14 @@ pub const AssetManager = struct {
         var source_owned = true;
         errdefer if (source_owned) material_source.deinit(self.allocator);
 
-        const vertex_path = try zimp.runtime.resolveRelativeVirtualPath(
-            self.allocator,
-            normalized_path,
+        const vertex_path = try self.normalizeExpected(
             material_source.vertex_shader_path,
+            .shader_stage,
         );
         defer self.allocator.free(vertex_path);
-        const fragment_path = try zimp.runtime.resolveRelativeVirtualPath(
-            self.allocator,
-            normalized_path,
+        const fragment_path = try self.normalizeExpected(
             material_source.fragment_shader_path,
+            .shader_stage,
         );
         defer self.allocator.free(fragment_path);
 
@@ -242,10 +236,9 @@ pub const AssetManager = struct {
                 continue;
             }
 
-            const texture_path = try zimp.runtime.resolveRelativeVirtualPath(
-                self.allocator,
-                normalized_path,
+            const texture_path = try self.normalizeExpected(
                 slot.cooked_path,
+                .texture,
             );
             defer self.allocator.free(texture_path);
 
@@ -307,13 +300,13 @@ pub const AssetManager = struct {
         var key_owned = true;
         defer if (key_owned) self.allocator.free(lookup_key);
 
-        if (self.shader_programs.get(lookup_key)) |id| {
-            return self.get(Shader, id).?;
+        if (self.shader_programs.get(lookup_key)) |shader| {
+            return shader;
         }
 
-        var vertex_asset = try self.loadCookedAsset(normalized_vertex, .shader);
+        var vertex_asset = try self.loadCookedAsset(normalized_vertex, .shader_stage);
         defer vertex_asset.deinit(self.allocator);
-        var fragment_asset = try self.loadCookedAsset(normalized_fragment, .shader);
+        var fragment_asset = try self.loadCookedAsset(normalized_fragment, .shader_stage);
         defer fragment_asset.deinit(self.allocator);
 
         const vertex_stage = switch (vertex_asset) {
@@ -334,11 +327,7 @@ pub const AssetManager = struct {
         shader.* = try linkShaderProgram(self.allocator, vertex_stage, fragment_stage);
         errdefer shader.deinit();
 
-        const id = try self.newAssetId();
-        try self.assets.put(id, .{ .shader_program = shader });
-        errdefer _ = self.assets.remove(id);
-
-        try self.shader_programs.put(lookup_key, id);
+        try self.shader_programs.put(lookup_key, shader);
         key_owned = false;
 
         return shader;
@@ -347,19 +336,19 @@ pub const AssetManager = struct {
     fn loadCookedAsset(
         self: *AssetManager,
         normalized_path: []const u8,
-        expected: zimp.runtime.AssetType,
+        expected: AssetKind,
     ) !zimp.runtime.Asset {
         const bytes = try self.source.readAlloc(self.allocator, self.io, normalized_path);
         defer self.allocator.free(bytes);
 
         var reader = std.Io.Reader.fixed(bytes);
-        return zimp.runtime.loadFromReader(self.allocator, &reader, expected);
+        return zimp.runtime.loadFromReader(self.allocator, &reader, expected.toAssetType());
     }
 
     fn normalizeExpected(self: *AssetManager, raw_path: []const u8, expected: AssetKind) ![]u8 {
-        const normalized = zimp.runtime.normalizeVirtualPath(self.allocator, raw_path) catch return AssetError.InvalidPath;
+        const normalized = zimp.path.normalizeVirtual(self.allocator, raw_path) catch return AssetError.InvalidPath;
         errdefer self.allocator.free(normalized);
-        const actual = asset_uuid.inferKind(normalized) orelse return AssetError.UnsupportedAssetKind;
+        const actual = inferKind(normalized) orelse return AssetError.UnsupportedAssetKind;
         if (actual != expected) return AssetError.WrongAssetKind;
         return normalized;
     }
@@ -367,12 +356,17 @@ pub const AssetManager = struct {
     fn newAssetId(self: *AssetManager) !AssetId {
         while (true) {
             const random_source: std.Random.IoSource = .{ .io = self.io };
-            const id = asset_uuid.Uuid.v4(random_source.interface());
+            const id = AssetId.v4(random_source.interface());
             if (id.isZero()) continue;
             if (!self.assets.contains(id)) return id;
         }
     }
 };
+
+fn inferKind(path: []const u8) ?AssetKind {
+    const asset_type = zimp.runtime.detectType(path) orelse return null;
+    return AssetKind.fromAssetType(asset_type);
+}
 
 fn linkShaderProgram(
     allocator: std.mem.Allocator,

@@ -52,7 +52,7 @@ pub const Material = struct {
 
     pub fn bind(self: *const Material) void {
         self.shader.bind();
-        applyAlphaMode(self.source.alpha_mode);
+        applyAlphaMode(self.source.render_state.alpha_mode);
 
         for (self.texture_bindings) |*binding| {
             binding.texture.bind(binding.unit);
@@ -110,7 +110,7 @@ pub const Material = struct {
     }
 };
 
-fn applyAlphaMode(mode: anytype) void {
+fn applyAlphaMode(mode: zimp.AlphaMode) void {
     switch (mode) {
         .solid => {
             gl.glDisable(gl.GL_BLEND);

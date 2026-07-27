@@ -6,11 +6,33 @@ const IndexBuffer = @import("opengl/buffer.zig").IndexBuffer;
 const VertexArray = @import("opengl/vertex_array.zig").VertexArray;
 
 pub const Mesh = struct {
-    vao: VertexArray,
+    vaos: []VertexArray,
     aabb_min: [3]f32,
     aabb_max: [3]f32,
+    allocator: std.mem.Allocator,
 
-    pub fn loadFromZMesh(mesh: ZMesh) !Mesh {
+    pub fn loadFromZmesh(allocator: std.mem.Allocator, mesh: ZMesh) !Mesh {
+        const vaos = try allocator.alloc(VertexArray, mesh.parts.len);
+
+        var aabb_min = mesh.parts[0].mesh.aabb_min;
+        var aabb_max = mesh.parts[0].mesh.aabb_max;
+        for (mesh.parts, vaos) |part, *vao| {
+            vao.* = try loadPart(&part.mesh);
+            for (0..3) |axis| {
+                aabb_min[axis] = @min(aabb_min[axis], part.mesh.aabb_min[axis]);
+                aabb_max[axis] = @max(aabb_max[axis], part.mesh.aabb_max[axis]);
+            }
+        }
+
+        return .{
+            .vaos = vaos,
+            .aabb_min = aabb_min,
+            .aabb_max = aabb_max,
+            .allocator = allocator,
+        };
+    }
+
+    pub fn loadPart(mesh: *const zimp.formats.zmesh.MeshPart) !VertexArray {
         var vao = try VertexArray.init();
         errdefer vao.deinit();
 
@@ -73,18 +95,19 @@ pub const Mesh = struct {
             vao.setIndexBuffer(try IndexBuffer.initU32(indices));
         }
 
-        return .{
-            .vao = vao,
-            .aabb_min = mesh.aabb_min,
-            .aabb_max = mesh.aabb_max,
-        };
+        return vao;
     }
 
     pub fn draw(self: *const Mesh) void {
-        self.vao.draw();
+        for (self.vaos) |vao| {
+            vao.draw();
+        }
     }
 
     pub fn deinit(self: *Mesh) void {
-        self.vao.deinit();
+        for (self.vaos) |*vao| {
+            vao.deinit();
+        }
+        self.allocator.free(self.vaos);
     }
 };
