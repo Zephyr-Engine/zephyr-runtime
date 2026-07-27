@@ -20,10 +20,7 @@
             .url = "git+https://github.com/Zephyr-Engine/zcs.git#b9d9df018a8c09c866bf3dfa6f39ce66a73cca7a",
             .hash = "zcs-0.0.0-ypv9mwRcAgDZ4xVozzASVBPT0DA7kZGF6wJGXOmvYCMu",
         },
-        .zimp = .{
-            .url = "git+https://github.com/Zephyr-Engine/zimp.git#89ac615ecc871eb6eef9494c0f09092ad4e4bbc3",
-            .hash = "zimp-0.0.0-jO8AWhCCEgDDP601PVNr1FViSxIKuAurOCyHq70OC99v",
-        },
+        .zimp = .{ .path = "git+https://github.com/Zephyr-Engine/zimp.git#6e1c873e826dcb5469c77bd1b50c5cb2632d7e54", },
     },
     .paths = .{
         "build.zig",

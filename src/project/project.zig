@@ -12,7 +12,7 @@ pub const Project = struct {
         return zimp.WatchHandle.start(
             allocator,
             io,
-            self.manifest,
+            &self.manifest,
             self.root_dir,
             .{},
             .{},
