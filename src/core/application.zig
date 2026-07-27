@@ -5,7 +5,7 @@ const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
 const RuntimeContext = @import("runtime_context.zig").RuntimeContext;
 const RenderViewport = @import("runtime_context.zig").RenderViewport;
 const SceneManager = @import("../scene/manager.zig").SceneManager;
-const AssetRoots = @import("../assets/source.zig").AssetRoots;
+const Project = @import("../project/project.zig").Project;
 const Scene = @import("../scene/scene.zig").Scene;
 const Input = @import("input.zig").InputManager;
 const Time = @import("time.zig").Time;
@@ -33,7 +33,7 @@ pub const Application = struct {
         allocator: std.mem.Allocator,
         io: std.Io,
         params: WindowParams,
-        asset_roots: AssetRoots,
+        project: *const Project,
     ) !*Application {
         const window = Window.init(allocator, params) catch |err| {
             std.log.err("Failed to initialize window: {}", .{err});
@@ -44,7 +44,7 @@ pub const Application = struct {
         var assets = try AssetManager.initFiles(
             allocator,
             io,
-            asset_roots,
+            project,
         );
         errdefer assets.deinit();
 

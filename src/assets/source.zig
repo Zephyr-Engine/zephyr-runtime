@@ -10,11 +10,6 @@ pub const AssetError = error{
     OutOfMemory,
 };
 
-pub const AssetRoots = struct {
-    cooked_root: []const u8,
-    source_root: ?[]const u8 = null,
-};
-
 pub const AssetSource = struct {
     ptr: *anyopaque,
     vtable: *const VTable,
@@ -66,12 +61,12 @@ pub const FileSource = struct {
 
     pub fn createSource(
         allocator: std.mem.Allocator,
-        io: std.Io,
         root: []const u8,
+        dir: std.Io.Dir,
     ) !AssetSource {
         const source_ptr = try allocator.create(FileSource);
         errdefer allocator.destroy(source_ptr);
-        source_ptr.* = try FileSource.init(allocator, io, root);
+        source_ptr.* = try FileSource.initFromDir(allocator, root, dir);
         return source_ptr.source();
     }
 

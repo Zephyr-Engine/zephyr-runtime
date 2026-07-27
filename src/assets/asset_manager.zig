@@ -5,11 +5,11 @@ const source_mod = @import("source.zig");
 
 const AssetId = zimp.AssetId;
 const AssetKind = zimp.AssetKind;
-const AssetRoots = source_mod.AssetRoots;
 const AssetSource = source_mod.AssetSource;
 const AssetError = source_mod.AssetError;
 const FileSource = source_mod.FileSource;
 const Mesh = @import("../graphics/mesh.zig").Mesh;
+const Project = @import("../project/project.zig").Project;
 const Material = @import("../graphics/material.zig").Material;
 const Shader = @import("../graphics/opengl/shader.zig").Shader;
 const Texture2D = @import("../graphics/opengl/texture.zig").Texture2D;
@@ -77,12 +77,20 @@ pub const AssetManager = struct {
     pub fn initFiles(
         allocator: std.mem.Allocator,
         io: std.Io,
-        roots: AssetRoots,
+        project: *const Project,
     ) !AssetManager {
+        const cooked_dir = try std.Io.Dir.openDir(
+            project.root_dir,
+            io,
+            project.manfiest.cookedAssetsPath(),
+            .{},
+        );
+        errdefer cooked_dir.close(io);
+
         const source = try FileSource.createSource(
             allocator,
-            io,
-            roots.cooked_root,
+            project.manfiest.cookedAssetsPath(),
+            cooked_dir,
         );
         return init(allocator, io, source);
     }

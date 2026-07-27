@@ -23,8 +23,11 @@ pub const AssetKind = zimp.AssetKind;
 pub const AssetId = zimp.AssetId;
 pub const Uuid = zimp.Uuid;
 
-pub const AssetRoots = @import("assets/source.zig").AssetRoots;
 pub const AssetError = @import("assets/source.zig").AssetError;
+
+pub const ProjectManifest = zimp.ProjectManifest;
+pub const Project = @import("project/project.zig").Project;
+pub const openProject = @import("project/open.zig").open;
 
 const math = @import("core/math.zig");
 pub const Vec3 = math.Vec3;
