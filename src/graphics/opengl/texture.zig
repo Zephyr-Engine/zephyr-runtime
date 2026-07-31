@@ -207,3 +207,41 @@ fn compressedInternalFormat(format: anytype, color_space: anytype) ?u32 {
         else => null,
     };
 }
+
+test "texture format translation covers every cooked texel format" {
+    const Case = struct {
+        format: zimp.TexelFormat,
+        color_space: zimp.ColorSpace,
+        internal: u32,
+        external: ?u32 = null,
+        ty: ?u32 = null,
+    };
+    const cases = [_]Case{
+        .{ .format = .rgba8, .color_space = .linear, .internal = gl.GL_RGBA8, .external = gl.GL_RGBA, .ty = gl.GL_UNSIGNED_BYTE },
+        .{ .format = .rgba8, .color_space = .srgb, .internal = gl.GL_SRGB8_ALPHA8, .external = gl.GL_RGBA, .ty = gl.GL_UNSIGNED_BYTE },
+        .{ .format = .rg8, .color_space = .linear, .internal = gl.GL_RG8, .external = gl.GL_RG, .ty = gl.GL_UNSIGNED_BYTE },
+        .{ .format = .r8, .color_space = .linear, .internal = gl.GL_R8, .external = gl.GL_RED, .ty = gl.GL_UNSIGNED_BYTE },
+        .{ .format = .rgb16f, .color_space = .linear, .internal = gl.GL_RGB16F, .external = gl.GL_RGB, .ty = gl.GL_HALF_FLOAT },
+        .{ .format = .bc4, .color_space = .linear, .internal = gl.GL_COMPRESSED_RED_RGTC1 },
+        .{ .format = .bc5, .color_space = .linear, .internal = gl.GL_COMPRESSED_RG_RGTC2 },
+        .{ .format = .bc7, .color_space = .linear, .internal = gl.GL_COMPRESSED_RGBA_BPTC_UNORM },
+        .{ .format = .bc7, .color_space = .srgb, .internal = gl.GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM },
+        .{ .format = .bc6h, .color_space = .linear, .internal = gl.GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT },
+    };
+
+    for (cases) |case| {
+        if (case.external) |external| {
+            const actual = uncompressedFormat(case.format, case.color_space).?;
+            try std.testing.expectEqual(case.internal, actual.internal);
+            try std.testing.expectEqual(external, actual.format);
+            try std.testing.expectEqual(case.ty.?, actual.ty);
+        } else {
+            try std.testing.expectEqual(case.internal, compressedInternalFormat(case.format, case.color_space).?);
+        }
+    }
+
+    inline for (@typeInfo(zimp.TexelFormat).@"enum".fields) |field| {
+        const format: zimp.TexelFormat = @enumFromInt(field.value);
+        try std.testing.expect(uncompressedFormat(format, .linear) != null or compressedInternalFormat(format, .linear) != null);
+    }
+}

@@ -131,3 +131,19 @@ test "collector rejects zero frame deltas" {
     try std.testing.expectEqual(@as(f32, 0), stats.fps);
     try std.testing.expectEqual(@as(f32, 0), stats.frame_time_ms);
 }
+
+test "collector rejects non-finite timings and clears values when disabled" {
+    var collector: Collector = .{};
+    collector.setEnabled(true);
+    collector.recordCpuFrame(std.math.nan(f32), -1);
+
+    var stats = collector.snapshot().?;
+    try std.testing.expectEqual(@as(f32, 0), stats.fps);
+    try std.testing.expectEqual(@as(f32, 0), stats.frame_time_ms);
+    try std.testing.expectEqual(@as(f32, 0), stats.cpu_time_ms);
+
+    collector.setEnabled(false);
+    collector.setEnabled(true);
+    stats = collector.snapshot().?;
+    try std.testing.expectEqual(DebugStats{}, stats);
+}

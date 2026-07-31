@@ -167,10 +167,10 @@ fn testDocument(entities: []zimp.scene.SceneEntity) zimp.scene.SceneDocument {
 fn testProjectWithAssets(tmp: *testing.TmpDir) !Project {
     try tmp.dir.createDirPath(testing.io, ".zephyr/cooked");
     var manifest = try zimp.manifest.model.testManifest(testing.allocator, &.{
-        .{ .id = "8d522c0b-45e6-4e54-8c04-5f1bf913d1be", .source_path = "meshes/test.glb", .cooked_path = "test.zmesh" },
         .{ .id = "7e6d1a1f-209f-4945-a2f5-283c895803cf", .kind = .material, .source_path = "materials/test.mat", .cooked_path = "test.zamat" },
-        .{ .id = "f443d495-a80f-4a1c-ad87-6fe35159d17d", .kind = .texture, .source_path = "textures/test.png", .cooked_path = "test.ztex" },
+        .{ .id = "8d522c0b-45e6-4e54-8c04-5f1bf913d1be", .source_path = "meshes/test.glb", .cooked_path = "test.zmesh" },
         .{ .id = "c7daab84-6540-4980-a9a4-ca7fb4dbd64c", .kind = .shader_stage, .source_path = "shaders/test.vert", .cooked_path = "test.zshdr" },
+        .{ .id = "f443d495-a80f-4a1c-ad87-6fe35159d17d", .kind = .texture, .source_path = "textures/test.png", .cooked_path = "test.ztex" },
     });
     defer manifest.deinit();
     try zimp.manifest.codec.writeToDir(testing.allocator, testing.io, tmp.dir, ".zephyr/assets.zmanifest", &manifest);
@@ -182,9 +182,9 @@ fn testProjectWithAssets(tmp: *testing.TmpDir) !Project {
 }
 
 test "SceneRuntimeInstance preserves scene entity references and resolves them through the instance" {
-    const fields = [_]zimp.scene.SceneField{.{ .number = 1, .value = .{ .entity_ref = test_target_id } }};
-    const components = [_]zimp.scene.SceneComponent{.{ .type_id = reference_component_id, .fields = &fields }};
-    const entities = [_]zimp.scene.SceneEntity{
+    var fields = [_]zimp.scene.SceneField{.{ .number = 1, .value = .{ .entity_ref = test_target_id } }};
+    var components = [_]zimp.scene.SceneComponent{.{ .type_id = reference_component_id, .fields = &fields }};
+    var entities = [_]zimp.scene.SceneEntity{
         .{ .id = test_source_id, .name = "source", .components = &components, .prefab = .{} },
         .{ .id = test_target_id, .name = "target", .components = &.{}, .prefab = .{} },
     };
@@ -240,8 +240,8 @@ test "SceneRuntimeInstance instantiates an empty document" {
 }
 
 test "SceneRuntimeInstance reports an unregistered component type" {
-    const components = [_]zimp.scene.SceneComponent{.{ .type_id = unknown_component_id, .fields = &.{} }};
-    const entities = [_]zimp.scene.SceneEntity{.{ .id = test_source_id, .name = "source", .components = &components, .prefab = .{} }};
+    var components = [_]zimp.scene.SceneComponent{.{ .type_id = unknown_component_id, .fields = &.{} }};
+    var entities = [_]zimp.scene.SceneEntity{.{ .id = test_source_id, .name = "source", .components = &components, .prefab = .{} }};
     var scene = testDocument(&entities);
     defer scene.deinit();
     var world = try initTestWorld();
@@ -258,11 +258,11 @@ test "SceneRuntimeInstance reports an unregistered component type" {
 }
 
 test "SceneRuntimeInstance applies the document active camera" {
-    const components = [_]zimp.scene.SceneComponent{
+    var components = [_]zimp.scene.SceneComponent{
         .{ .type_id = transform_component_id, .fields = &.{} },
         .{ .type_id = camera_component_id, .fields = &.{} },
     };
-    const entities = [_]zimp.scene.SceneEntity{.{ .id = test_source_id, .name = "camera", .components = &components, .prefab = .{} }};
+    var entities = [_]zimp.scene.SceneEntity{.{ .id = test_source_id, .name = "camera", .components = &components, .prefab = .{} }};
     var scene = testDocument(&entities);
     defer scene.deinit();
     scene.active_camera = test_source_id;
@@ -301,23 +301,23 @@ test "SceneRuntimeInstance registers asset references without loading them" {
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
     var project = try testProjectWithAssets(&tmp);
-    defer project.deinit(testing.allocator, testing.io);
+    defer project.root_dir.close(testing.io);
     var assets = try AssetManager.init(testing.allocator, testing.io, &project);
     defer assets.deinit();
 
-    const fields = [_]zimp.scene.SceneField{
+    var fields = [_]zimp.scene.SceneField{
         .{ .number = 1, .value = .{ .asset_ref = test_mesh_id } },
         .{ .number = 2, .value = .{ .asset_ref = test_material_id } },
     };
-    const remaining_fields = [_]zimp.scene.SceneField{
+    var remaining_fields = [_]zimp.scene.SceneField{
         .{ .number = 1, .value = .{ .asset_ref = test_texture_id } },
         .{ .number = 2, .value = .{ .asset_ref = test_shader_id } },
     };
-    const components = [_]zimp.scene.SceneComponent{
+    var components = [_]zimp.scene.SceneComponent{
         .{ .type_id = mesh_component_id, .fields = &fields },
         .{ .type_id = remaining_asset_component_id, .fields = &remaining_fields },
     };
-    const entities = [_]zimp.scene.SceneEntity{.{ .id = test_source_id, .name = "renderable", .components = &components, .prefab = .{} }};
+    var entities = [_]zimp.scene.SceneEntity{.{ .id = test_source_id, .name = "renderable", .components = &components, .prefab = .{} }};
     var scene = testDocument(&entities);
     defer scene.deinit();
     var world = try initTestWorld();
@@ -350,13 +350,13 @@ test "SceneRuntimeInstance fails when an asset reference is absent from the mani
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
     var project = try testProjectWithAssets(&tmp);
-    defer project.deinit(testing.allocator, testing.io);
+    defer project.root_dir.close(testing.io);
     var assets = try AssetManager.init(testing.allocator, testing.io, &project);
     defer assets.deinit();
 
-    const fields = [_]zimp.scene.SceneField{.{ .number = 1, .value = .{ .asset_ref = missing_asset_id } }};
-    const components = [_]zimp.scene.SceneComponent{.{ .type_id = mesh_component_id, .fields = &fields }};
-    const entities = [_]zimp.scene.SceneEntity{.{ .id = test_source_id, .name = "missing-asset", .components = &components, .prefab = .{} }};
+    var fields = [_]zimp.scene.SceneField{.{ .number = 1, .value = .{ .asset_ref = missing_asset_id } }};
+    var components = [_]zimp.scene.SceneComponent{.{ .type_id = mesh_component_id, .fields = &fields }};
+    var entities = [_]zimp.scene.SceneEntity{.{ .id = test_source_id, .name = "missing-asset", .components = &components, .prefab = .{} }};
     var scene = testDocument(&entities);
     defer scene.deinit();
     var world = try initTestWorld();
