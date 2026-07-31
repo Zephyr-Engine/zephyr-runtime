@@ -96,13 +96,17 @@ pub fn Application(comptime game: Game) type {
         }
 
         pub fn renderScene(self: *@This(), framebuffer: ?*Framebuffer) !void {
+            if (framebuffer != null) {
+                defer self.bindDefaultFramebuffer();
+            }
+
             const target: Renderer.RenderTarget = if (framebuffer) |value|
                 .{ .framebuffer = value }
             else blk: {
-                const size = self.window.getFramebufferSize();
-                break :blk .{ .default_framebuffer = .{ .width = size.width, .height = size.height } };
+                break :blk .{ .default_framebuffer = self.defaultViewport() };
             };
-            try self.runtime.render(target, Window.GetTime());
+            try self.runtime.render(target);
+            self.runtime.completeFrame(Window.GetTime());
         }
 
         pub fn setDebugStatsEnabled(self: *@This(), enabled: bool) void {
@@ -123,6 +127,16 @@ pub fn Application(comptime game: Game) type {
 
         pub fn present(self: *@This()) void {
             self.window.swapBuffers();
+        }
+
+        fn defaultViewport(self: *const @This()) Renderer.RenderViewport {
+            const size = self.window.getFramebufferSize();
+            return .{ .width = size.width, .height = size.height };
+        }
+
+        fn bindDefaultFramebuffer(self: *const @This()) void {
+            const viewport = self.defaultViewport();
+            Framebuffer.bindDefault(viewport.width, viewport.height);
         }
 
         pub fn deinit(self: *@This()) void {

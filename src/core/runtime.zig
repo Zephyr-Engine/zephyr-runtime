@@ -109,8 +109,11 @@ pub fn Runtime(comptime game: Game) type {
             );
         }
 
-        pub fn render(self: *@This(), target: Renderer.RenderTarget, now: f64) !void {
+        pub fn render(self: *@This(), target: Renderer.RenderTarget) !void {
             try self.renderer.render(&self.world, &self.assets, target);
+        }
+
+        pub fn completeFrame(self: *@This(), now: f64) void {
             const elapsed_ms: f32 = @floatCast(@max(0, now - self.frame_cpu_start) * 1000);
             self.renderer.recordCpuFrame(self.time.delta_time, elapsed_ms);
         }
