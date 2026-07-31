@@ -1,6 +1,7 @@
+const std = @import("std");
+
 const zimp = @import("zimp");
 const zcs = @import("zcs");
-const std = @import("std");
 
 const math = @import("../core/math.zig");
 const codec = @import("component_codec.zig");
@@ -191,7 +192,7 @@ pub fn deriveSchema(comptime T: type) zimp.scene.ComponentSchema {
     };
 }
 
-pub fn deriveCodec(comptime Ecs: type, comptime T: type) ComponentCodec(Ecs) {
+pub fn deriveCodec(comptime T: type) ComponentCodec {
     const schema = comptime deriveSchema(T);
     const pfs = comptime PersistedField.Fields(T);
 
@@ -239,7 +240,7 @@ pub fn deriveCodec(comptime Ecs: type, comptime T: type) ComponentCodec(Ecs) {
             return t;
         }
 
-        fn attachDefault(world: *Ecs.World, entity: zcs.EntityID, allocator: std.mem.Allocator) !void {
+        fn attachDefault(world: *zcs.World, entity: zcs.EntityID, allocator: std.mem.Allocator) !void {
             const old_instance = if (world.getComponent(entity, T)) |comp| comp.* else null;
             var instance = try defaultInstance(allocator);
             errdefer deinitOwnedFields(&instance, allocator);
@@ -256,7 +257,7 @@ pub fn deriveCodec(comptime Ecs: type, comptime T: type) ComponentCodec(Ecs) {
             }
         }
 
-        fn attach(world: *Ecs.World, entity: zcs.EntityID, allocator: std.mem.Allocator, data: zimp.scene.SceneComponentData) !void {
+        fn attach(world: *zcs.World, entity: zcs.EntityID, allocator: std.mem.Allocator, data: zimp.scene.SceneComponentData) !void {
             const old_instance = if (world.getComponent(entity, T)) |comp| comp.* else null;
             var instance = try defaultInstance(allocator);
             errdefer deinitOwnedFields(&instance, allocator);
@@ -295,14 +296,14 @@ pub fn deriveCodec(comptime Ecs: type, comptime T: type) ComponentCodec(Ecs) {
             }
         }
 
-        fn detach(world: *Ecs.World, entity: zcs.EntityID, allocator: std.mem.Allocator) !void {
+        fn detach(world: *zcs.World, entity: zcs.EntityID, allocator: std.mem.Allocator) !void {
             const comp = world.getComponent(entity, T) orelse return;
             var old = comp.*;
             try world.removeComponent(entity, T);
             deinitOwnedFields(&old, allocator);
         }
 
-        fn readDocument(world: *Ecs.World, entity: zcs.EntityID, allocator: std.mem.Allocator) !zimp.scene.SceneComponentData {
+        fn readDocument(world: *zcs.World, entity: zcs.EntityID, allocator: std.mem.Allocator) !zimp.scene.SceneComponentData {
             const comp = world.getComponent(entity, T) orelse return codec.CodecError.ComponentMissing;
             const fields = try allocator.alloc(zimp.scene.SceneField, pfs.len);
             for (fields) |*field| {
@@ -323,7 +324,7 @@ pub fn deriveCodec(comptime Ecs: type, comptime T: type) ComponentCodec(Ecs) {
             return .{ .component = schema.id, .fields = fields };
         }
 
-        fn writeField(world: *Ecs.World, entity: zcs.EntityID, allocator: std.mem.Allocator, number: u32, value: zimp.scene.Value) !void {
+        fn writeField(world: *zcs.World, entity: zcs.EntityID, allocator: std.mem.Allocator, number: u32, value: zimp.scene.Value) !void {
             const comp = world.getComponent(entity, T) orelse return codec.CodecError.ComponentMissing;
             inline for (pfs) |pf| {
                 if (pf.number == number) {
@@ -482,7 +483,12 @@ test "value conversion helpers map supported scalar and math values" {
     try testing.expectError(error.ValueKindMismatch, fromValue(bool, .bool, .{ .i32 = 1 }));
 }
 
-const CodecFixtureEcs = @import("../ecs/world.zig").GameEcs(&.{SchemaFixture});
+fn initCodecFixtureWorld() !zcs.World {
+    var world = zcs.World.init(testing.allocator);
+    errdefer world.deinit();
+    _ = try world.registerType(SchemaFixture, .{ .schema_hash = 0 });
+    return world;
+}
 
 fn expectSchemaFixtureDefaults(actual: *const SchemaFixture) !void {
     try testing.expectEqual(true, actual.enabled);
@@ -522,8 +528,8 @@ fn expectSceneField(field: zimp.scene.SceneField, number: u32, expected: Value) 
 }
 
 test "deriveCodec attaches default component and detaches it" {
-    const derived = deriveCodec(CodecFixtureEcs, SchemaFixture);
-    var world = CodecFixtureEcs.World.init(testing.allocator);
+    const derived = deriveCodec(SchemaFixture);
+    var world = try initCodecFixtureWorld();
     defer world.deinit();
 
     const entity = try world.spawn();
@@ -536,8 +542,8 @@ test "deriveCodec attaches default component and detaches it" {
 }
 
 test "deriveCodec attaches document data over component defaults" {
-    const derived = deriveCodec(CodecFixtureEcs, SchemaFixture);
-    var world = CodecFixtureEcs.World.init(testing.allocator);
+    const derived = deriveCodec(SchemaFixture);
+    var world = try initCodecFixtureWorld();
     defer world.deinit();
 
     const target = id_types.SceneEntityId.parseComptime("bbbbbbbb-cccc-4ddd-8eee-ffffffffffff");
@@ -577,8 +583,8 @@ test "deriveCodec attaches document data over component defaults" {
 }
 
 test "deriveCodec writes fields and reads scene component data" {
-    const derived = deriveCodec(CodecFixtureEcs, SchemaFixture);
-    var world = CodecFixtureEcs.World.init(testing.allocator);
+    const derived = deriveCodec(SchemaFixture);
+    var world = try initCodecFixtureWorld();
     defer world.deinit();
 
     const entity = try world.spawn();
@@ -616,8 +622,8 @@ test "deriveCodec writes fields and reads scene component data" {
 }
 
 test "deriveCodec reports missing components and invalid document fields" {
-    const derived = deriveCodec(CodecFixtureEcs, SchemaFixture);
-    var world = CodecFixtureEcs.World.init(testing.allocator);
+    const derived = deriveCodec(SchemaFixture);
+    var world = try initCodecFixtureWorld();
     defer world.deinit();
 
     const entity = try world.spawn();

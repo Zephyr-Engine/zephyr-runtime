@@ -3,6 +3,7 @@ const std = @import("std");
 const components = @import("../ecs/components.zig");
 const math = @import("../core/math.zig");
 const ecs = @import("../ecs/world.zig");
+const zcs = @import("zcs");
 
 const Mat4 = math.Mat4;
 
@@ -13,7 +14,7 @@ pub const ActiveCamera = struct {
 const expectApproxEq = std.testing.expectApproxEqAbs;
 const tolerance: f32 = 1e-4;
 
-pub fn setActive(world: anytype, entity: ecs.EntityID) !void {
+pub fn setActive(world: *zcs.World, entity: ecs.EntityID) !void {
     if (world.getComponent(entity, components.TransformComponent) == null or
         world.getComponent(entity, components.CameraComponent) == null)
     {
@@ -22,7 +23,7 @@ pub fn setActive(world: anytype, entity: ecs.EntityID) !void {
     try world.setResource(ActiveCamera, .{ .entity = entity });
 }
 
-pub fn active(world: anytype) ?ecs.EntityID {
+pub fn active(world: *zcs.World) ?ecs.EntityID {
     const selection = world.getResourceOrNull(ActiveCamera) orelse return null;
     const entity = selection.entity;
     if (world.getComponent(entity, components.TransformComponent) == null or
@@ -46,8 +47,9 @@ test "camera projection uses the render-view aspect" {
 }
 
 test "active camera is an explicit world selection" {
-    var world = ecs.EngineEcs.World.init(std.testing.allocator);
+    var world = zcs.World.init(std.testing.allocator);
     defer world.deinit();
+    _ = try ecs.registerEngineComponents(&world);
 
     const first = try world.spawnWith(.{
         components.TransformComponent{},
@@ -66,8 +68,9 @@ test "active camera is an explicit world selection" {
 }
 
 test "active camera must have camera and transform components" {
-    var world = ecs.EngineEcs.World.init(std.testing.allocator);
+    var world = zcs.World.init(std.testing.allocator);
     defer world.deinit();
+    _ = try ecs.registerEngineComponents(&world);
 
     const entity = try world.spawn();
     try std.testing.expectError(error.InvalidCamera, setActive(&world, entity));

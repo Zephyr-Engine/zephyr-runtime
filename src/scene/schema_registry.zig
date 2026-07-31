@@ -5,96 +5,92 @@ const codec_mod = @import("component_codec.zig");
 const ComponentTypeId = zimp.id.types.ComponentTypeId;
 const deriveCodec = @import("derive_schema.zig").deriveCodec;
 
-pub fn SchemaRegistry(comptime Ecs: type) type {
-    const Codec = codec_mod.ComponentCodec(Ecs);
+pub const SchemaRegistry = struct {
+    const Self = @This();
+    const Codec = codec_mod.ComponentCodec;
 
-    return struct {
-        const Self = @This();
+    allocator: std.mem.Allocator,
+    codecs: std.AutoHashMap(ComponentTypeId, Codec),
+    names: std.StringHashMap(ComponentTypeId),
 
-        allocator: std.mem.Allocator,
-        codecs: std.AutoHashMap(ComponentTypeId, Codec),
-        names: std.StringHashMap(ComponentTypeId),
+    pub fn init(allocator: std.mem.Allocator) Self {
+        return .{
+            .allocator = allocator,
+            .codecs = std.AutoHashMap(ComponentTypeId, Codec).init(allocator),
+            .names = std.StringHashMap(ComponentTypeId).init(allocator),
+        };
+    }
 
-        pub fn init(allocator: std.mem.Allocator) Self {
-            return .{
-                .allocator = allocator,
-                .codecs = std.AutoHashMap(ComponentTypeId, Codec).init(allocator),
-                .names = std.StringHashMap(ComponentTypeId).init(allocator),
-            };
+    pub fn deinit(self: *Self) void {
+        self.codecs.deinit();
+        self.names.deinit();
+    }
+    pub fn registerMany(self: *Self, comptime Components: []const type) !void {
+        inline for (Components) |Component| {
+            try self.register(Component);
         }
+    }
 
-        pub fn deinit(self: *Self) void {
-            self.codecs.deinit();
-            self.names.deinit();
-        }
-        pub fn registerMany(self: *Self, comptime Components: []const type) !void {
-            inline for (Components) |Component| {
+    pub fn registerComponents(self: *Self, comptime components: []const type) !void {
+        inline for (components) |Component| {
+            if (@hasDecl(Component, "schema_meta")) {
                 try self.register(Component);
             }
         }
+    }
 
-        pub fn registerFromEcs(self: *Self) !void {
-            inline for (0..Ecs.component_count) |i| {
-                const Component = Ecs.componentType(i);
-                if (@hasDecl(Component, "schema_meta")) {
-                    try self.register(Component);
-                }
+    pub fn register(self: *Self, comptime Component: type) !void {
+        const codec = comptime deriveCodec(Component);
+        try zimp.scene.validateSchema(codec.schema);
+
+        if (self.codecs.contains(codec.schema.id)) {
+            return error.DuplicateComponentId;
+        }
+
+        if (self.names.contains(codec.schema.name)) {
+            return error.DuplicateComponentName;
+        }
+
+        try self.codecs.put(codec.schema.id, codec);
+        try self.names.put(codec.schema.name, codec.schema.id);
+    }
+
+    pub fn get(self: *const Self, id: ComponentTypeId) ?*const Codec {
+        return self.codecs.getPtr(id);
+    }
+
+    pub fn getByName(self: *const Self, name: []const u8) ?*const Codec {
+        const id = self.names.get(name) orelse return null;
+        return self.get(id);
+    }
+
+    pub fn sortedSchemas(self: *const Self, allocator: std.mem.Allocator) ![]zimp.scene.ComponentSchema {
+        var out = try allocator.alloc(zimp.scene.ComponentSchema, self.codecs.count());
+        var it = self.codecs.valueIterator();
+        var i: usize = 0;
+        while (it.next()) |codec| : (i += 1) out[i] = codec.schema;
+        std.mem.sort(zimp.scene.ComponentSchema, out, {}, struct {
+            fn lessThan(_: void, a: zimp.scene.ComponentSchema, b: zimp.scene.ComponentSchema) bool {
+                return std.mem.order(u8, &a.id.uuid.bytes, &b.id.uuid.bytes) == .lt;
             }
-        }
+        }.lessThan);
+        return out;
+    }
 
-        pub fn register(self: *Self, comptime Component: type) !void {
-            const codec = comptime deriveCodec(Ecs, Component);
-            try zimp.scene.validateSchema(codec.schema);
+    pub fn schemaHash(self: *const Self, allocator: std.mem.Allocator) !u64 {
+        const schemas = try self.sortedSchemas(allocator);
+        defer allocator.free(schemas);
+        return zimp.scene.descriptor.schemaHash(schemas);
+    }
 
-            if (self.codecs.contains(codec.schema.id)) {
-                return error.DuplicateComponentId;
-            }
-
-            if (self.names.contains(codec.schema.name)) {
-                return error.DuplicateComponentName;
-            }
-
-            try self.codecs.put(codec.schema.id, codec);
-            try self.names.put(codec.schema.name, codec.schema.id);
-        }
-
-        pub fn get(self: *const Self, id: ComponentTypeId) ?*const Codec {
-            return self.codecs.getPtr(id);
-        }
-
-        pub fn getByName(self: *const Self, name: []const u8) ?*const Codec {
-            const id = self.names.get(name) orelse return null;
-            return self.get(id);
-        }
-
-        pub fn sortedSchemas(self: *const Self, allocator: std.mem.Allocator) ![]zimp.scene.ComponentSchema {
-            var out = try allocator.alloc(zimp.scene.ComponentSchema, self.codecs.count());
-            var it = self.codecs.valueIterator();
-            var i: usize = 0;
-            while (it.next()) |codec| : (i += 1) out[i] = codec.schema;
-            std.mem.sort(zimp.scene.ComponentSchema, out, {}, struct {
-                fn lessThan(_: void, a: zimp.scene.ComponentSchema, b: zimp.scene.ComponentSchema) bool {
-                    return std.mem.order(u8, &a.id.uuid.bytes, &b.id.uuid.bytes) == .lt;
-                }
-            }.lessThan);
-            return out;
-        }
-
-        pub fn schemaHash(self: *const Self, allocator: std.mem.Allocator) !u64 {
-            const schemas = try self.sortedSchemas(allocator);
-            defer allocator.free(schemas);
-            return zimp.scene.descriptor.schemaHash(schemas);
-        }
-
-        pub fn descriptor(self: *const Self, allocator: std.mem.Allocator) !zimp.scene.descriptor.SchemaDescriptor {
-            const schemas = try self.sortedSchemas(allocator);
-            return .{
-                .schema_hash = zimp.scene.descriptor.schemaHash(schemas),
-                .components = schemas,
-            };
-        }
-    };
-}
+    pub fn descriptor(self: *const Self, allocator: std.mem.Allocator) !zimp.scene.descriptor.SchemaDescriptor {
+        const schemas = try self.sortedSchemas(allocator);
+        return .{
+            .schema_hash = zimp.scene.descriptor.schemaHash(schemas),
+            .components = schemas,
+        };
+    }
+};
 
 const testing = std.testing;
 
@@ -169,17 +165,8 @@ const InvalidSchemaComponent = struct {
     };
 };
 
-const TestEcs = @import("../ecs/world.zig").GameEcs(&.{
-    RegistryComponentA,
-    RegistryComponentB,
-    DuplicateIdComponent,
-    DuplicateNameComponent,
-    InvalidSchemaComponent,
-});
-
 test "SchemaRegistry registers derived codecs and looks them up by id and name" {
-    const Registry = SchemaRegistry(TestEcs);
-    var registry = Registry.init(testing.allocator);
+    var registry = SchemaRegistry.init(testing.allocator);
     defer registry.deinit();
 
     try registry.register(RegistryComponentA);
@@ -197,8 +184,7 @@ test "SchemaRegistry registers derived codecs and looks them up by id and name" 
 }
 
 test "SchemaRegistry rejects duplicate component ids and names" {
-    const Registry = SchemaRegistry(TestEcs);
-    var registry = Registry.init(testing.allocator);
+    var registry = SchemaRegistry.init(testing.allocator);
     defer registry.deinit();
 
     try registry.register(RegistryComponentA);
@@ -207,8 +193,7 @@ test "SchemaRegistry rejects duplicate component ids and names" {
 }
 
 test "SchemaRegistry returns schemas sorted by component id" {
-    const Registry = SchemaRegistry(TestEcs);
-    var registry = Registry.init(testing.allocator);
+    var registry = SchemaRegistry.init(testing.allocator);
     defer registry.deinit();
 
     try registry.register(RegistryComponentA);
@@ -223,8 +208,7 @@ test "SchemaRegistry returns schemas sorted by component id" {
 }
 
 test "SchemaRegistry computes descriptor and schema hash from sorted schemas" {
-    const Registry = SchemaRegistry(TestEcs);
-    var registry = Registry.init(testing.allocator);
+    var registry = SchemaRegistry.init(testing.allocator);
     defer registry.deinit();
 
     try registry.register(RegistryComponentA);
@@ -240,35 +224,22 @@ test "SchemaRegistry computes descriptor and schema hash from sorted schemas" {
     try testing.expect(descriptor.components[1].id.eql(ComponentTypeId.parseComptime(RegistryComponentA.schema_meta.id)));
 }
 
-
 const RuntimeOnlyComponent = struct {
     ticks: u32 = 0,
 };
 
-const DerivedEcs = @import("../ecs/world.zig").GameEcs(&.{
-    RegistryComponentA,
-    RuntimeOnlyComponent,
-});
-
-test "registerFromEcs registers engine and annotated components, skips runtime-only ones" {
-    const Registry = SchemaRegistry(DerivedEcs);
-    var registry = Registry.init(testing.allocator);
+test "registerComponents registers annotated components and skips runtime-only ones" {
+    var registry = SchemaRegistry.init(testing.allocator);
     defer registry.deinit();
 
-    try registry.registerFromEcs();
+    try registry.registerComponents(&.{ RegistryComponentA, RuntimeOnlyComponent });
 
-    // Three engine components plus RegistryComponentA; RuntimeOnlyComponent
-    // has no schema_meta and must be skipped.
-    try testing.expectEqual(@as(usize, 4), registry.codecs.count());
-    try testing.expect(registry.getByName("zephyr.runtime.transform") != null);
-    try testing.expect(registry.getByName("zephyr.runtime.mesh.render") != null);
-    try testing.expect(registry.getByName("zephyr.runtime.camera") != null);
+    try testing.expectEqual(@as(usize, 1), registry.codecs.count());
     try testing.expect(registry.getByName("RegistryComponentA") != null);
 }
 
 test "SchemaRegistry validates derived schemas before insertion" {
-    const Registry = SchemaRegistry(TestEcs);
-    var registry = Registry.init(testing.allocator);
+    var registry = SchemaRegistry.init(testing.allocator);
     defer registry.deinit();
 
     try testing.expectError(error.InvalidComponentName, registry.register(InvalidSchemaComponent));

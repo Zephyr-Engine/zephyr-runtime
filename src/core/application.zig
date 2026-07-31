@@ -1,54 +1,53 @@
 const std = @import("std");
 
 const SchemaRegistry = @import("../scene/schema_registry.zig").SchemaRegistry;
-const LoadedScene = @import("../scene/loader.zig").LoadedScene;
 const Framebuffer = @import("../graphics/opengl/framebuffer.zig").Framebuffer;
-const Project = @import("../project/project.zig").Project;
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
 const RenderViewport = @import("runtime_context.zig").RenderViewport;
+const LoadedScene = @import("../scene/loader.zig").LoadedScene;
+const Project = @import("../project/project.zig").Project;
+const engine_components = @import("../ecs/components.zig");
 const debug_stats = @import("../graphics/debug_stats.zig");
 const runtime_context = @import("runtime_context.zig");
 const renderer = @import("../graphics/renderer.zig");
+const ecs = @import("../ecs/world.zig");
 const InputManager = input.InputManager;
 const WindowParams = win.WindowParams;
 const Time = @import("time.zig").Time;
 const glfw = @import("../c.zig").glfw;
 const InputState = input.InputState;
 const input = @import("input.zig");
-const win = @import("window.zig");
 const event = @import("event.zig");
+const win = @import("window.zig");
 const log = @import("log.zig");
 const Window = win.Window;
+const zcs = @import("zcs");
 
 pub const ApplicationError = error{
     WindowError,
 };
 
-pub fn Application(comptime Game: type) type {
-    comptime if (!@hasDecl(Game, "Ecs")) {
-        @compileError("Game must declare `pub const Ecs = zp.GameEcs(...)`");
-    };
-    comptime if (!@hasDecl(Game, "update_schedule")) {
-        @compileError("Game must declare `pub const update_schedule = Ecs.Schedule.Spec{ ... }`");
-    };
+pub const Game = struct {
+    components: []const type,
+    update_schedule: zcs.Schedule.Spec,
+};
 
-    const Ecs = Game.Ecs;
-    const CommandBuffer = Ecs.CommandBuffer;
-    const Schedule = Ecs.Schedule;
-
-    const RuntimeContext = runtime_context.RuntimeContext(Ecs);
-    const Renderer = renderer.Renderer(Ecs);
+pub fn Application(comptime game: Game) type {
+    const CommandBuffer = zcs.CommandBuffer;
+    const Schedule = zcs.Schedule;
+    const RuntimeContext = runtime_context.RuntimeContext;
+    const Renderer = renderer.Renderer;
 
     return struct {
         events: std.ArrayList(event.ZEvent) = .empty,
-        schemas: SchemaRegistry(Ecs),
+        schemas: SchemaRegistry,
         assets: AssetManager,
         ctx: RuntimeContext,
         command_buffer: CommandBuffer,
         window: *Window,
         time: Time,
         debug_stats: debug_stats.Collector = .{},
-        active_scene: ?LoadedScene(Ecs),
+        active_scene: ?LoadedScene,
 
         pub fn init(
             allocator: std.mem.Allocator,
@@ -72,7 +71,7 @@ pub fn Application(comptime Game: type) type {
             const app = try allocator.create(@This());
             errdefer allocator.destroy(app);
             app.* = @This(){
-                .schemas = SchemaRegistry(Ecs).init(allocator),
+                .schemas = SchemaRegistry.init(allocator),
                 .window = window,
                 .time = .init(),
                 .ctx = undefined,
@@ -81,8 +80,6 @@ pub fn Application(comptime Game: type) type {
                 .assets = assets,
             };
             errdefer app.schemas.deinit();
-            try app.schemas.registerFromEcs();
-
             app.ctx = .{
                 .allocator = allocator,
                 .io = io,
@@ -91,6 +88,16 @@ pub fn Application(comptime Game: type) type {
                 .project = project,
                 .world = .init(allocator),
             };
+            errdefer app.ctx.world.deinit();
+
+            try ecs.registerEngineComponents(&app.ctx.world);
+
+            inline for (game.components) |Component| {
+                const name = if (@hasDecl(Component, "schema_meta")) Component.schema_meta.name else @typeName(Component);
+                _ = try ecs.registerComponent(&app.ctx.world, Component, name);
+            }
+            try app.schemas.registerComponents(&.{ engine_components.TransformComponent, engine_components.MeshRenderComponent, engine_components.CameraComponent });
+            try app.schemas.registerComponents(game.components);
             app.command_buffer = .init(&app.ctx.world);
             try app.ctx.world.setResource(InputState, .{});
             window.setEventCallback(app, eventCallback);
@@ -128,7 +135,7 @@ pub fn Application(comptime Game: type) type {
         }
 
         pub fn start(self: *@This()) !void {
-            self.active_scene = try LoadedScene(Ecs).loadDefaultScene(&self.ctx);
+            self.active_scene = try LoadedScene.loadDefaultScene(&self.ctx);
             try self.active_scene.?.start(&self.ctx);
         }
 
@@ -190,7 +197,7 @@ pub fn Application(comptime Game: type) type {
                 &self.ctx.world,
                 &self.command_buffer,
                 self.time.delta_time,
-                Game.update_schedule,
+                game.update_schedule,
             );
             self.debug_stats.beginGpuTimer();
             defer self.debug_stats.endGpuTimer();
