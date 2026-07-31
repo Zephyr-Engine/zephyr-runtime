@@ -226,6 +226,10 @@ pub const Window = struct {
         return .{ .x = x_scale, .y = y_scale };
     }
 
+    pub fn isFocused(self: *const Window) bool {
+        return glfw.glfwGetWindowAttrib(self.window, glfw.GLFW_FOCUSED) == glfw.GLFW_TRUE;
+    }
+
     pub fn setCursor(self: *Window, cursor: CursorKind) void {
         const handle = switch (cursor) {
             .arrow => self.arrow_cursor,

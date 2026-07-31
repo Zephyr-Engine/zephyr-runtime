@@ -3,437 +3,232 @@ const std = @import("std");
 const event = @import("event.zig");
 
 pub const Position = struct {
-    x: f32,
-    y: f32,
+    x: f32 = 0,
+    y: f32 = 0,
 };
 
-pub const InputState = struct {
-    mouse_pos: Position = .{ .x = 0, .y = 0 },
-    mouse_delta: Position = .{ .x = 0, .y = 0 },
-    mouse_scroll: Position = .{ .x = 0, .y = 0 },
-    pressed_keys: [512]bool = [_]bool{false} ** 512,
-    released_keys: [512]bool = [_]bool{false} ** 512,
-    held_keys: [512]bool = [_]bool{false} ** 512,
-    pressed_buttons: [8]bool = [_]bool{false} ** 8,
-    released_buttons: [8]bool = [_]bool{false} ** 8,
-    held_buttons: [8]bool = [_]bool{false} ** 8,
+pub const Input = struct {
+    pub const key_count = @intFromEnum(event.Key.Menu) + 1;
+    pub const mouse_button_count = @intFromEnum(event.MouseButton.Button7) + 1;
+    pub const text_capacity = 64;
 
-    pub fn isKeyHeld(self: *const InputState, key: event.Key) bool {
-        return self.held_keys[@intFromEnum(key)];
+    key_down: [key_count]bool = [_]bool{false} ** key_count,
+    key_pressed: [key_count]bool = [_]bool{false} ** key_count,
+    key_released: [key_count]bool = [_]bool{false} ** key_count,
+    mouse_button_down: [mouse_button_count]bool = [_]bool{false} ** mouse_button_count,
+    mouse_button_pressed: [mouse_button_count]bool = [_]bool{false} ** mouse_button_count,
+    mouse_button_released: [mouse_button_count]bool = [_]bool{false} ** mouse_button_count,
+    mouse_pos: Position = .{},
+    mouse_delta: Position = .{},
+    mouse_scroll: Position = .{},
+    text_codepoints: [text_capacity]u32 = [_]u32{0} ** text_capacity,
+    text_len: usize = 0,
+    focused: bool = true,
+    has_mouse_position: bool = false,
+
+    pub fn beginFrame(self: *Input) void {
+        @memset(&self.key_pressed, false);
+        @memset(&self.key_released, false);
+        @memset(&self.mouse_button_pressed, false);
+        @memset(&self.mouse_button_released, false);
+
+        self.mouse_delta = .{};
+        self.mouse_scroll = .{};
+        self.text_len = 0;
     }
 
-    pub fn isButtonHeld(self: *const InputState, button: event.MouseButton) bool {
-        return self.held_buttons[@intFromEnum(button)];
-    }
-};
-
-pub const InputManager = struct {
-    mouse_pos: Position,
-    mouse_delta: Position,
-    mouse_scroll: Position,
-    pressed_keys: [512]bool,
-    released_keys: [512]bool,
-    held_keys: [512]bool,
-
-    pressed_buttons: [8]bool,
-    released_buttons: [8]bool,
-    held_buttons: [8]bool,
-
-    var instance: ?InputManager = null;
-
-    inline fn getInstance() *InputManager {
-        if (instance == null) {
-            instance = InputManager{
-                .mouse_pos = .{ .x = 0.0, .y = 0.0 },
-                .mouse_delta = .{ .x = 0.0, .y = 0.0 },
-                .mouse_scroll = .{ .x = 0.0, .y = 0.0 },
-                .pressed_keys = [_]bool{false} ** 512,
-                .released_keys = [_]bool{false} ** 512,
-                .held_keys = [_]bool{false} ** 512,
-                .pressed_buttons = [_]bool{false} ** 8,
-                .released_buttons = [_]bool{false} ** 8,
-                .held_buttons = [_]bool{false} ** 8,
-            };
-        }
-        return &instance.?;
-    }
-
-    pub fn Clear() void {
-        const self = getInstance();
-        @memset(&self.pressed_keys, false);
-        @memset(&self.released_keys, false);
-        @memset(&self.pressed_buttons, false);
-        @memset(&self.released_buttons, false);
-        self.mouse_scroll = .{ .x = 0.0, .y = 0.0 };
-        self.mouse_delta = .{ .x = 0.0, .y = 0.0 };
-    }
-
-    pub fn Update(ev: event.ZEvent) void {
-        const self = getInstance();
+    pub fn applyEvent(self: *Input, ev: event.ZEvent) void {
         switch (ev) {
-            .MouseMove => |move_event| {
-                self.mouse_delta.x = move_event.x - self.mouse_pos.x;
-                self.mouse_delta.y = move_event.y - self.mouse_pos.y;
-                self.mouse_pos.x = move_event.x;
-                self.mouse_pos.y = move_event.y;
+            .KeyPressed => |key| self.setKeyDown(key),
+            .KeyReleased => |key| self.setKeyUp(key),
+            .KeyRepeated => {},
+            .MousePressed => |button| self.setMouseButtonDown(button),
+            .MouseReleased => |button| self.setMouseButtonUp(button),
+            .MouseMove => |position| self.setMousePosition(.{ .x = position.x, .y = position.y }),
+            .MouseScroll => |scroll| {
+                self.mouse_scroll.x += scroll.x;
+                self.mouse_scroll.y += scroll.y;
             },
-            .MouseScroll => |scroll_event| {
-                self.mouse_scroll.x += scroll_event.x;
-                self.mouse_scroll.y += scroll_event.y;
-            },
-            .KeyPressed => |key_event| {
-                const key = @intFromEnum(key_event);
-                self.pressed_keys[key] = true;
-                self.held_keys[key] = true;
-            },
-            .KeyRepeated => |key_event| {
-                const key = @intFromEnum(key_event);
-                self.pressed_keys[key] = true;
-                self.held_keys[key] = true;
-            },
-            .KeyReleased => |key_event| {
-                const key = @intFromEnum(key_event);
-                self.released_keys[key] = true;
-                self.held_keys[key] = false;
-            },
-            .MousePressed => |mouse_event| {
-                const button = @intFromEnum(mouse_event);
-                self.pressed_buttons[button] = true;
-                self.held_buttons[button] = true;
-            },
-            .MouseReleased => |mouse_event| {
-                const button = @intFromEnum(mouse_event);
-                self.released_buttons[button] = true;
-                self.held_buttons[button] = false;
-            },
+            .CharInput => |codepoint| self.appendText(codepoint),
             else => {},
         }
     }
 
-    pub fn GetMousePos() Position {
-        const self = getInstance();
-        return self.mouse_pos;
+    pub fn isKeyDown(self: *const Input, key: event.Key) bool {
+        return self.key_down[keyIndex(key)];
     }
 
-    pub fn IsKeyPressed(key: event.Key) bool {
-        const self = getInstance();
-        const k = @intFromEnum(key);
-        return self.pressed_keys[k];
+    pub fn wasKeyPressed(self: *const Input, key: event.Key) bool {
+        return self.key_pressed[keyIndex(key)];
     }
 
-    pub fn IsKeyReleased(key: event.Key) bool {
-        const self = getInstance();
-        const k = @intFromEnum(key);
-        return self.released_keys[k];
+    pub fn wasKeyReleased(self: *const Input, key: event.Key) bool {
+        return self.key_released[keyIndex(key)];
     }
 
-    pub fn IsKeyHeld(key: event.Key) bool {
-        const self = getInstance();
-        const k = @intFromEnum(key);
-        return self.held_keys[k];
+    pub fn isMouseButtonDown(self: *const Input, button: event.MouseButton) bool {
+        return self.mouse_button_down[mouseButtonIndex(button)];
     }
 
-    pub fn IsButtonPressed(key: event.MouseButton) bool {
-        const self = getInstance();
-        const b = @intFromEnum(key);
-        return self.pressed_buttons[b];
+    pub fn wasMouseButtonPressed(self: *const Input, button: event.MouseButton) bool {
+        return self.mouse_button_pressed[mouseButtonIndex(button)];
     }
 
-    pub fn IsButtonReleased(key: event.MouseButton) bool {
-        const self = getInstance();
-        const b = @intFromEnum(key);
-        return self.released_buttons[b];
+    pub fn wasMouseButtonReleased(self: *const Input, button: event.MouseButton) bool {
+        return self.mouse_button_released[mouseButtonIndex(button)];
     }
 
-    pub fn IsButtonHeld(key: event.MouseButton) bool {
-        const self = getInstance();
-        const b = @intFromEnum(key);
-        return self.held_buttons[b];
+    pub fn textInput(self: *const Input) []const u32 {
+        return self.text_codepoints[0..self.text_len];
     }
 
-    pub fn IsScrollingY() bool {
-        const self = getInstance();
-        return self.mouse_scroll.y != 0;
+    fn setKeyDown(self: *Input, key: event.Key) void {
+        const index = keyIndex(key);
+        if (!self.key_down[index]) {
+            self.key_pressed[index] = true;
+            self.key_down[index] = true;
+        }
     }
 
-    pub fn IsScrollingX() bool {
-        const self = getInstance();
-        return self.mouse_scroll.x != 0;
+    fn setKeyUp(self: *Input, key: event.Key) void {
+        const index = keyIndex(key);
+        if (self.key_down[index]) {
+            self.key_released[index] = true;
+            self.key_down[index] = false;
+        }
     }
 
-    pub fn GetMouseMoveDelta() Position {
-        const self = getInstance();
-        return self.mouse_delta;
+    fn setMouseButtonDown(self: *Input, button: event.MouseButton) void {
+        const index = mouseButtonIndex(button);
+        if (!self.mouse_button_down[index]) {
+            self.mouse_button_pressed[index] = true;
+            self.mouse_button_down[index] = true;
+        }
     }
 
-    pub fn GetMouseMoveScroll() Position {
-        const self = getInstance();
-        return self.mouse_scroll;
+    fn setMouseButtonUp(self: *Input, button: event.MouseButton) void {
+        const index = mouseButtonIndex(button);
+        if (self.mouse_button_down[index]) {
+            self.mouse_button_released[index] = true;
+            self.mouse_button_down[index] = false;
+        }
     }
 
-    pub fn snapshot() InputState {
-        const self = getInstance();
-        return .{
-            .mouse_pos = self.mouse_pos,
-            .mouse_delta = self.mouse_delta,
-            .mouse_scroll = self.mouse_scroll,
-            .pressed_keys = self.pressed_keys,
-            .released_keys = self.released_keys,
-            .held_keys = self.held_keys,
-            .pressed_buttons = self.pressed_buttons,
-            .released_buttons = self.released_buttons,
-            .held_buttons = self.held_buttons,
-        };
+    fn setMousePosition(self: *Input, position: Position) void {
+        if (self.has_mouse_position) {
+            self.mouse_delta.x += position.x - self.mouse_pos.x;
+            self.mouse_delta.y += position.y - self.mouse_pos.y;
+        }
+        self.mouse_pos = position;
+        self.has_mouse_position = true;
+    }
+
+    fn appendText(self: *Input, codepoint: u32) void {
+        if (self.text_len == text_capacity) {
+            return;
+        }
+        self.text_codepoints[self.text_len] = codepoint;
+        self.text_len += 1;
+    }
+
+    pub fn setFocused(self: *Input, focused: bool) void {
+        if (self.focused == focused) {
+            return;
+        }
+
+        self.focused = focused;
+        self.has_mouse_position = false;
+        if (!focused) {
+            self.releaseAll();
+        }
+    }
+
+    fn releaseAll(self: *Input) void {
+        @memset(&self.key_down, false);
+        @memset(&self.mouse_button_down, false);
+    }
+
+    inline fn keyIndex(key: event.Key) usize {
+        return @intFromEnum(key);
+    }
+
+    inline fn mouseButtonIndex(button: event.MouseButton) usize {
+        return @intFromEnum(button);
     }
 };
 
-test "InputManager initialization" {
-    InputManager.Clear();
+test "Input tracks press, hold, and release edges" {
+    var input: Input = .{};
 
-    const self = InputManager.getInstance();
+    input.applyEvent(.{ .KeyPressed = .A });
+    try std.testing.expect(input.isKeyDown(.A));
+    try std.testing.expect(input.wasKeyPressed(.A));
+    try std.testing.expect(!input.wasKeyReleased(.A));
 
-    try std.testing.expectEqual(@as(f32, 0.0), self.mouse_pos.x);
-    try std.testing.expectEqual(@as(f32, 0.0), self.mouse_pos.y);
-    try std.testing.expectEqual(@as(f32, 0.0), self.mouse_scroll.x);
-    try std.testing.expectEqual(@as(f32, 0.0), self.mouse_scroll.y);
-
-    for (self.pressed_keys) |key| {
-        try std.testing.expect(!key);
-    }
-    for (self.released_keys) |key| {
-        try std.testing.expect(!key);
-    }
-    for (self.held_keys) |key| {
-        try std.testing.expect(!key);
-    }
-    for (self.pressed_buttons) |button| {
-        try std.testing.expect(!button);
-    }
-    for (self.released_buttons) |button| {
-        try std.testing.expect(!button);
-    }
+    input.applyEvent(.{ .KeyReleased = .A });
+    try std.testing.expect(!input.isKeyDown(.A));
+    try std.testing.expect(input.wasKeyPressed(.A));
+    try std.testing.expect(input.wasKeyReleased(.A));
 }
 
-test "InputManager key press detection" {
-    InputManager.Clear();
+test "Input frame reset preserves held input and clears transient input" {
+    var input: Input = .{};
+    input.applyEvent(.{ .KeyPressed = .W });
+    input.applyEvent(.{ .MousePressed = .Left });
+    input.applyEvent(.{ .MouseScroll = .{ .x = 2, .y = -1 } });
+    input.applyEvent(.{ .CharInput = 'z' });
 
-    const press_event = event.ZEvent{ .KeyPressed = event.Key.A };
-    InputManager.Update(press_event);
+    input.beginFrame();
 
-    try std.testing.expect(InputManager.IsKeyPressed(.A));
-    try std.testing.expect(InputManager.IsKeyHeld(.A));
-    try std.testing.expect(!InputManager.IsKeyReleased(.A));
-    try std.testing.expect(!InputManager.IsKeyPressed(.B));
+    try std.testing.expect(input.isKeyDown(.W));
+    try std.testing.expect(input.isMouseButtonDown(.Left));
+    try std.testing.expect(!input.wasKeyPressed(.W));
+    try std.testing.expect(!input.wasMouseButtonPressed(.Left));
+    try std.testing.expectEqual(@as(f32, 0), input.mouse_scroll.x);
+    try std.testing.expectEqual(@as(usize, 0), input.textInput().len);
 }
 
-test "InputManager key release detection" {
-    InputManager.Clear();
+test "Input does not turn repeated keys into additional pressed edges" {
+    var input: Input = .{};
+    input.applyEvent(.{ .KeyPressed = .W });
+    input.beginFrame();
+    input.applyEvent(.{ .KeyRepeated = .W });
 
-    const press_event = event.ZEvent{ .KeyPressed = event.Key.Space };
-    InputManager.Update(press_event);
-
-    try std.testing.expect(InputManager.IsKeyHeld(.Space));
-
-    const release_event = event.ZEvent{ .KeyReleased = event.Key.Space };
-    InputManager.Update(release_event);
-
-    try std.testing.expect(InputManager.IsKeyReleased(.Space));
-    try std.testing.expect(!InputManager.IsKeyHeld(.Space));
+    try std.testing.expect(input.isKeyDown(.W));
+    try std.testing.expect(!input.wasKeyPressed(.W));
 }
 
-test "InputManager key repeated detection" {
-    InputManager.Clear();
+test "Input accumulates mouse movement for the whole frame" {
+    var input: Input = .{};
+    input.applyEvent(.{ .MouseMove = .{ .x = 10, .y = 20 } });
+    input.beginFrame();
+    input.applyEvent(.{ .MouseMove = .{ .x = 15, .y = 22 } });
+    input.applyEvent(.{ .MouseMove = .{ .x = 12, .y = 30 } });
 
-    const repeat_event = event.ZEvent{ .KeyRepeated = event.Key.W };
-    InputManager.Update(repeat_event);
-
-    try std.testing.expect(InputManager.IsKeyPressed(.W));
-    try std.testing.expect(InputManager.IsKeyHeld(.W));
+    try std.testing.expectEqual(@as(f32, 2), input.mouse_delta.x);
+    try std.testing.expectEqual(@as(f32, 10), input.mouse_delta.y);
 }
 
-test "InputManager mouse button press detection" {
-    InputManager.Clear();
+test "Input records text input until its fixed capacity" {
+    var input: Input = .{};
+    input.applyEvent(.{ .CharInput = 'a' });
+    input.applyEvent(.{ .CharInput = 0x1F642 });
 
-    const press_event = event.ZEvent{ .MousePressed = event.MouseButton.Left };
-    InputManager.Update(press_event);
-
-    try std.testing.expect(InputManager.IsButtonPressed(.Left));
-    try std.testing.expect(!InputManager.IsButtonPressed(.Right));
+    try std.testing.expectEqualSlices(u32, &.{ 'a', 0x1F642 }, input.textInput());
 }
 
-test "InputManager mouse button release detection" {
-    InputManager.Clear();
+test "Input focus loss clears held input and prevents a mouse jump" {
+    var input: Input = .{};
+    input.applyEvent(.{ .KeyPressed = .W });
+    input.applyEvent(.{ .MousePressed = .Right });
+    input.applyEvent(.{ .MouseMove = .{ .x = 10, .y = 10 } });
+    input.setFocused(false);
+    input.setFocused(true);
+    input.applyEvent(.{ .MouseMove = .{ .x = 100, .y = 100 } });
 
-    const press_event = event.ZEvent{ .MousePressed = event.MouseButton.Right };
-    InputManager.Update(press_event);
-
-    const release_event = event.ZEvent{ .MouseReleased = event.MouseButton.Right };
-    InputManager.Update(release_event);
-
-    try std.testing.expect(InputManager.IsButtonReleased(.Right));
-}
-
-test "InputManager mouse position tracking" {
-    InputManager.Clear();
-
-    const move_event = event.ZEvent{ .MouseMove = .{ .x = 100.5, .y = 200.75 } };
-    InputManager.Update(move_event);
-
-    const self = InputManager.getInstance();
-    try std.testing.expectEqual(@as(f32, 100.5), self.mouse_pos.x);
-    try std.testing.expectEqual(@as(f32, 200.75), self.mouse_pos.y);
-
-    const move_event2 = event.ZEvent{ .MouseMove = .{ .x = 50.0, .y = 75.0 } };
-    InputManager.Update(move_event2);
-
-    try std.testing.expectEqual(@as(f32, 50.0), self.mouse_pos.x);
-    try std.testing.expectEqual(@as(f32, 75.0), self.mouse_pos.y);
-}
-
-test "InputManager mouse scroll accumulation" {
-    InputManager.Clear();
-
-    const scroll_event1 = event.ZEvent{ .MouseScroll = .{ .x = 1.0, .y = 2.0 } };
-    InputManager.Update(scroll_event1);
-
-    const scroll = InputManager.GetMouseMoveScroll();
-    try std.testing.expectEqual(@as(f32, 1.0), scroll.x);
-    try std.testing.expectEqual(@as(f32, 2.0), scroll.y);
-
-    const scroll_event2 = event.ZEvent{ .MouseScroll = .{ .x = 0.5, .y = -1.0 } };
-    InputManager.Update(scroll_event2);
-
-    const scroll2 = InputManager.GetMouseMoveScroll();
-    try std.testing.expectEqual(@as(f32, 1.5), scroll2.x);
-    try std.testing.expectEqual(@as(f32, 1.0), scroll2.y);
-}
-
-test "InputManager clear resets all state" {
-    InputManager.Clear();
-
-    InputManager.Update(event.ZEvent{ .KeyPressed = event.Key.A });
-    InputManager.Update(event.ZEvent{ .MousePressed = event.MouseButton.Left });
-    InputManager.Update(event.ZEvent{ .MouseMove = .{ .x = 100.0, .y = 200.0 } });
-    InputManager.Update(event.ZEvent{ .MouseScroll = .{ .x = 5.0, .y = 10.0 } });
-
-    try std.testing.expect(InputManager.IsKeyPressed(.A));
-    try std.testing.expect(InputManager.IsButtonPressed(.Left));
-
-    InputManager.Clear();
-
-    try std.testing.expect(!InputManager.IsKeyPressed(.A));
-    try std.testing.expect(!InputManager.IsButtonPressed(.Left));
-
-    const self = InputManager.getInstance();
-    try std.testing.expectEqual(@as(f32, 100.0), self.mouse_pos.x);
-    try std.testing.expectEqual(@as(f32, 200.0), self.mouse_pos.y);
-    try std.testing.expectEqual(@as(f32, 0.0), self.mouse_delta.x);
-    try std.testing.expectEqual(@as(f32, 0.0), self.mouse_delta.y);
-    try std.testing.expectEqual(@as(f32, 0.0), self.mouse_scroll.x);
-    try std.testing.expectEqual(@as(f32, 0.0), self.mouse_scroll.y);
-}
-
-test "InputManager multiple keys simultaneously" {
-    InputManager.Clear();
-
-    InputManager.Update(event.ZEvent{ .KeyPressed = event.Key.W });
-    InputManager.Update(event.ZEvent{ .KeyPressed = event.Key.A });
-    InputManager.Update(event.ZEvent{ .KeyPressed = event.Key.LeftShift });
-
-    try std.testing.expect(InputManager.IsKeyHeld(.W));
-    try std.testing.expect(InputManager.IsKeyHeld(.A));
-    try std.testing.expect(InputManager.IsKeyHeld(.LeftShift));
-
-    InputManager.Update(event.ZEvent{ .KeyReleased = event.Key.A });
-
-    try std.testing.expect(InputManager.IsKeyHeld(.W));
-    try std.testing.expect(!InputManager.IsKeyHeld(.A));
-    try std.testing.expect(InputManager.IsKeyReleased(.A));
-    try std.testing.expect(InputManager.IsKeyHeld(.LeftShift));
-}
-
-test "InputManager window close event ignored" {
-    InputManager.Clear();
-
-    const self = InputManager.getInstance();
-    const initial_x = self.mouse_pos.x;
-    const initial_y = self.mouse_pos.y;
-
-    InputManager.Update(event.ZEvent.WindowClose);
-
-    try std.testing.expectEqual(initial_x, self.mouse_pos.x);
-    try std.testing.expectEqual(initial_y, self.mouse_pos.y);
-}
-
-test "InputManager mouse button held detection" {
-    InputManager.Clear();
-
-    const press_event = event.ZEvent{ .MousePressed = event.MouseButton.Left };
-    InputManager.Update(press_event);
-
-    try std.testing.expect(InputManager.IsButtonHeld(.Left));
-    try std.testing.expect(!InputManager.IsButtonHeld(.Right));
-
-    const release_event = event.ZEvent{ .MouseReleased = event.MouseButton.Left };
-    InputManager.Update(release_event);
-
-    try std.testing.expect(!InputManager.IsButtonHeld(.Left));
-}
-
-test "InputManager scroll detection Y axis" {
-    InputManager.Clear();
-
-    try std.testing.expect(!InputManager.IsScrollingY());
-
-    const scroll_event = event.ZEvent{ .MouseScroll = .{ .x = 0.0, .y = 1.5 } };
-    InputManager.Update(scroll_event);
-
-    try std.testing.expect(InputManager.IsScrollingY());
-
-    InputManager.Clear();
-    try std.testing.expect(!InputManager.IsScrollingY());
-}
-
-test "InputManager scroll detection X axis" {
-    InputManager.Clear();
-
-    try std.testing.expect(!InputManager.IsScrollingX());
-
-    const scroll_event = event.ZEvent{ .MouseScroll = .{ .x = 2.0, .y = 0.0 } };
-    InputManager.Update(scroll_event);
-
-    try std.testing.expect(InputManager.IsScrollingX());
-
-    InputManager.Clear();
-    try std.testing.expect(!InputManager.IsScrollingX());
-}
-
-test "InputManager mouse move delta tracking" {
-    InputManager.Clear();
-
-    // Set initial position
-    const move_event1 = event.ZEvent{ .MouseMove = .{ .x = 100.0, .y = 200.0 } };
-    InputManager.Update(move_event1);
-
-    // Move to new position and check delta
-    const move_event2 = event.ZEvent{ .MouseMove = .{ .x = 150.0, .y = 250.0 } };
-    InputManager.Update(move_event2);
-
-    var delta = InputManager.GetMouseMoveDelta();
-    try std.testing.expectEqual(@as(f32, 50.0), delta.x);
-    try std.testing.expectEqual(@as(f32, 50.0), delta.y);
-
-    // Move again and check new delta
-    const move_event3 = event.ZEvent{ .MouseMove = .{ .x = 125.0, .y = 225.0 } };
-    InputManager.Update(move_event3);
-
-    delta = InputManager.GetMouseMoveDelta();
-    try std.testing.expectEqual(@as(f32, -25.0), delta.x);
-    try std.testing.expectEqual(@as(f32, -25.0), delta.y);
-
-    // Clear should reset delta to zero
-    InputManager.Clear();
-    delta = InputManager.GetMouseMoveDelta();
-    try std.testing.expectEqual(@as(f32, 0.0), delta.x);
-    try std.testing.expectEqual(@as(f32, 0.0), delta.y);
+    try std.testing.expect(input.focused);
+    try std.testing.expect(!input.isKeyDown(.W));
+    try std.testing.expect(!input.isMouseButtonDown(.Right));
+    try std.testing.expectEqual(@as(f32, 0), input.mouse_delta.x);
+    try std.testing.expectEqual(@as(f32, 0), input.mouse_delta.y);
 }

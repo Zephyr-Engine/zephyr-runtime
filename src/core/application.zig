@@ -11,11 +11,10 @@ const debug_stats = @import("../graphics/debug_stats.zig");
 const runtime_context = @import("runtime_context.zig");
 const renderer = @import("../graphics/renderer.zig");
 const ecs = @import("../ecs/world.zig");
-const InputManager = input.InputManager;
 const WindowParams = win.WindowParams;
 const Time = @import("time.zig").Time;
 const glfw = @import("../c.zig").glfw;
-const InputState = input.InputState;
+const Input = input.Input;
 const input = @import("input.zig");
 const event = @import("event.zig");
 const win = @import("window.zig");
@@ -99,7 +98,7 @@ pub fn Application(comptime game: Game) type {
             try app.schemas.registerComponents(&.{ engine_components.TransformComponent, engine_components.MeshRenderComponent, engine_components.CameraComponent });
             try app.schemas.registerComponents(game.components);
             app.command_buffer = .init(&app.ctx.world);
-            try app.ctx.world.setResource(InputState, .{});
+            try app.ctx.world.setResource(Input, .{});
             window.setEventCallback(app, eventCallback);
 
             return app;
@@ -141,6 +140,9 @@ pub fn Application(comptime game: Game) type {
 
         pub fn beginFrame(self: *@This()) []const event.ZEvent {
             self.events.clearRetainingCapacity();
+            const input_state = self.ctx.world.getResource(Input);
+            input_state.beginFrame();
+            input_state.setFocused(self.window.isFocused());
             self.time.update(@floatCast(Window.GetTime()));
             Window.HandleInput();
             return self.events.items;
@@ -157,8 +159,7 @@ pub fn Application(comptime game: Game) type {
         }
 
         pub fn processEvent(self: *@This(), ev: event.ZEvent) !void {
-            InputManager.Update(ev);
-            self.ctx.world.getResource(InputState).* = InputManager.snapshot();
+            self.ctx.world.getResource(Input).applyEvent(ev);
         }
 
         pub fn pumpAssets(self: *@This()) !void {
@@ -221,8 +222,6 @@ pub fn Application(comptime game: Game) type {
 
         pub fn present(self: *@This()) void {
             self.window.swapBuffers();
-            InputManager.Clear();
-            self.ctx.world.getResource(InputState).* = InputManager.snapshot();
         }
 
         pub fn deinit(self: *@This()) !void {
