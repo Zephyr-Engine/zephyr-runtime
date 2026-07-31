@@ -92,8 +92,13 @@ test {
     _ = @import("assets/asset_manager.zig");
     _ = @import("core/runtime.zig");
     _ = @import("scene/controller.zig");
+    _ = @import("scene/loader.zig");
     _ = @import("graphics/opengl/framebuffer.zig");
+    _ = @import("graphics/opengl/buffer.zig");
     _ = @import("graphics/opengl/diagnostics.zig");
+    _ = @import("graphics/opengl/shader.zig");
+    _ = @import("graphics/opengl/texture.zig");
+    _ = @import("graphics/opengl/vertex_array.zig");
     _ = @import("graphics/debug_stats.zig");
     _ = @import("graphics/layout.zig");
     _ = @import("project/project.zig");

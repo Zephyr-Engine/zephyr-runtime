@@ -49,3 +49,19 @@ pub const LoadedScene = struct {
         self.document.deinit();
     }
 };
+
+test "loadDefaultScene rejects projects without a configured default scene" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var project = Project{
+        .manifest = .{ .project_id = .zero },
+        .root_dir = try std.Io.Dir.openDir(tmp.dir, std.testing.io, ".", .{}),
+    };
+    defer project.root_dir.close(std.testing.io);
+
+    try std.testing.expectError(
+        error.DefaultSceneNotFound,
+        LoadedScene.loadDefaultScene(std.testing.allocator, std.testing.io, &project),
+    );
+}

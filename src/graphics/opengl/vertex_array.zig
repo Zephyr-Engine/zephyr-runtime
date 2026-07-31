@@ -144,3 +144,15 @@ pub const VertexArray = struct {
         self.id = 0;
     }
 };
+
+test "indexCount reports zero without an index buffer and its stored count otherwise" {
+    var vertex_array = VertexArray{
+        .id = 0,
+        .streams = [_]?VertexArray.Stream{null} ** VertexArray.MAX_STREAMS,
+        .stream_count = 0,
+    };
+    try std.testing.expectEqual(@as(usize, 0), vertex_array.indexCount());
+
+    vertex_array.ebo = .{ .id = 0, .count = 36, .index_format = .u32 };
+    try std.testing.expectEqual(@as(usize, 36), vertex_array.indexCount());
+}
