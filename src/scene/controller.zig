@@ -1,9 +1,10 @@
 const std = @import("std");
-const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
-const LoadedScene = @import("loader.zig").LoadedScene;
-const Project = @import("../project/project.zig").Project;
-const SchemaRegistry = @import("schema_registry.zig").SchemaRegistry;
 const zcs = @import("zcs");
+
+const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
+const SchemaRegistry = @import("schema_registry.zig").SchemaRegistry;
+const Project = @import("../project/project.zig").Project;
+const LoadedScene = @import("loader.zig").LoadedScene;
 
 pub const SceneController = struct {
     active: ?LoadedScene = null,

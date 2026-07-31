@@ -87,7 +87,7 @@ pub fn Runtime(comptime game: Game) type {
             }
         }
 
-        pub fn processEvent(self: *@This(), ev: event.ZEvent) void {
+        fn processEvent(self: *@This(), ev: event.ZEvent) void {
             self.input().applyEvent(ev);
         }
 
@@ -95,7 +95,7 @@ pub fn Runtime(comptime game: Game) type {
             return self.world.getResource(Input);
         }
 
-        pub fn pumpAssets(self: *@This()) !void {
+        fn pumpAssets(self: *@This()) !void {
             try self.assets.pump();
         }
 
@@ -120,10 +120,6 @@ pub fn Runtime(comptime game: Game) type {
 
         pub fn setDebugStatsEnabled(self: *@This(), enabled: bool) void {
             self.renderer.setDebugStatsEnabled(enabled);
-        }
-
-        pub fn debugStatsEnabled(self: *const @This()) bool {
-            return self.renderer.debugStatsEnabled();
         }
 
         pub fn debugStats(self: *const @This()) ?Renderer.DebugStats {

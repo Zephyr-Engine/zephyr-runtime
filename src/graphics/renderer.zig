@@ -55,7 +55,7 @@ pub const Renderer = struct {
         try self.renderWorld(world, assets, viewport);
     }
 
-    pub fn renderWorld(_: *Renderer, world: *zcs.World, assets: *AssetManager, viewport: RenderViewport) !void {
+    fn renderWorld(_: *Renderer, world: *zcs.World, assets: *AssetManager, viewport: RenderViewport) !void {
         gl.glEnable(gl.GL_DEPTH_TEST);
         gl.glClearColor(0.4, 0.4, 0.4, 1);
         gl.glDepthMask(gl.GL_TRUE);
@@ -71,10 +71,6 @@ pub const Renderer = struct {
 
     pub fn setDebugStatsEnabled(self: *Renderer, enabled: bool) void {
         self.debug_stats.setEnabled(enabled);
-    }
-
-    pub fn debugStatsEnabled(self: *const Renderer) bool {
-        return self.debug_stats.enabled;
     }
 
     pub fn debugStats(self: *const Renderer) ?DebugStats {

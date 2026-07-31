@@ -6,20 +6,19 @@ const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
 const SceneRuntimeInstance = @import("runtime_instance.zig").SceneRuntimeInstance;
 const SchemaRegistry = @import("schema_registry.zig").SchemaRegistry;
 const Project = @import("../project/project.zig").Project;
-const log = @import("../core/log.zig");
 
 pub const LoadedScene = struct {
     instance: SceneRuntimeInstance,
     document: scene.SceneDocument,
 
-    pub fn init(allocator: std.mem.Allocator, document: scene.SceneDocument) !@This() {
+    fn init(allocator: std.mem.Allocator, document: scene.SceneDocument) !@This() {
         return .{
             .instance = .init(allocator, document.scene_id),
             .document = document,
         };
     }
 
-    pub fn loadScene(allocator: std.mem.Allocator, io: std.Io, project: *const Project, path: []const u8) !@This() {
+    fn loadScene(allocator: std.mem.Allocator, io: std.Io, project: *const Project, path: []const u8) !@This() {
         const bytes = try project.root_dir.readFileAlloc(
             io,
             path,

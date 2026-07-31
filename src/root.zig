@@ -41,10 +41,6 @@ pub const scene_schema = struct {
     const derive_schema = @import("scene/derive_schema.zig");
     pub const deriveCodec = derive_schema.deriveCodec;
     pub const deriveSchema = derive_schema.deriveSchema;
-
-    const loader = @import("scene/loader.zig");
-    pub const loadSceneFile = loader.loadSceneFile;
-    pub const loadDefaultScene = loader.loadDefaultScene;
 };
 
 const camera = @import("scene/camera.zig");
