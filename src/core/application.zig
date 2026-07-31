@@ -88,6 +88,7 @@ pub fn Application(comptime game: Game) type {
                 .project = project,
                 .world = .init(allocator),
             };
+            errdefer app.ctx.world.deinit();
 
             try ecs.registerEngineComponents(&app.ctx.world);
 
