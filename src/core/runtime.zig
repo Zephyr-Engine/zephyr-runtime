@@ -1,30 +1,31 @@
 const std = @import("std");
 const zcs = @import("zcs");
 
-const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
-const engine_components = @import("../ecs/components.zig");
-const ecs = @import("../ecs/world.zig");
-const Renderer = @import("../graphics/renderer.zig").Renderer;
-const Project = @import("../project/project.zig").Project;
 const SceneController = @import("../scene/controller.zig").SceneController;
 const SchemaRegistry = @import("../scene/schema_registry.zig").SchemaRegistry;
-const Game = @import("game.zig").Game;
+const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
+const Renderer = @import("../graphics/renderer.zig").Renderer;
+const engine_components = @import("../ecs/components.zig");
+const Project = @import("../project/project.zig").Project;
 const Input = @import("input.zig").Input;
-const event = @import("event.zig");
-const RuntimeContext = @import("runtime_context.zig").RuntimeContext;
+const ecs = @import("../ecs/world.zig");
+const Game = @import("game.zig").Game;
 const Time = @import("time.zig").Time;
+const event = @import("event.zig");
 
 pub fn Runtime(comptime game: Game) type {
     return struct {
-        allocator: std.mem.Allocator,
-        assets: AssetManager,
-        schemas: SchemaRegistry,
-        ctx: RuntimeContext,
         command_buffer: zcs.CommandBuffer,
-        renderer: Renderer,
         scenes: SceneController = .{},
-        time: Time = .init(),
+        allocator: std.mem.Allocator,
         frame_cpu_start: f64 = 0,
+        project: *const Project,
+        schemas: SchemaRegistry,
+        assets: AssetManager,
+        time: Time = .init(),
+        renderer: Renderer,
+        world: zcs.World,
+        io: std.Io,
 
         pub fn init(allocator: std.mem.Allocator, io: std.Io, project: *const Project) !*@This() {
             const runtime = try allocator.create(@This());
@@ -32,11 +33,13 @@ pub fn Runtime(comptime game: Game) type {
 
             runtime.* = .{
                 .allocator = allocator,
-                .assets = undefined,
-                .schemas = undefined,
-                .ctx = undefined,
+                .io = io,
+                .project = project,
                 .command_buffer = undefined,
+                .schemas = undefined,
+                .assets = undefined,
                 .renderer = undefined,
+                .world = undefined,
             };
 
             runtime.assets = try AssetManager.init(allocator, io, project);
@@ -45,39 +48,43 @@ pub fn Runtime(comptime game: Game) type {
             runtime.schemas = SchemaRegistry.init(allocator);
             errdefer runtime.schemas.deinit();
 
-            runtime.ctx = .{
-                .allocator = allocator,
-                .io = io,
-                .assets = &runtime.assets,
-                .schemas = &runtime.schemas,
-                .project = project,
-                .world = .init(allocator),
-            };
-            errdefer runtime.ctx.world.deinit();
+            runtime.world = .init(allocator);
+            errdefer runtime.world.deinit();
 
-            try initializeWorld(game, &runtime.ctx.world, &runtime.schemas);
-            runtime.command_buffer = .init(&runtime.ctx.world);
+            try initializeWorld(game, &runtime.world, &runtime.schemas);
+            runtime.command_buffer = .init(&runtime.world);
             errdefer runtime.command_buffer.deinit();
-            try runtime.ctx.world.setResource(Input, .{});
+
+            try runtime.world.setResource(Input, .{});
 
             runtime.renderer = try Renderer.init(allocator);
             errdefer runtime.renderer.deinit();
+
             return runtime;
         }
 
         pub fn start(self: *@This()) !void {
-            try self.scenes.startDefault(&self.ctx);
+            try self.scenes.startDefault(
+                self.allocator,
+                self.io,
+                self.project,
+                &self.world,
+                &self.schemas,
+                &self.assets,
+            );
         }
 
         pub fn beginFrame(self: *@This(), now: f64, focused: bool) void {
-            self.ctx.world.getResource(Input).beginFrame();
-            self.ctx.world.getResource(Input).setFocused(focused);
+            self.world.getResource(Input).beginFrame();
+            self.world.getResource(Input).setFocused(focused);
             self.time.update(@floatCast(now));
             self.frame_cpu_start = now;
         }
 
         pub fn processEvents(self: *@This(), events: []const event.ZEvent) void {
-            for (events) |ev| self.processEvent(ev);
+            for (events) |ev| {
+                self.processEvent(ev);
+            }
         }
 
         pub fn processEvent(self: *@This(), ev: event.ZEvent) void {
@@ -85,7 +92,7 @@ pub fn Runtime(comptime game: Game) type {
         }
 
         pub fn input(self: *@This()) *Input {
-            return self.ctx.world.getResource(Input);
+            return self.world.getResource(Input);
         }
 
         pub fn pumpAssets(self: *@This()) !void {
@@ -95,7 +102,7 @@ pub fn Runtime(comptime game: Game) type {
         pub fn update(self: *@This()) !void {
             try self.pumpAssets();
             try zcs.Schedule.tickDt(
-                &self.ctx.world,
+                &self.world,
                 &self.command_buffer,
                 self.time.delta_time,
                 game.update_schedule,
@@ -103,7 +110,7 @@ pub fn Runtime(comptime game: Game) type {
         }
 
         pub fn render(self: *@This(), target: Renderer.RenderTarget, now: f64) !void {
-            try self.renderer.render(&self.ctx.world, &self.assets, target);
+            try self.renderer.render(&self.world, &self.assets, target);
             const elapsed_ms: f32 = @floatCast(@max(0, now - self.frame_cpu_start) * 1000);
             self.renderer.recordCpuFrame(self.time.delta_time, elapsed_ms);
         }
@@ -127,8 +134,8 @@ pub fn Runtime(comptime game: Game) type {
         pub fn deinit(self: *@This()) void {
             self.renderer.deinit();
             self.command_buffer.deinit();
-            self.scenes.deinit(&self.ctx.world);
-            self.ctx.world.deinit();
+            self.scenes.deinit(&self.world);
+            self.world.deinit();
             self.schemas.deinit();
             self.assets.deinit();
             self.allocator.destroy(self);
@@ -142,6 +149,7 @@ fn initializeWorld(comptime game: Game, world: *zcs.World, schemas: *SchemaRegis
         const name = if (@hasDecl(Component, "schema_meta")) Component.schema_meta.name else @typeName(Component);
         _ = try ecs.registerComponent(world, Component, name);
     }
+
     try schemas.registerComponents(&.{
         engine_components.TransformComponent,
         engine_components.MeshRenderComponent,

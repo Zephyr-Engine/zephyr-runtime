@@ -2,7 +2,6 @@ pub const Application = @import("core/application.zig").Application;
 pub const Runtime = @import("core/runtime.zig").Runtime;
 pub const VertexArray = @import("graphics/opengl/vertex_array.zig").VertexArray;
 pub const Framebuffer = @import("graphics/opengl/framebuffer.zig").Framebuffer;
-pub const RuntimeContext = @import("core/runtime_context.zig").RuntimeContext;
 pub const Texture = @import("graphics/opengl/texture.zig").Texture2D;
 pub const Shader = @import("graphics/opengl/shader.zig").Shader;
 pub const Material = @import("graphics/material.zig").Material;
@@ -95,7 +94,6 @@ test {
     _ = @import("assets/manifest.zig");
     _ = @import("ecs/components.zig");
     _ = @import("assets/asset_manager.zig");
-    _ = @import("core/runtime_context.zig");
     _ = @import("core/runtime.zig");
     _ = @import("scene/controller.zig");
     _ = @import("graphics/opengl/framebuffer.zig");

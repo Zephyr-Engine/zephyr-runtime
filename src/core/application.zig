@@ -1,15 +1,15 @@
 const std = @import("std");
 
 const Framebuffer = @import("../graphics/opengl/framebuffer.zig").Framebuffer;
+const Runtime = @import("runtime.zig").Runtime;
 const Renderer = @import("../graphics/renderer.zig").Renderer;
 const Project = @import("../project/project.zig").Project;
-const Game = @import("game.zig").Game;
-const Runtime = @import("runtime.zig").Runtime;
-const event = @import("event.zig");
-const Input = @import("input.zig").Input;
-const log = @import("log.zig");
-const Window = @import("window.zig").Window;
 const WindowParams = @import("window.zig").WindowParams;
+const Window = @import("window.zig").Window;
+const Input = @import("input.zig").Input;
+const Game = @import("game.zig").Game;
+const event = @import("event.zig");
+const log = @import("log.zig");
 
 pub fn Application(comptime game: Game) type {
     const GameRuntime = Runtime(game);
@@ -49,6 +49,7 @@ pub fn Application(comptime game: Game) type {
 
         pub fn run(self: *@This()) !void {
             try self.start();
+
             while (self.window.shouldCloseWindow()) {
                 self.beginFrame();
                 self.processQueuedEvents();
@@ -56,6 +57,7 @@ pub fn Application(comptime game: Game) type {
                 try self.renderScene(null);
                 self.present();
             }
+
             Window.HandleInput();
         }
 
@@ -69,6 +71,7 @@ pub fn Application(comptime game: Game) type {
             self.events.clearRetainingCapacity();
             self.runtime.beginFrame(Window.GetTime(), self.window.isFocused());
             Window.HandleInput();
+
             return self.events.items;
         }
 

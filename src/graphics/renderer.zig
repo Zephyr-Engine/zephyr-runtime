@@ -1,12 +1,12 @@
 const std = @import("std");
 const zcs = @import("zcs");
 
+const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
+const Framebuffer = @import("opengl/framebuffer.zig").Framebuffer;
 const camera_system = @import("../scene/camera.zig");
 const components = @import("../ecs/components.zig");
-const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
-const debug_stats = @import("debug_stats.zig");
-const Framebuffer = @import("opengl/framebuffer.zig").Framebuffer;
 const Material = @import("material.zig").Material;
+const debug_stats = @import("debug_stats.zig");
 const ecs = @import("../ecs/world.zig");
 const Mesh = @import("mesh.zig").Mesh;
 const c = @import("../c.zig");

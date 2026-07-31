@@ -1,20 +1,29 @@
+const std = @import("std");
+const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
 const LoadedScene = @import("loader.zig").LoadedScene;
-const RuntimeContext = @import("../core/runtime_context.zig").RuntimeContext;
+const Project = @import("../project/project.zig").Project;
+const SchemaRegistry = @import("schema_registry.zig").SchemaRegistry;
 const zcs = @import("zcs");
 
-/// Owns the scene currently instantiated into the runtime world.
-///
-/// Keeping this boundary separate from the platform loop makes scene replacement
-/// a local future extension rather than an Application concern.
 pub const SceneController = struct {
     active: ?LoadedScene = null,
 
-    pub fn startDefault(self: *SceneController, ctx: *RuntimeContext) !void {
-        if (self.active != null) return error.SceneAlreadyStarted;
+    pub fn startDefault(
+        self: *SceneController,
+        allocator: std.mem.Allocator,
+        io: std.Io,
+        project: *const Project,
+        world: *zcs.World,
+        schemas: *const SchemaRegistry,
+        assets: *AssetManager,
+    ) !void {
+        if (self.active != null) {
+            return error.SceneAlreadyStarted;
+        }
 
-        var scene = try LoadedScene.loadDefaultScene(ctx);
-        errdefer scene.deinit(&ctx.world);
-        try scene.start(ctx);
+        var scene = try LoadedScene.loadDefaultScene(allocator, io, project);
+        errdefer scene.deinit(world);
+        try scene.start(world, schemas, assets);
         self.active = scene;
     }
 
