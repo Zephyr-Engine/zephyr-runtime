@@ -1,8 +1,8 @@
 pub const Application = @import("core/application.zig").Application;
+pub const Runtime = @import("core/runtime.zig").Runtime;
 pub const VertexArray = @import("graphics/opengl/vertex_array.zig").VertexArray;
 pub const Framebuffer = @import("graphics/opengl/framebuffer.zig").Framebuffer;
 pub const RuntimeContext = @import("core/runtime_context.zig").RuntimeContext;
-pub const RenderViewport = @import("core/runtime_context.zig").RenderViewport;
 pub const Texture = @import("graphics/opengl/texture.zig").Texture2D;
 pub const Shader = @import("graphics/opengl/shader.zig").Shader;
 pub const Material = @import("graphics/material.zig").Material;
@@ -59,8 +59,10 @@ pub const Project = @import("project/project.zig").Project;
 pub const openProject = @import("project/open.zig").open;
 
 pub const Renderer = @import("graphics/renderer.zig").Renderer;
+pub const RenderViewport = Renderer.RenderViewport;
+pub const RenderTarget = Renderer.RenderTarget;
 pub const DebugStats = @import("graphics/debug_stats.zig").DebugStats;
-pub const Game = @import("core/application.zig").Game;
+pub const Game = @import("core/game.zig").Game;
 
 pub const components = @import("ecs/components.zig");
 pub const ecs = @import("ecs/world.zig");
@@ -94,7 +96,8 @@ test {
     _ = @import("ecs/components.zig");
     _ = @import("assets/asset_manager.zig");
     _ = @import("core/runtime_context.zig");
-    _ = @import("core/runtime_context.zig");
+    _ = @import("core/runtime.zig");
+    _ = @import("scene/controller.zig");
     _ = @import("graphics/opengl/framebuffer.zig");
     _ = @import("graphics/opengl/diagnostics.zig");
     _ = @import("graphics/debug_stats.zig");
