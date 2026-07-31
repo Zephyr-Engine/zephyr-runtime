@@ -27,14 +27,12 @@ pub const ApplicationError = error{
     WindowError,
 };
 
-pub fn Application(comptime Game: type) type {
-    comptime if (!@hasDecl(Game, "components")) {
-        @compileError("Game must declare `pub const components = &.{ ... }`");
-    };
-    comptime if (!@hasDecl(Game, "update_schedule")) {
-        @compileError("Game must declare `pub const update_schedule = zcs.Schedule.Spec{ ... }`");
-    };
+pub const Game = struct {
+    components: []const type,
+    update_schedule: zcs.Schedule.Spec,
+};
 
+pub fn Application(comptime game: Game) type {
     const CommandBuffer = zcs.CommandBuffer;
     const Schedule = zcs.Schedule;
     const RuntimeContext = runtime_context.RuntimeContext;
@@ -93,13 +91,12 @@ pub fn Application(comptime Game: type) type {
 
             try ecs.registerEngineComponents(&app.ctx.world);
 
-            inline for (Game.components) |Component| {
+            inline for (game.components) |Component| {
                 const name = if (@hasDecl(Component, "schema_meta")) Component.schema_meta.name else @typeName(Component);
-                const component_id = try ecs.registerComponent(&app.ctx.world, Component, name);
-                std.debug.assert(@intFromEnum(component_id) > 3);
+                _ = try ecs.registerComponent(&app.ctx.world, Component, name);
             }
             try app.schemas.registerComponents(&.{ engine_components.TransformComponent, engine_components.MeshRenderComponent, engine_components.CameraComponent });
-            try app.schemas.registerComponents(Game.components);
+            try app.schemas.registerComponents(game.components);
             app.command_buffer = .init(&app.ctx.world);
             try app.ctx.world.setResource(InputState, .{});
             window.setEventCallback(app, eventCallback);
@@ -199,7 +196,7 @@ pub fn Application(comptime Game: type) type {
                 &self.ctx.world,
                 &self.command_buffer,
                 self.time.delta_time,
-                Game.update_schedule,
+                game.update_schedule,
             );
             self.debug_stats.beginGpuTimer();
             defer self.debug_stats.endGpuTimer();

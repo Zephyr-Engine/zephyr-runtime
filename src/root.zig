@@ -58,6 +58,7 @@ pub const openProject = @import("project/open.zig").open;
 
 pub const Renderer = @import("graphics/renderer.zig").Renderer;
 pub const DebugStats = @import("graphics/debug_stats.zig").DebugStats;
+pub const Game = @import("core/application.zig").Game;
 
 pub const components = @import("ecs/components.zig");
 pub const ecs = @import("ecs/world.zig");

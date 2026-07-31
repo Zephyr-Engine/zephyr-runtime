@@ -6,11 +6,9 @@ const zcs = @import("zcs");
 pub const EntityID = zcs.EntityID;
 
 pub fn registerEngineComponents(world: *zcs.World) !void {
-    return .{
-        .transform = try registerComponent(world, components.TransformComponent, "zephyr.Transform"),
-        .mesh_render = try registerComponent(world, components.MeshRenderComponent, "zephyr.MeshRender"),
-        .camera = try registerComponent(world, components.CameraComponent, "zephyr.Camera"),
-    };
+    _ = try registerComponent(world, components.TransformComponent, "zephyr.Transform");
+    _ = try registerComponent(world, components.MeshRenderComponent, "zephyr.MeshRender");
+    _ = try registerComponent(world, components.CameraComponent, "zephyr.Camera");
 }
 
 pub fn registerComponent(world: *zcs.World, comptime T: type, name: []const u8) !zcs.ComponentId {
