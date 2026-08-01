@@ -17,6 +17,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const zob_dep = b.dependency("zob", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     const zcs_dep = b.dependency("zcs", .{
         .target = target,
         .optimize = optimize,
@@ -41,6 +46,7 @@ pub fn build(b: *std.Build) void {
     mod.linkLibrary(glad_dep.artifact("glad"));
     mod.addImport("zlm", zlm_dep.module("zlm"));
     mod.addImport("zimp", zimp_dep.module("zimp"));
+    mod.addImport("zob", zob_dep.module("zob"));
     mod.addImport("zcs", zcs_dep.module("zcs"));
 
     const check = b.step("check", "Check if library compiles");
@@ -53,6 +59,7 @@ pub fn build(b: *std.Build) void {
     lib_check.linkLibrary(glad_dep.artifact("glad"));
     lib_check.addImport("zlm", zlm_dep.module("zlm"));
     lib_check.addImport("zimp", zimp_dep.module("zimp"));
+    lib_check.addImport("zob", zob_dep.module("zob"));
     lib_check.addImport("zcs", zcs_dep.module("zcs"));
 
     const check_compile = b.addObject(.{
@@ -71,6 +78,7 @@ pub fn build(b: *std.Build) void {
     lib_unit_tests.root_module.linkLibrary(glad_dep.artifact("glad"));
     lib_unit_tests.root_module.addImport("zlm", zlm_dep.module("zlm"));
     lib_unit_tests.root_module.addImport("zimp", zimp_dep.module("zimp"));
+    lib_unit_tests.root_module.addImport("zob", zob_dep.module("zob"));
     lib_unit_tests.root_module.addImport("zcs", zcs_dep.module("zcs"));
 
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);

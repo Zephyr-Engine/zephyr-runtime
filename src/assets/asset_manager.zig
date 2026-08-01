@@ -1,5 +1,6 @@
-const std = @import("std");
 const zimp = @import("zimp");
+const std = @import("std");
+const zob = @import("zob");
 
 const source_mod = @import("source.zig");
 
@@ -66,6 +67,7 @@ const AssetRecord = struct {
     asset: ?Asset = null,
     cooked: ?zimp.runtime.Asset = null,
     failure: ?anyerror = null,
+    load_future: ?zob.Future(void) = null,
 
     fn deinit(
         self: *AssetRecord,
@@ -133,145 +135,10 @@ const SynchronizedAllocator = struct {
 };
 
 const LoadJob = struct {
+    manager: *AssetManager,
     record: *AssetRecord,
-};
-
-const ReaderPool = struct {
-    allocator: std.mem.Allocator,
-    io: std.Io,
-    source: CookedStore,
-
-    mutex: std.Io.Mutex = .init,
-    cond: std.Io.Condition = .init,
-    jobs: std.ArrayList(LoadJob) = .empty,
-    workers: []std.Thread = &.{},
-    stopping: bool = false,
-
-    fn create(
-        allocator: std.mem.Allocator,
-        io: std.Io,
-        source: CookedStore,
-        worker_count: usize,
-    ) !*ReaderPool {
-        const pool = try allocator.create(ReaderPool);
-        errdefer allocator.destroy(pool);
-
-        pool.* = .{
-            .allocator = allocator,
-            .io = io,
-            .source = source,
-        };
-
-        pool.workers = try allocator.alloc(std.Thread, worker_count);
-        errdefer allocator.free(pool.workers);
-
-        var spawned: usize = 0;
-        errdefer {
-            pool.requestStop();
-            for (pool.workers[0..spawned]) |thread| thread.join();
-        }
-        while (spawned < worker_count) : (spawned += 1) {
-            pool.workers[spawned] = try std.Thread.spawn(.{}, workerMain, .{pool});
-        }
-
-        return pool;
-    }
-
-    fn destroy(self: *ReaderPool) void {
-        self.requestStop();
-        for (self.workers) |thread| {
-            thread.join();
-        }
-        self.allocator.free(self.workers);
-        self.jobs.deinit(self.allocator);
-        self.allocator.destroy(self);
-    }
-
-    fn requestStop(self: *ReaderPool) void {
-        self.mutex.lockUncancelable(self.io);
-        self.stopping = true;
-        self.cond.broadcast(self.io);
-        self.mutex.unlock(self.io);
-    }
-
-    fn enqueueLocked(self: *ReaderPool, record: *AssetRecord) !void {
-        try self.jobs.append(self.allocator, .{ .record = record });
-        self.cond.signal(self.io);
-    }
-
-    fn workerMain(self: *ReaderPool) void {
-        while (true) {
-            const job = self.nextJob() orelse return;
-            self.process(job);
-        }
-    }
-
-    fn nextJob(self: *ReaderPool) ?LoadJob {
-        self.mutex.lockUncancelable(self.io);
-        defer self.mutex.unlock(self.io);
-
-        while (!self.stopping and self.jobs.items.len == 0) {
-            self.cond.waitUncancelable(self.io, &self.mutex);
-        }
-
-        if (self.stopping and self.jobs.items.len == 0) {
-            return null;
-        }
-
-        return self.jobs.orderedRemove(0);
-    }
-
-    fn process(self: *ReaderPool, job: LoadJob) void {
-        self.mutex.lockUncancelable(self.io);
-        if (job.record.state != .queued) {
-            self.mutex.unlock(self.io);
-            return;
-        }
-        job.record.state = .loading;
-        self.cond.broadcast(self.io);
-        self.mutex.unlock(self.io);
-
-        const loaded = self.loadCookedAsset(job.record) catch |err| {
-            log.err("failed to load {s} asset '{s}': {}", .{
-                @tagName(job.record.kind),
-                assetPath(job.record),
-                err,
-            });
-            self.mutex.lockUncancelable(self.io);
-            job.record.failure = err;
-            job.record.state = .failed;
-            self.cond.broadcast(self.io);
-            self.mutex.unlock(self.io);
-            return;
-        };
-
-        self.mutex.lockUncancelable(self.io);
-        job.record.cooked = loaded;
-        job.record.state = .ready_for_finalize;
-        self.cond.broadcast(self.io);
-        self.mutex.unlock(self.io);
-    }
-
-    fn loadCookedAsset(self: *ReaderPool, record: *AssetRecord) !zimp.runtime.Asset {
-        const normalized_path = record.path orelse return AssetError.AssetNotFound;
-        const bytes = self.source.readAlloc(self.allocator, self.io, normalized_path) catch |err| switch (err) {
-            error.FileNotFound, error.NotDir, error.IsDir => return AssetError.AssetNotFound,
-            error.OutOfMemory => return AssetError.OutOfMemory,
-            zimp.path.Error.AbsolutePathNotAllowed,
-            zimp.path.Error.ParentTraversalNotAllowed,
-            zimp.path.Error.EmptyPath,
-            zimp.path.Error.PathTooLong,
-            => return AssetError.InvalidPath,
-            else => return err,
-        };
-        defer self.allocator.free(bytes);
-
-        var reader = std.Io.Reader.fixed(bytes);
-        return zimp.runtime.loadFromReader(
-            self.allocator,
-            &reader,
-            zimp.runtime.detectType(normalized_path) orelse return AssetError.UnsupportedAssetKind,
-        );
+    pub fn execute(self: LoadJob) void {
+        self.manager.processLoad(self.record);
     }
 };
 
@@ -280,7 +147,9 @@ pub const AssetManager = struct {
     allocator_state: *SynchronizedAllocator,
     io: std.Io,
     source: CookedStore,
-    pool: *ReaderPool,
+    scheduler: zob.Scheduler,
+    mutex: std.Io.Mutex = .init,
+    cond: std.Io.Condition = .init,
 
     assets: std.AutoHashMap(AssetId, *AssetRecord),
     asset_keys: std.StringHashMap(AssetId),
@@ -318,7 +187,6 @@ pub const AssetManager = struct {
             cooked_dir,
         );
         var owned_source = source;
-        const worker_count = defaultWorkerCount();
         errdefer owned_source.deinit(allocator, io);
 
         const allocator_state = try allocator.create(SynchronizedAllocator);
@@ -329,23 +197,14 @@ pub const AssetManager = struct {
         };
         const managed_allocator = allocator_state.allocator();
 
-        const pool = try ReaderPool.create(
-            managed_allocator,
-            io,
-            owned_source,
-            worker_count,
-        );
-        errdefer {
-            pool.destroy();
-            allocator.destroy(allocator_state);
-        }
-
         return .{
             .allocator = managed_allocator,
             .allocator_state = allocator_state,
             .io = io,
             .source = owned_source,
-            .pool = pool,
+            .scheduler = zob.Scheduler.initWithOptions(io, managed_allocator, .{
+                .max_concurrency = defaultLoadConcurrency(),
+            }),
             .assets = std.AutoHashMap(AssetId, *AssetRecord).init(managed_allocator),
             .asset_keys = std.StringHashMap(AssetId).init(managed_allocator),
             .shader_programs = std.StringHashMap(*Shader).init(managed_allocator),
@@ -354,14 +213,16 @@ pub const AssetManager = struct {
     }
 
     pub fn deinit(self: *AssetManager) void {
-        self.pool.destroy();
-
         var assets_it = self.assets.valueIterator();
         while (assets_it.next()) |record_ptr| {
             const record = record_ptr.*;
+            if (record.load_future) |*future| {
+                future.await(self.io);
+            }
             record.deinit(self.allocator);
             self.allocator.destroy(record);
         }
+        self.scheduler.deinit();
         self.assets.deinit();
 
         var key_it = self.asset_keys.keyIterator();
@@ -425,7 +286,7 @@ pub const AssetManager = struct {
                     self.unlock();
                 },
                 .queued, .loading => {
-                    self.pool.cond.waitUncancelable(self.io, &self.pool.mutex);
+                    self.cond.waitUncancelable(self.io, &self.mutex);
                     self.unlock();
                 },
             }
@@ -444,9 +305,11 @@ pub const AssetManager = struct {
                 const record = record_ptr.*;
                 switch (record.state) {
                     .ready_for_finalize, .waiting_dependencies => {
+                        self.reapLoadFutureLocked(record);
                         try ready.append(self.allocator, record);
                         record.state = .finalizing;
                     },
+                    .failed => self.reapLoadFutureLocked(record),
                     else => {},
                 }
             }
@@ -476,7 +339,7 @@ pub const AssetManager = struct {
                     record.state = .waiting_dependencies;
                 },
             }
-            self.pool.cond.broadcast(self.io);
+            self.cond.broadcast(self.io);
             self.unlock();
         }
     }
@@ -516,7 +379,8 @@ pub const AssetManager = struct {
         errdefer if (key_owned) self.allocator.free(lookup_key);
 
         self.lock();
-        defer self.unlock();
+        var locked = true;
+        defer if (locked) self.unlock();
 
         if (self.asset_keys.get(lookup_key)) |cached| {
             self.allocator.free(normalized_path);
@@ -548,10 +412,78 @@ pub const AssetManager = struct {
             _ = self.asset_keys.remove(lookup_key);
             self.allocator.free(lookup_key);
         }
-        try self.pool.enqueueLocked(record);
-
         record_owned = false;
+
+        self.unlock();
+        locked = false;
+        record.load_future = self.scheduler.submit(LoadJob, .{
+            .manager = self,
+            .record = record,
+        }, .low);
         return id;
+    }
+
+    fn processLoad(self: *AssetManager, record: *AssetRecord) void {
+        self.lock();
+        if (record.state != .queued) {
+            self.unlock();
+            return;
+        }
+        record.state = .loading;
+        self.cond.broadcast(self.io);
+        self.unlock();
+
+        const loaded = self.loadCookedAsset(record) catch |err| {
+            log.err("failed to load {s} asset '{s}': {}", .{
+                @tagName(record.kind),
+                assetPath(record),
+                err,
+            });
+            self.lock();
+            record.failure = err;
+            record.state = .failed;
+            self.cond.broadcast(self.io);
+            self.unlock();
+            return;
+        };
+
+        self.lock();
+        record.cooked = loaded;
+        record.state = .ready_for_finalize;
+        self.cond.broadcast(self.io);
+        self.unlock();
+    }
+
+    /// `processLoad` publishes its terminal state before returning. Reaping a
+    /// future after that state is visible is therefore non-blocking in normal
+    /// operation and releases the scheduler's completed-task resources.
+    fn reapLoadFutureLocked(self: *AssetManager, record: *AssetRecord) void {
+        if (record.load_future) |*future| {
+            future.await(self.io);
+            record.load_future = null;
+        }
+    }
+
+    fn loadCookedAsset(self: *AssetManager, record: *AssetRecord) !zimp.runtime.Asset {
+        const normalized_path = record.path orelse return AssetError.AssetNotFound;
+        const bytes = self.source.readAlloc(self.allocator, self.io, normalized_path) catch |err| switch (err) {
+            error.FileNotFound, error.NotDir, error.IsDir => return AssetError.AssetNotFound,
+            error.OutOfMemory => return AssetError.OutOfMemory,
+            zimp.path.Error.AbsolutePathNotAllowed,
+            zimp.path.Error.ParentTraversalNotAllowed,
+            zimp.path.Error.EmptyPath,
+            zimp.path.Error.PathTooLong,
+            => return AssetError.InvalidPath,
+            else => return err,
+        };
+        defer self.allocator.free(bytes);
+
+        var reader = std.Io.Reader.fixed(bytes);
+        return zimp.runtime.loadFromReader(
+            self.allocator,
+            &reader,
+            zimp.runtime.detectType(normalized_path) orelse return AssetError.UnsupportedAssetKind,
+        );
     }
 
     const FinalizeResult = union(enum) {
@@ -775,7 +707,7 @@ pub const AssetManager = struct {
         }
         record.failure = err;
         record.state = .failed;
-        self.pool.cond.broadcast(self.io);
+        self.cond.broadcast(self.io);
     }
 
     fn normalizeExpected(self: *AssetManager, raw_path: []const u8, expected: AssetKind) ![]u8 {
@@ -801,11 +733,11 @@ pub const AssetManager = struct {
     }
 
     fn lock(self: *AssetManager) void {
-        self.pool.mutex.lockUncancelable(self.io);
+        self.mutex.lockUncancelable(self.io);
     }
 
     fn unlock(self: *AssetManager) void {
-        self.pool.mutex.unlock(self.io);
+        self.mutex.unlock(self.io);
     }
 };
 
@@ -833,7 +765,7 @@ fn takeCooked(record: *AssetRecord) !zimp.runtime.Asset {
     return cooked_asset;
 }
 
-fn defaultWorkerCount() usize {
+fn defaultLoadConcurrency() usize {
     const cpu_count = std.Thread.getCpuCount() catch 2;
     if (cpu_count <= 1) return 1;
     return @min(cpu_count - 1, 4);
@@ -938,7 +870,7 @@ test "init opens cooked assets from project root" {
     try testing.expectEqualStrings(".zephyr/cooked", manager.source.root);
 }
 
-test "registerId deduplicates requests before worker load finishes" {
+test "registerId deduplicates requests before background load finishes" {
     if (@import("builtin").single_threaded) return error.SkipZigTest;
 
     var tmp = testing.tmpDir(.{});
@@ -961,7 +893,7 @@ test "registerId deduplicates requests before worker load finishes" {
     manager.wait(first) catch {};
 }
 
-test "worker load failures are observable through wait and state" {
+test "background load failures are observable through wait and state" {
     if (@import("builtin").single_threaded) return error.SkipZigTest;
 
     var tmp = testing.tmpDir(.{});
