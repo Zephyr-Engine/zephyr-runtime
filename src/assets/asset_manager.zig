@@ -88,52 +88,6 @@ const AssetRecord = struct {
     }
 };
 
-const SynchronizedAllocator = struct {
-    child: std.mem.Allocator,
-    io: std.Io,
-    mutex: std.Io.Mutex = .init,
-
-    fn allocator(self: *SynchronizedAllocator) std.mem.Allocator {
-        return .{
-            .ptr = self,
-            .vtable = &.{
-                .alloc = alloc,
-                .resize = resize,
-                .remap = remap,
-                .free = free,
-            },
-        };
-    }
-
-    fn alloc(ptr: *anyopaque, len: usize, alignment: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
-        const self: *SynchronizedAllocator = @ptrCast(@alignCast(ptr));
-        self.mutex.lockUncancelable(self.io);
-        defer self.mutex.unlock(self.io);
-        return self.child.rawAlloc(len, alignment, ret_addr);
-    }
-
-    fn resize(ptr: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, ret_addr: usize) bool {
-        const self: *SynchronizedAllocator = @ptrCast(@alignCast(ptr));
-        self.mutex.lockUncancelable(self.io);
-        defer self.mutex.unlock(self.io);
-        return self.child.rawResize(memory, alignment, new_len, ret_addr);
-    }
-
-    fn remap(ptr: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, ret_addr: usize) ?[*]u8 {
-        const self: *SynchronizedAllocator = @ptrCast(@alignCast(ptr));
-        self.mutex.lockUncancelable(self.io);
-        defer self.mutex.unlock(self.io);
-        return self.child.rawRemap(memory, alignment, new_len, ret_addr);
-    }
-
-    fn free(ptr: *anyopaque, memory: []u8, alignment: std.mem.Alignment, ret_addr: usize) void {
-        const self: *SynchronizedAllocator = @ptrCast(@alignCast(ptr));
-        self.mutex.lockUncancelable(self.io);
-        defer self.mutex.unlock(self.io);
-        self.child.rawFree(memory, alignment, ret_addr);
-    }
-};
-
 const LoadJob = struct {
     manager: *AssetManager,
     record: *AssetRecord,
@@ -144,7 +98,6 @@ const LoadJob = struct {
 
 pub const AssetManager = struct {
     allocator: std.mem.Allocator,
-    allocator_state: *SynchronizedAllocator,
     io: std.Io,
     source: CookedStore,
     scheduler: zob.Scheduler,
@@ -159,6 +112,8 @@ pub const AssetManager = struct {
     /// durable id the cook assigned.
     manifest: RuntimeAssetManifest,
 
+    /// `allocator` must be safe for concurrent use: zob jobs load cooked
+    /// assets while the main thread finalizes them.
     pub fn init(
         allocator: std.mem.Allocator,
         io: std.Io,
@@ -189,25 +144,16 @@ pub const AssetManager = struct {
         var owned_source = source;
         errdefer owned_source.deinit(allocator, io);
 
-        const allocator_state = try allocator.create(SynchronizedAllocator);
-        errdefer allocator.destroy(allocator_state);
-        allocator_state.* = .{
-            .child = allocator,
-            .io = io,
-        };
-        const managed_allocator = allocator_state.allocator();
-
         return .{
-            .allocator = managed_allocator,
-            .allocator_state = allocator_state,
+            .allocator = allocator,
             .io = io,
             .source = owned_source,
-            .scheduler = zob.Scheduler.initWithOptions(io, managed_allocator, .{
+            .scheduler = zob.Scheduler.initWithOptions(io, allocator, .{
                 .max_concurrency = defaultLoadConcurrency(),
             }),
-            .assets = std.AutoHashMap(AssetId, *AssetRecord).init(managed_allocator),
-            .asset_keys = std.StringHashMap(AssetId).init(managed_allocator),
-            .shader_programs = std.StringHashMap(*Shader).init(managed_allocator),
+            .assets = std.AutoHashMap(AssetId, *AssetRecord).init(allocator),
+            .asset_keys = std.StringHashMap(AssetId).init(allocator),
+            .shader_programs = std.StringHashMap(*Shader).init(allocator),
             .manifest = manifest,
         };
     }
@@ -241,7 +187,6 @@ pub const AssetManager = struct {
 
         self.source.deinit(self.allocator, self.io);
         self.manifest.deinit();
-        self.allocator_state.child.destroy(self.allocator_state);
     }
 
     /// Register an asset by its durable id from `assets.zmanifest`. This is
