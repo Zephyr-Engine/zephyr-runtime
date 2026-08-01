@@ -156,7 +156,6 @@ pub const Shader = struct {
 
     pub fn setUniform(self: *const Shader, name: []const u8, value: anytype) void {
         const location = self.uniformLocation(name) orelse return;
-        self.bind();
         const T = comptime @TypeOf(value);
         switch (comptime @typeInfo(T)) {
             .float, .comptime_float => {

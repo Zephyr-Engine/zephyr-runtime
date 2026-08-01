@@ -88,9 +88,7 @@ pub fn Application(comptime game: Game) type {
         }
 
         pub fn renderScene(self: *@This(), framebuffer: ?*Framebuffer) !void {
-            if (framebuffer != null) {
-                defer self.bindDefaultFramebuffer();
-            }
+            defer if (framebuffer != null) self.bindDefaultFramebuffer();
 
             const target: Renderer.RenderTarget = if (framebuffer) |value|
                 .{ .framebuffer = value }
