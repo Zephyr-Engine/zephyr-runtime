@@ -24,6 +24,10 @@
             .url = "git+https://github.com/Zephyr-Engine/zcs.git#1d4701563b9dea5aa35d1048445cc8d7c7d1b16f",
             .hash = "zcs-0.0.0-ypv9mzQrAQAzqv3TrRF-PFxJve01bMrroZt5XtixxtfT",
         },
+        .zob = .{
+            .url = "git+https://github.com/Zephyr-Engine/zob.git#c4ee545ba07e59c4aac95bd5c39f932d2ee9668d",
+            .hash = "zob-1.2.0-qYajyLa8AAA0NgQZaYY6DTC8GuKqWlgpOXkq-Xze4soh",
+        },
     },
     .paths = .{
         "build.zig",
