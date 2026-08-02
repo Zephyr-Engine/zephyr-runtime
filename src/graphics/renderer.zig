@@ -103,19 +103,19 @@ fn renderWorld(self: *Renderer, world: *zcs.World, assets: *AssetManager, viewpo
 }
 
 pub fn setDebugStatsEnabled(self: *Renderer, enabled: bool) void {
-    self.debug_stats.setEnabled(enabled);
+    self.stats.setEnabled(enabled);
 }
 
 pub fn debugStats(self: *const Renderer) ?debug_stats.DebugStats {
-    return self.debug_stats.snapshot();
+    return self.stats.snapshot();
 }
 
 pub fn recordCpuFrame(self: *Renderer, delta_time: f32, elapsed_ms: f32) void {
-    self.debug_stats.recordCpuFrame(delta_time, elapsed_ms);
+    self.stats.recordCpuFrame(delta_time, elapsed_ms);
 }
 
 pub fn deinit(self: *Renderer) void {
-    self.debug_stats.deinit();
+    self.stats.deinit();
     self.render_queues.solid.deinit(self.allocator);
     self.render_queues.alpha_test.deinit(self.allocator);
     self.render_queues.transparent.deinit(self.allocator);
