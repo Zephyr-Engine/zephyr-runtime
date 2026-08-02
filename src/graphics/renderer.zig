@@ -135,11 +135,7 @@ fn gatherDrawItems(self: *Renderer, world: *zcs.World, assets: *AssetManager, ca
                     log.err("mesh submesh references invalid material slot {d}", .{submesh.material_index});
                     continue;
                 };
-
-                const material = assets.get(Material, material_id) orelse {
-                    log.err("mesh references invalid material {s}", .{material_id.toString()});
-                    continue;
-                };
+                const material = assets.get(Material, material_id) orelse continue;
 
                 const state = material.source.render_state;
 
