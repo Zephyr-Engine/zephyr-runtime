@@ -51,9 +51,7 @@ pub const Material = struct {
         };
     }
 
-    pub fn bind(self: *const Material) void {
-        self.shader.bind();
-
+    pub fn bindResources(self: *const Material) void {
         for (self.texture_bindings) |*binding| {
             binding.texture.bind(binding.unit);
             self.shader.setUniform(binding.resource_name, @as(i32, @intCast(binding.unit)));
@@ -95,10 +93,10 @@ pub const Material = struct {
                 .bool => gl.glUniform1i(binding.location, if (std.mem.readInt(u32, bytes[0..4], .little) != 0) 1 else 0),
             }
         }
-    }
 
-    pub fn setUniform(self: *const Material, name: []const u8, value: anytype) void {
-        self.shader.setUniform(name, value);
+        if (self.source.render_state.alpha_mode == .alpha_test) {
+            self.shader.setUniform("u_alpha_cutoff", self.source.render_state.alpha_cutoff);
+        }
     }
 
     pub fn deinit(self: *Material) void {

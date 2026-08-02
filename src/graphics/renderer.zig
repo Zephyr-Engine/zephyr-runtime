@@ -183,12 +183,13 @@ fn renderFromCamera(self: *Renderer, world: *zcs.World, assets: *AssetManager, v
 
 fn renderQueue(queue: std.ArrayList(DrawItem), view: math.Mat4, projection: math.Mat4) void {
     for (queue.items) |draw_item| {
+        draw_item.material.shader.bind();
         applyFixedState(.generate(draw_item.material.source.render_state));
 
-        draw_item.material.bind();
-        draw_item.material.setUniform("u_view", view);
-        draw_item.material.setUniform("u_projection", projection);
-        draw_item.material.setUniform("u_model", draw_item.part.transform.mul(draw_item.model));
+        draw_item.material.bindResources();
+        draw_item.material.shader.setUniform("u_view", view);
+        draw_item.material.shader.setUniform("u_projection", projection);
+        draw_item.material.shader.setUniform("u_model", draw_item.model);
 
         draw_item.part.drawSubmesh(draw_item.submesh);
     }
