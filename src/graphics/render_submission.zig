@@ -136,3 +136,103 @@ fn pipelineLessThan(
 
     return false;
 }
+
+fn drawItem(phase: zimp.AlphaMode, depth_key: f32, material_id: zimp.AssetId, pipeline_key: PipelineKey) DrawItem {
+    return .{
+        .part = undefined,
+        .submesh = undefined,
+        .material_id = material_id,
+        .material = undefined,
+        .model = undefined,
+        .depth_key = depth_key,
+        .phase = phase,
+        .pipeline_key = pipeline_key,
+    };
+}
+
+const pipeline_a = PipelineKey{
+    .shader_program_id = 1,
+    .depth_test = true,
+    .depth_write = true,
+    .cull_mode = .back,
+    .blend_mode = .disabled,
+};
+
+const pipeline_b = PipelineKey{
+    .shader_program_id = 2,
+    .depth_test = true,
+    .depth_write = true,
+    .cull_mode = .back,
+    .blend_mode = .disabled,
+};
+
+const material_a = zimp.AssetId.parseComptime("11111111-1111-4111-8111-111111111111");
+const material_b = zimp.AssetId.parseComptime("22222222-2222-4222-8222-222222222222");
+
+test "draw items sort render phases before their per-phase keys" {
+    var items = [_]DrawItem{
+        drawItem(.alpha_blend, 10, material_b, pipeline_b),
+        drawItem(.solid, 3, material_b, pipeline_b),
+        drawItem(.alpha_test, 2, material_a, pipeline_a),
+    };
+
+    std.mem.sort(DrawItem, &items, {}, DrawItem.lessThan);
+
+    try std.testing.expectEqual(zimp.AlphaMode.solid, items[0].phase);
+    try std.testing.expectEqual(zimp.AlphaMode.alpha_test, items[1].phase);
+    try std.testing.expectEqual(zimp.AlphaMode.alpha_blend, items[2].phase);
+}
+
+test "opaque draw items batch by pipeline then material then front-to-back depth" {
+    var items = [_]DrawItem{
+        drawItem(.solid, 5, material_a, pipeline_a),
+        drawItem(.solid, 3, material_b, pipeline_a),
+        drawItem(.solid, 1, material_a, pipeline_a),
+        drawItem(.solid, 2, material_a, pipeline_b),
+    };
+
+    std.mem.sort(DrawItem, &items, {}, DrawItem.lessThan);
+
+    try std.testing.expect(items[0].pipeline_key.eql(pipeline_a));
+    try std.testing.expect(items[0].material_id.eql(material_a));
+    try std.testing.expectEqual(@as(f32, 1), items[0].depth_key);
+    try std.testing.expectEqual(@as(f32, 5), items[1].depth_key);
+    try std.testing.expect(items[2].material_id.eql(material_b));
+    try std.testing.expect(items[3].pipeline_key.eql(pipeline_b));
+}
+
+test "transparent draw items sort back-to-front before batching ties" {
+    var items = [_]DrawItem{
+        drawItem(.alpha_blend, 2, material_b, pipeline_b),
+        drawItem(.alpha_blend, 8, material_b, pipeline_b),
+        drawItem(.alpha_blend, 8, material_a, pipeline_b),
+        drawItem(.alpha_blend, 8, material_a, pipeline_a),
+    };
+
+    std.mem.sort(DrawItem, &items, {}, DrawItem.lessThan);
+
+    try std.testing.expectEqual(@as(f32, 8), items[0].depth_key);
+    try std.testing.expect(items[0].pipeline_key.eql(pipeline_a));
+    try std.testing.expect(items[1].pipeline_key.eql(pipeline_b));
+    try std.testing.expect(items[1].material_id.eql(material_a));
+    try std.testing.expectEqual(@as(f32, 2), items[3].depth_key);
+}
+
+test "pipeline ordering includes every fixed-state field" {
+    const base = pipeline_a;
+    const Case = struct { value: PipelineKey, base_first: bool };
+    const cases = [_]Case{
+        .{ .value = .{ .shader_program_id = 2, .depth_test = true, .depth_write = true, .cull_mode = .back, .blend_mode = .disabled }, .base_first = true },
+        .{ .value = .{ .shader_program_id = 1, .depth_test = false, .depth_write = true, .cull_mode = .back, .blend_mode = .disabled }, .base_first = false },
+        .{ .value = .{ .shader_program_id = 1, .depth_test = true, .depth_write = false, .cull_mode = .back, .blend_mode = .disabled }, .base_first = false },
+        .{ .value = .{ .shader_program_id = 1, .depth_test = true, .depth_write = true, .cull_mode = .front, .blend_mode = .disabled }, .base_first = false },
+        .{ .value = .{ .shader_program_id = 1, .depth_test = true, .depth_write = true, .cull_mode = .back, .blend_mode = .alpha }, .base_first = true },
+    };
+
+    try std.testing.expect(base.eql(base));
+    for (cases) |case| {
+        try std.testing.expect(!base.eql(case.value));
+        try std.testing.expectEqual(case.base_first, pipelineLessThan(base, case.value));
+        try std.testing.expectEqual(!case.base_first, pipelineLessThan(case.value, base));
+    }
+}
