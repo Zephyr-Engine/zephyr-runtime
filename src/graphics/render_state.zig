@@ -16,3 +16,18 @@ pub const FixedState = struct {
         };
     }
 };
+
+pub const ColorLoadOp = union(enum) {
+    load,
+    clear: [4]f32,
+};
+
+pub const DepthLoadOp = union(enum) {
+    load,
+    clear: f32,
+};
+
+pub const BeginInfo = struct {
+    color: ?ColorLoadOp = null,
+    depth: ?DepthLoadOp = null,
+};

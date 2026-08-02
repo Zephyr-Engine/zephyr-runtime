@@ -1,9 +1,8 @@
-const FixedState = @import("../render_state.zig").FixedState;
-
+const render_state = @import("../render_state.zig");
 const c = @import("../../c.zig");
 const gl = c.glad;
 
-pub fn apply(state: FixedState) void {
+pub fn apply(state: render_state.FixedState) void {
     if (state.depth_test) {
         gl.glEnable(gl.GL_DEPTH_TEST);
     } else {
@@ -49,5 +48,48 @@ pub fn apply(state: FixedState) void {
                 gl.GL_ONE_MINUS_SRC_ALPHA,
             );
         },
+    }
+}
+
+pub fn begin(info: render_state.BeginInfo) void {
+    var clear_mask: c_uint = 0;
+
+    if (info.color) |col| {
+        switch (col) {
+            .load => {},
+            .clear => |color| {
+                gl.glColorMask(
+                    gl.GL_TRUE,
+                    gl.GL_TRUE,
+                    gl.GL_TRUE,
+                    gl.GL_TRUE,
+                );
+
+                gl.glClearColor(
+                    color[0],
+                    color[1],
+                    color[2],
+                    color[3],
+                );
+
+                clear_mask |= gl.GL_COLOR_BUFFER_BIT;
+            },
+        }
+    }
+
+    if (info.depth) |d| {
+        switch (d) {
+            .load => {},
+            .clear => |depth| {
+                gl.glDepthMask(gl.GL_TRUE);
+                gl.glClearDepth(depth);
+
+                clear_mask |= gl.GL_DEPTH_BUFFER_BIT;
+            },
+        }
+    }
+
+    if (clear_mask != 0) {
+        gl.glClear(clear_mask);
     }
 }

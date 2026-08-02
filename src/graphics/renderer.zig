@@ -2,17 +2,17 @@ const zimp = @import("zimp");
 const std = @import("std");
 const zcs = @import("zcs");
 
+const render_submission = @import("render_submission.zig");
 const camera_system = @import("../scene/camera.zig");
 const components = @import("../ecs/components.zig");
-const render_submission = @import("render_submission.zig");
+const render_state = @import("render_state.zig");
 const debug_stats = @import("debug_stats.zig");
 const math = @import("../core/math.zig");
 const ecs = @import("../ecs/world.zig");
 const log = @import("../core/log.zig");
-const c = @import("../c.zig");
-const gl = c.glad;
 
 const applyFixedState = @import("opengl/render_state.zig").apply;
+const beginRenderPass = @import("opengl/render_state.zig").begin;
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
 const Framebuffer = @import("opengl/framebuffer.zig").Framebuffer;
 const Material = @import("material.zig").Material;
@@ -49,18 +49,6 @@ pub const RenderTarget = union(enum) {
     }
 };
 
-pub const RenderQueues = struct {
-    solid: std.ArrayList(DrawItem),
-    alpha_test: std.ArrayList(DrawItem),
-    transparent: std.ArrayList(DrawItem),
-
-    fn clear(self: *RenderQueues) void {
-        self.solid.clearRetainingCapacity();
-        self.alpha_test.clearRetainingCapacity();
-        self.transparent.clearRetainingCapacity();
-    }
-};
-
 submissions: std.ArrayList(DrawItem) = .empty,
 stats: debug_stats.Collector = .{},
 allocator: std.mem.Allocator,
@@ -81,10 +69,10 @@ pub fn render(self: *Renderer, world: *zcs.World, assets: *AssetManager, target:
 }
 
 fn renderWorld(self: *Renderer, world: *zcs.World, assets: *AssetManager, viewport: RenderViewport) !void {
-    gl.glEnable(gl.GL_DEPTH_TEST);
-    gl.glClearColor(0.4, 0.4, 0.4, 1);
-    gl.glDepthMask(gl.GL_TRUE);
-    gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT);
+    beginRenderPass(.{
+        .color = .{ .clear = .{ 0.4, 0.4, 0.4, 1 } },
+        .depth = .{ .clear = 1 },
+    });
 
     const camera_entity = camera_system.active(world) orelse {
         std.log.warn("Skipping scene render: no active camera", .{});
