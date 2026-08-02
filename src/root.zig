@@ -53,7 +53,7 @@ pub const ProjectManifest = zimp.ProjectManifest;
 pub const Project = @import("project/project.zig").Project;
 pub const openProject = @import("project/open.zig").open;
 
-pub const Renderer = @import("graphics/renderer.zig").Renderer;
+pub const Renderer = @import("graphics/renderer.zig");
 pub const RenderViewport = Renderer.RenderViewport;
 pub const RenderTarget = Renderer.RenderTarget;
 pub const DebugStats = @import("graphics/debug_stats.zig").DebugStats;

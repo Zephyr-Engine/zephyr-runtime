@@ -53,7 +53,6 @@ pub const Material = struct {
 
     pub fn bind(self: *const Material) void {
         self.shader.bind();
-        applyAlphaMode(self.source.render_state.alpha_mode);
 
         for (self.texture_bindings) |*binding| {
             binding.texture.bind(binding.unit);
@@ -108,24 +107,6 @@ pub const Material = struct {
         self.source.deinit(self.allocator);
     }
 };
-
-fn applyAlphaMode(mode: anytype) void {
-    switch (mode) {
-        .solid => {
-            gl.glDisable(gl.GL_BLEND);
-            gl.glDepthMask(gl.GL_TRUE);
-        },
-        .alpha_test => {
-            gl.glDisable(gl.GL_BLEND);
-            gl.glDepthMask(gl.GL_TRUE);
-        },
-        .alpha_blend => {
-            gl.glEnable(gl.GL_BLEND);
-            gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA);
-            gl.glDepthMask(gl.GL_FALSE);
-        },
-    }
-}
 
 fn readF32(bytes: *const [4]u8) f32 {
     return @bitCast(std.mem.readInt(u32, bytes, .little));

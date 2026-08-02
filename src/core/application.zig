@@ -2,9 +2,9 @@ const std = @import("std");
 
 const Framebuffer = @import("../graphics/opengl/framebuffer.zig").Framebuffer;
 const Runtime = @import("runtime.zig").Runtime;
-const Renderer = @import("../graphics/renderer.zig").Renderer;
 const Project = @import("../project/project.zig").Project;
 const WindowParams = @import("window.zig").WindowParams;
+const Renderer = @import("../graphics/renderer.zig");
 const Window = @import("window.zig").Window;
 const Input = @import("input.zig").Input;
 const Game = @import("game.zig").Game;
