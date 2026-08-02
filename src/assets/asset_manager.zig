@@ -9,10 +9,10 @@ const AssetError = source_mod.AssetError;
 const CookedStore = source_mod.CookedStore;
 const RuntimeAssetManifest = @import("manifest.zig").RuntimeAssetManifest;
 const Project = @import("../project/project.zig").Project;
-const Mesh = @import("../graphics/mesh.zig").Mesh;
 const Material = @import("../graphics/material.zig").Material;
 const Shader = @import("../graphics/opengl/shader.zig").Shader;
 const Texture2D = @import("../graphics/opengl/texture.zig").Texture2D;
+const Mesh = @import("../graphics/mesh.zig");
 const log = @import("../core/log.zig");
 
 const AssetKind = zimp.AssetKind;
@@ -456,7 +456,11 @@ pub const AssetManager = struct {
 
         const mesh = try self.allocator.create(Mesh);
         errdefer self.allocator.destroy(mesh);
-        mesh.* = try Mesh.loadFromZMesh(self.allocator, cooked_mesh);
+
+        const material_ids = try self.requestMeshMaterials(&cooked_mesh);
+        errdefer self.allocator.free(material_ids);
+
+        mesh.* = try Mesh.loadFromZMesh(self.allocator, &cooked_mesh, material_ids);
         errdefer mesh.deinit();
 
         return mesh;
@@ -570,6 +574,23 @@ pub const AssetManager = struct {
             });
         }
         return true;
+    }
+
+    fn requestMeshMaterials(self: *AssetManager, source: *const zimp.ZMesh) ![]AssetId {
+        const ids = try self.allocator.alloc(
+            AssetId,
+            source.material_slots.len,
+        );
+        errdefer self.allocator.free(ids);
+
+        for (source.material_slots, ids) |cooked_path, *id| {
+            id.* = try self.requestKind(
+                .material,
+                cooked_path,
+            );
+        }
+
+        return ids;
     }
 
     fn loadShaderProgramReady(

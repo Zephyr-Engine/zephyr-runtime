@@ -1,17 +1,17 @@
 pub const Application = @import("core/application.zig").Application;
 pub const Runtime = @import("core/runtime.zig").Runtime;
-pub const VertexArray = @import("graphics/opengl/vertex_array.zig").VertexArray;
 pub const Framebuffer = @import("graphics/opengl/framebuffer.zig").Framebuffer;
 pub const Texture = @import("graphics/opengl/texture.zig").Texture2D;
+pub const VertexArray = @import("graphics/opengl/vertex_array.zig");
 pub const Shader = @import("graphics/opengl/shader.zig").Shader;
 pub const Material = @import("graphics/material.zig").Material;
 pub const CursorKind = @import("core/window.zig").CursorKind;
 pub const MouseButton = @import("core/event.zig").MouseButton;
 pub const Window = @import("core/window.zig").Window;
 pub const ZEvent = @import("core/event.zig").ZEvent;
-pub const Mesh = @import("graphics/mesh.zig").Mesh;
 pub const Input = @import("core/input.zig").Input;
 pub const Key = @import("core/event.zig").Key;
+pub const Mesh = @import("graphics/mesh.zig");
 
 pub const AssetManager = @import("assets/asset_manager.zig").AssetManager;
 pub const AssetError = @import("assets/source.zig").AssetError;
@@ -54,6 +54,8 @@ pub const Project = @import("project/project.zig").Project;
 pub const openProject = @import("project/open.zig").open;
 
 pub const Renderer = @import("graphics/renderer.zig");
+pub const RenderQueue = @import("graphics/render_submission.zig");
+pub const RenderState = @import("graphics/render_state.zig");
 pub const RenderViewport = Renderer.RenderViewport;
 pub const RenderTarget = Renderer.RenderTarget;
 pub const DebugStats = @import("graphics/debug_stats.zig").DebugStats;

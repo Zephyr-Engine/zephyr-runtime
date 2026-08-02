@@ -10,7 +10,7 @@ const Texture2D = @import("../graphics/opengl/texture.zig").Texture2D;
 const activeCamera = @import("camera.zig").active;
 const Material = @import("../graphics/material.zig").Material;
 const Project = @import("../project/project.zig").Project;
-const Mesh = @import("../graphics/mesh.zig").Mesh;
+const Mesh = @import("../graphics/mesh.zig");
 
 pub const SceneRuntimeInstance = struct {
     const World = zcs.World;
@@ -111,6 +111,7 @@ const ReferenceComponent = struct {
 const RemainingAssetReferences = struct {
     texture: zimp.AssetId = zimp.AssetId.zero,
     shader: zimp.AssetId = zimp.AssetId.zero,
+    material: zimp.AssetId = zimp.AssetId.zero,
 
     pub const schema_meta: zimp.scene.SchemaMeta = .{
         .id = "8076d802-d3f0-482f-823b-e0b317c9b65f",
@@ -119,6 +120,7 @@ const RemainingAssetReferences = struct {
         .fields = &.{
             .{ .name = "texture", .number = 1, .kind_override = .{ .asset_ref = .texture }, .default_override = .{ .asset_ref = zimp.AssetId.zero } },
             .{ .name = "shader", .number = 2, .kind_override = .{ .asset_ref = .shader_stage }, .default_override = .{ .asset_ref = zimp.AssetId.zero } },
+            .{ .name = "material", .number = 3, .kind_override = .{ .asset_ref = .material }, .default_override = .{ .asset_ref = zimp.AssetId.zero } },
         },
     };
 };
@@ -307,11 +309,11 @@ test "SceneRuntimeInstance registers asset references without loading them" {
 
     var fields = [_]zimp.scene.SceneField{
         .{ .number = 1, .value = .{ .asset_ref = test_mesh_id } },
-        .{ .number = 2, .value = .{ .asset_ref = test_material_id } },
     };
     var remaining_fields = [_]zimp.scene.SceneField{
         .{ .number = 1, .value = .{ .asset_ref = test_texture_id } },
         .{ .number = 2, .value = .{ .asset_ref = test_shader_id } },
+        .{ .number = 3, .value = .{ .asset_ref = test_material_id } },
     };
     var components = [_]zimp.scene.SceneComponent{
         .{ .type_id = mesh_component_id, .fields = &fields },
@@ -338,10 +340,10 @@ test "SceneRuntimeInstance registers asset references without loading them" {
     const entity = try instance.resolve(test_source_id);
     const component = world.getComponent(entity, MeshRenderComponent).?;
     try testing.expect(component.mesh.eql(test_mesh_id));
-    try testing.expect(component.material.eql(test_material_id));
     const remaining = world.getComponent(entity, RemainingAssetReferences).?;
     try testing.expect(remaining.texture.eql(test_texture_id));
     try testing.expect(remaining.shader.eql(test_shader_id));
+    try testing.expect(remaining.material.eql(test_material_id));
 }
 
 test "SceneRuntimeInstance fails when an asset reference is absent from the manifest" {
