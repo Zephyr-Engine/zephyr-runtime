@@ -4,96 +4,96 @@ const zimp = @import("zimp");
 const zcs = @import("zcs");
 
 const setActiveCamera = @import("camera.zig").setActive;
-const SchemaRegistry = @import("schema_registry.zig").SchemaRegistry;
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
-const Texture2D = @import("../graphics/opengl/texture.zig").Texture2D;
 const activeCamera = @import("camera.zig").active;
-const Material = @import("../graphics/material.zig").Material;
-const Project = @import("../project/project.zig").Project;
+const Texture2D = @import("../graphics/opengl/texture.zig");
+const SchemaRegistry = @import("schema_registry.zig");
+const Material = @import("../graphics/material.zig");
+const Project = @import("../project/project.zig");
 const Mesh = @import("../graphics/mesh.zig");
 
-pub const SceneRuntimeInstance = struct {
-    const World = zcs.World;
-    const Registry = SchemaRegistry;
-    allocator: std.mem.Allocator,
-    scene_id: zimp.SceneId,
-    scene_to_runtime: std.AutoHashMap(zimp.SceneEntityId, zcs.EntityID),
-    runtime_to_scene: std.AutoHashMap(zcs.EntityID, zimp.SceneEntityId),
+const SceneRuntimeInstance = @This();
 
-    pub fn init(allocator: std.mem.Allocator, scene_id: zimp.SceneId) @This() {
-        return .{
-            .allocator = allocator,
-            .scene_id = scene_id,
-            .scene_to_runtime = std.AutoHashMap(zimp.SceneEntityId, zcs.EntityID).init(allocator),
-            .runtime_to_scene = std.AutoHashMap(zcs.EntityID, zimp.SceneEntityId).init(allocator),
-        };
+const World = zcs.World;
+const Registry = SchemaRegistry;
+allocator: std.mem.Allocator,
+scene_id: zimp.SceneId,
+scene_to_runtime: std.AutoHashMap(zimp.SceneEntityId, zcs.EntityID),
+runtime_to_scene: std.AutoHashMap(zcs.EntityID, zimp.SceneEntityId),
+
+pub fn init(allocator: std.mem.Allocator, scene_id: zimp.SceneId) SceneRuntimeInstance {
+    return .{
+        .allocator = allocator,
+        .scene_id = scene_id,
+        .scene_to_runtime = std.AutoHashMap(zimp.SceneEntityId, zcs.EntityID).init(allocator),
+        .runtime_to_scene = std.AutoHashMap(zcs.EntityID, zimp.SceneEntityId).init(allocator),
+    };
+}
+
+pub fn deinit(self: *SceneRuntimeInstance, world: *zcs.World) void {
+    var entities = self.scene_to_runtime.valueIterator();
+    while (entities.next()) |entity| {
+        if (world.isAlive(entity.*)) {
+            world.despawn(entity.*);
+        }
+    }
+    self.scene_to_runtime.deinit();
+    self.runtime_to_scene.deinit();
+}
+
+pub fn resolve(self: *const SceneRuntimeInstance, id: zimp.SceneEntityId) !zcs.EntityID {
+    return self.scene_to_runtime.get(id) orelse return error.SceneEntityNotFound;
+}
+
+pub fn spawnEntities(self: *SceneRuntimeInstance, world: *World, registry: *const Registry, assets: *AssetManager, scene: *const zimp.scene.SceneDocument) !void {
+    for (scene.entities) |entity_data| {
+        const entity = try world.spawn();
+        errdefer world.despawn(entity);
+
+        try self.scene_to_runtime.put(entity_data.id, entity);
+        try self.runtime_to_scene.put(entity, entity_data.id);
     }
 
-    pub fn deinit(self: *@This(), world: *zcs.World) void {
-        var entities = self.scene_to_runtime.valueIterator();
-        while (entities.next()) |entity| {
-            if (world.isAlive(entity.*)) {
-                world.despawn(entity.*);
+    for (scene.entities) |entity_data| {
+        const entity = try self.resolve(entity_data.id);
+        for (entity_data.components) |component_data| {
+            const codec = registry.get(component_data.type_id) orelse return error.UnknownComponent;
+            try codec.attach(world, entity, self.allocator, component_data.asData());
+
+            for (component_data.fields) |field| {
+                const schema_field = for (codec.schema.fields) |candidate| {
+                    if (candidate.number == field.number) {
+                        break candidate;
+                    }
+                } else continue;
+
+                const asset_kind = switch (schema_field.kind) {
+                    .asset_ref => |kind| kind,
+                    else => continue,
+                };
+                const asset_id = switch (field.value) {
+                    .asset_ref => |id| id,
+                    else => continue,
+                };
+                try registerAssetId(assets, asset_kind, asset_id);
             }
         }
-        self.scene_to_runtime.deinit();
-        self.runtime_to_scene.deinit();
     }
 
-    pub fn resolve(self: *const @This(), id: zimp.SceneEntityId) !zcs.EntityID {
-        return self.scene_to_runtime.get(id) orelse return error.SceneEntityNotFound;
+    if (scene.active_camera) |camera_id| {
+        const runtime_camera = try self.resolve(camera_id);
+        try setActiveCamera(world, runtime_camera);
     }
+}
 
-    pub fn spawnEntities(self: *@This(), world: *World, registry: *const Registry, assets: *AssetManager, scene: *const zimp.scene.SceneDocument) !void {
-        for (scene.entities) |entity_data| {
-            const entity = try world.spawn();
-            errdefer world.despawn(entity);
-
-            try self.scene_to_runtime.put(entity_data.id, entity);
-            try self.runtime_to_scene.put(entity, entity_data.id);
-        }
-
-        for (scene.entities) |entity_data| {
-            const entity = try self.resolve(entity_data.id);
-            for (entity_data.components) |component_data| {
-                const codec = registry.get(component_data.type_id) orelse return error.UnknownComponent;
-                try codec.attach(world, entity, self.allocator, component_data.asData());
-
-                for (component_data.fields) |field| {
-                    const schema_field = for (codec.schema.fields) |candidate| {
-                        if (candidate.number == field.number) {
-                            break candidate;
-                        }
-                    } else continue;
-
-                    const asset_kind = switch (schema_field.kind) {
-                        .asset_ref => |kind| kind,
-                        else => continue,
-                    };
-                    const asset_id = switch (field.value) {
-                        .asset_ref => |id| id,
-                        else => continue,
-                    };
-                    try registerAssetId(assets, asset_kind, asset_id);
-                }
-            }
-        }
-
-        if (scene.active_camera) |camera_id| {
-            const runtime_camera = try self.resolve(camera_id);
-            try setActiveCamera(world, runtime_camera);
-        }
+fn registerAssetId(assets: *AssetManager, kind: zimp.AssetKind, id: zimp.AssetId) !void {
+    switch (kind) {
+        .mesh => _ = try assets.registerId(Mesh, id),
+        .texture => _ = try assets.registerId(Texture2D, id),
+        .shader_stage => _ = try assets.registerId(zimp.ZShader, id),
+        .material => _ = try assets.registerId(Material, id),
     }
-
-    fn registerAssetId(assets: *AssetManager, kind: zimp.AssetKind, id: zimp.AssetId) !void {
-        switch (kind) {
-            .mesh => _ = try assets.registerId(Mesh, id),
-            .texture => _ = try assets.registerId(Texture2D, id),
-            .shader_stage => _ = try assets.registerId(zimp.ZShader, id),
-            .material => _ = try assets.registerId(Material, id),
-        }
-    }
-};
+}
 
 const testing = std.testing;
 

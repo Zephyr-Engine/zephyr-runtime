@@ -2,160 +2,160 @@ const std = @import("std");
 
 const event = @import("event.zig");
 
+const Input = @This();
+
 pub const Position = struct {
     x: f32 = 0,
     y: f32 = 0,
 };
 
-pub const Input = struct {
-    pub const key_count = @intFromEnum(event.Key.Menu) + 1;
-    pub const mouse_button_count = @intFromEnum(event.MouseButton.Button7) + 1;
-    pub const text_capacity = 64;
+pub const key_count = @intFromEnum(event.Key.Menu) + 1;
+pub const mouse_button_count = @intFromEnum(event.MouseButton.Button7) + 1;
+pub const text_capacity = 64;
 
-    key_down: [key_count]bool = [_]bool{false} ** key_count,
-    key_pressed: [key_count]bool = [_]bool{false} ** key_count,
-    key_released: [key_count]bool = [_]bool{false} ** key_count,
-    mouse_button_down: [mouse_button_count]bool = [_]bool{false} ** mouse_button_count,
-    mouse_button_pressed: [mouse_button_count]bool = [_]bool{false} ** mouse_button_count,
-    mouse_button_released: [mouse_button_count]bool = [_]bool{false} ** mouse_button_count,
-    mouse_pos: Position = .{},
-    mouse_delta: Position = .{},
-    mouse_scroll: Position = .{},
-    text_codepoints: [text_capacity]u32 = [_]u32{0} ** text_capacity,
-    text_len: usize = 0,
-    focused: bool = true,
-    has_mouse_position: bool = false,
+key_down: [key_count]bool = [_]bool{false} ** key_count,
+key_pressed: [key_count]bool = [_]bool{false} ** key_count,
+key_released: [key_count]bool = [_]bool{false} ** key_count,
+mouse_button_down: [mouse_button_count]bool = [_]bool{false} ** mouse_button_count,
+mouse_button_pressed: [mouse_button_count]bool = [_]bool{false} ** mouse_button_count,
+mouse_button_released: [mouse_button_count]bool = [_]bool{false} ** mouse_button_count,
+mouse_pos: Position = .{},
+mouse_delta: Position = .{},
+mouse_scroll: Position = .{},
+text_codepoints: [text_capacity]u32 = [_]u32{0} ** text_capacity,
+text_len: usize = 0,
+focused: bool = true,
+has_mouse_position: bool = false,
 
-    pub fn beginFrame(self: *Input) void {
-        @memset(&self.key_pressed, false);
-        @memset(&self.key_released, false);
-        @memset(&self.mouse_button_pressed, false);
-        @memset(&self.mouse_button_released, false);
+pub fn beginFrame(self: *Input) void {
+    @memset(&self.key_pressed, false);
+    @memset(&self.key_released, false);
+    @memset(&self.mouse_button_pressed, false);
+    @memset(&self.mouse_button_released, false);
 
-        self.mouse_delta = .{};
-        self.mouse_scroll = .{};
-        self.text_len = 0;
+    self.mouse_delta = .{};
+    self.mouse_scroll = .{};
+    self.text_len = 0;
+}
+
+pub fn applyEvent(self: *Input, ev: event.ZEvent) void {
+    switch (ev) {
+        .KeyPressed => |key| self.setKeyDown(key),
+        .KeyReleased => |key| self.setKeyUp(key),
+        .KeyRepeated => {},
+        .MousePressed => |button| self.setMouseButtonDown(button),
+        .MouseReleased => |button| self.setMouseButtonUp(button),
+        .MouseMove => |position| self.setMousePosition(.{ .x = position.x, .y = position.y }),
+        .MouseScroll => |scroll| {
+            self.mouse_scroll.x += scroll.x;
+            self.mouse_scroll.y += scroll.y;
+        },
+        .CharInput => |codepoint| self.appendText(codepoint),
+        else => {},
+    }
+}
+
+pub fn isKeyDown(self: *const Input, key: event.Key) bool {
+    return self.key_down[keyIndex(key)];
+}
+
+pub fn wasKeyPressed(self: *const Input, key: event.Key) bool {
+    return self.key_pressed[keyIndex(key)];
+}
+
+pub fn wasKeyReleased(self: *const Input, key: event.Key) bool {
+    return self.key_released[keyIndex(key)];
+}
+
+pub fn isMouseButtonDown(self: *const Input, button: event.MouseButton) bool {
+    return self.mouse_button_down[mouseButtonIndex(button)];
+}
+
+pub fn wasMouseButtonPressed(self: *const Input, button: event.MouseButton) bool {
+    return self.mouse_button_pressed[mouseButtonIndex(button)];
+}
+
+pub fn wasMouseButtonReleased(self: *const Input, button: event.MouseButton) bool {
+    return self.mouse_button_released[mouseButtonIndex(button)];
+}
+
+pub fn textInput(self: *const Input) []const u32 {
+    return self.text_codepoints[0..self.text_len];
+}
+
+fn setKeyDown(self: *Input, key: event.Key) void {
+    const index = keyIndex(key);
+    if (!self.key_down[index]) {
+        self.key_pressed[index] = true;
+        self.key_down[index] = true;
+    }
+}
+
+fn setKeyUp(self: *Input, key: event.Key) void {
+    const index = keyIndex(key);
+    if (self.key_down[index]) {
+        self.key_released[index] = true;
+        self.key_down[index] = false;
+    }
+}
+
+fn setMouseButtonDown(self: *Input, button: event.MouseButton) void {
+    const index = mouseButtonIndex(button);
+    if (!self.mouse_button_down[index]) {
+        self.mouse_button_pressed[index] = true;
+        self.mouse_button_down[index] = true;
+    }
+}
+
+fn setMouseButtonUp(self: *Input, button: event.MouseButton) void {
+    const index = mouseButtonIndex(button);
+    if (self.mouse_button_down[index]) {
+        self.mouse_button_released[index] = true;
+        self.mouse_button_down[index] = false;
+    }
+}
+
+fn setMousePosition(self: *Input, position: Position) void {
+    if (self.has_mouse_position) {
+        self.mouse_delta.x += position.x - self.mouse_pos.x;
+        self.mouse_delta.y += position.y - self.mouse_pos.y;
+    }
+    self.mouse_pos = position;
+    self.has_mouse_position = true;
+}
+
+fn appendText(self: *Input, codepoint: u32) void {
+    if (self.text_len == text_capacity) {
+        return;
+    }
+    self.text_codepoints[self.text_len] = codepoint;
+    self.text_len += 1;
+}
+
+pub fn setFocused(self: *Input, focused: bool) void {
+    if (self.focused == focused) {
+        return;
     }
 
-    pub fn applyEvent(self: *Input, ev: event.ZEvent) void {
-        switch (ev) {
-            .KeyPressed => |key| self.setKeyDown(key),
-            .KeyReleased => |key| self.setKeyUp(key),
-            .KeyRepeated => {},
-            .MousePressed => |button| self.setMouseButtonDown(button),
-            .MouseReleased => |button| self.setMouseButtonUp(button),
-            .MouseMove => |position| self.setMousePosition(.{ .x = position.x, .y = position.y }),
-            .MouseScroll => |scroll| {
-                self.mouse_scroll.x += scroll.x;
-                self.mouse_scroll.y += scroll.y;
-            },
-            .CharInput => |codepoint| self.appendText(codepoint),
-            else => {},
-        }
+    self.focused = focused;
+    self.has_mouse_position = false;
+    if (!focused) {
+        self.releaseAll();
     }
+}
 
-    pub fn isKeyDown(self: *const Input, key: event.Key) bool {
-        return self.key_down[keyIndex(key)];
-    }
+fn releaseAll(self: *Input) void {
+    @memset(&self.key_down, false);
+    @memset(&self.mouse_button_down, false);
+}
 
-    pub fn wasKeyPressed(self: *const Input, key: event.Key) bool {
-        return self.key_pressed[keyIndex(key)];
-    }
+inline fn keyIndex(key: event.Key) usize {
+    return @intFromEnum(key);
+}
 
-    pub fn wasKeyReleased(self: *const Input, key: event.Key) bool {
-        return self.key_released[keyIndex(key)];
-    }
-
-    pub fn isMouseButtonDown(self: *const Input, button: event.MouseButton) bool {
-        return self.mouse_button_down[mouseButtonIndex(button)];
-    }
-
-    pub fn wasMouseButtonPressed(self: *const Input, button: event.MouseButton) bool {
-        return self.mouse_button_pressed[mouseButtonIndex(button)];
-    }
-
-    pub fn wasMouseButtonReleased(self: *const Input, button: event.MouseButton) bool {
-        return self.mouse_button_released[mouseButtonIndex(button)];
-    }
-
-    pub fn textInput(self: *const Input) []const u32 {
-        return self.text_codepoints[0..self.text_len];
-    }
-
-    fn setKeyDown(self: *Input, key: event.Key) void {
-        const index = keyIndex(key);
-        if (!self.key_down[index]) {
-            self.key_pressed[index] = true;
-            self.key_down[index] = true;
-        }
-    }
-
-    fn setKeyUp(self: *Input, key: event.Key) void {
-        const index = keyIndex(key);
-        if (self.key_down[index]) {
-            self.key_released[index] = true;
-            self.key_down[index] = false;
-        }
-    }
-
-    fn setMouseButtonDown(self: *Input, button: event.MouseButton) void {
-        const index = mouseButtonIndex(button);
-        if (!self.mouse_button_down[index]) {
-            self.mouse_button_pressed[index] = true;
-            self.mouse_button_down[index] = true;
-        }
-    }
-
-    fn setMouseButtonUp(self: *Input, button: event.MouseButton) void {
-        const index = mouseButtonIndex(button);
-        if (self.mouse_button_down[index]) {
-            self.mouse_button_released[index] = true;
-            self.mouse_button_down[index] = false;
-        }
-    }
-
-    fn setMousePosition(self: *Input, position: Position) void {
-        if (self.has_mouse_position) {
-            self.mouse_delta.x += position.x - self.mouse_pos.x;
-            self.mouse_delta.y += position.y - self.mouse_pos.y;
-        }
-        self.mouse_pos = position;
-        self.has_mouse_position = true;
-    }
-
-    fn appendText(self: *Input, codepoint: u32) void {
-        if (self.text_len == text_capacity) {
-            return;
-        }
-        self.text_codepoints[self.text_len] = codepoint;
-        self.text_len += 1;
-    }
-
-    pub fn setFocused(self: *Input, focused: bool) void {
-        if (self.focused == focused) {
-            return;
-        }
-
-        self.focused = focused;
-        self.has_mouse_position = false;
-        if (!focused) {
-            self.releaseAll();
-        }
-    }
-
-    fn releaseAll(self: *Input) void {
-        @memset(&self.key_down, false);
-        @memset(&self.mouse_button_down, false);
-    }
-
-    inline fn keyIndex(key: event.Key) usize {
-        return @intFromEnum(key);
-    }
-
-    inline fn mouseButtonIndex(button: event.MouseButton) usize {
-        return @intFromEnum(button);
-    }
-};
+inline fn mouseButtonIndex(button: event.MouseButton) usize {
+    return @intFromEnum(button);
+}
 
 test "Input tracks press, hold, and release edges" {
     var input: Input = .{};

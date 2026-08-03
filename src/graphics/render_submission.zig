@@ -3,7 +3,7 @@ const std = @import("std");
 
 const math = @import("../core/math.zig");
 
-const Material = @import("material.zig").Material;
+const Material = @import("material.zig");
 const Mesh = @import("mesh.zig");
 
 pub const DrawItem = struct {

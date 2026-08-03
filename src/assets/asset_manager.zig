@@ -4,18 +4,18 @@ const zob = @import("zob");
 
 const source_mod = @import("source.zig");
 
-const AssetId = @import("zimp").AssetId;
-const AssetError = source_mod.AssetError;
-const CookedStore = source_mod.CookedStore;
-const RuntimeAssetManifest = @import("manifest.zig").RuntimeAssetManifest;
-const Project = @import("../project/project.zig").Project;
-const Material = @import("../graphics/material.zig").Material;
-const Shader = @import("../graphics/opengl/shader.zig").Shader;
-const Texture2D = @import("../graphics/opengl/texture.zig").Texture2D;
+const Texture2D = @import("../graphics/opengl/texture.zig");
+const Shader = @import("../graphics/opengl/shader.zig");
+const RuntimeAssetManifest = @import("manifest.zig");
+const Material = @import("../graphics/material.zig");
+const Project = @import("../project/project.zig");
 const Mesh = @import("../graphics/mesh.zig");
 const log = @import("../core/log.zig");
 
+const CookedStore = source_mod.CookedStore;
+const AssetError = source_mod.AssetError;
 const AssetKind = zimp.AssetKind;
+const AssetId = zimp.AssetId;
 
 fn detectKind(path: []const u8) ?AssetKind {
     return AssetKind.fromAssetType(zimp.runtime.detectType(path) orelse return null);

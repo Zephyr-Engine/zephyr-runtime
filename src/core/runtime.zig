@@ -1,18 +1,18 @@
 const std = @import("std");
 const zcs = @import("zcs");
 
-const SchemaRegistry = @import("../scene/schema_registry.zig").SchemaRegistry;
-const SceneController = @import("../scene/controller.zig").SceneController;
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
-const DebugStats = @import("../graphics/debug_stats.zig").DebugStats;
+const SchemaRegistry = @import("../scene/schema_registry.zig");
 const engine_components = @import("../ecs/components.zig");
-const Project = @import("../project/project.zig").Project;
+const SceneController = @import("../scene/controller.zig");
+const DebugStats = @import("../graphics/debug_stats.zig");
 const Renderer = @import("../graphics/renderer.zig");
-const Input = @import("input.zig").Input;
+const Project = @import("../project/project.zig");
 const ecs = @import("../ecs/world.zig");
-const Game = @import("game.zig").Game;
-const Time = @import("time.zig").Time;
+const Input = @import("input.zig");
 const event = @import("event.zig");
+const Game = @import("game.zig");
+const Time = @import("time.zig");
 
 pub fn Runtime(comptime game: Game) type {
     return struct {

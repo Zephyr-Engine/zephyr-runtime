@@ -2,6 +2,7 @@ const std = @import("std");
 
 const zlm = @import("zlm").as(f32);
 
+pub const Vec4 = zlm.Vec4;
 pub const Vec3 = zlm.Vec3;
 pub const Vec2 = zlm.Vec2;
 pub const Mat4 = zlm.Mat4;

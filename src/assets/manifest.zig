@@ -4,87 +4,84 @@ const zimp = @import("zimp");
 const AssetId = zimp.AssetId;
 const log = @import("../core/log.zig");
 
-/// The runtime's trimmed view of `assets.zmanifest`: durable id, kind, and
-/// cooked path per asset, indexed both ways. Loaded once at AssetManager
-/// init so path registration resolves to durable ids and id registration
-/// resolves to cooked paths. Deliberately does not reuse the full builder
-/// model beyond decoding — the runtime never links manifest-building code.
-pub const RuntimeAssetManifest = struct {
-    arena: std.heap.ArenaAllocator,
-    entries: []Entry,
-    by_id: std.AutoHashMapUnmanaged(AssetId, u32),
-    by_cooked_path: std.StringHashMapUnmanaged(u32),
+const RuntimeAssetManifest = @This();
 
-    pub const Entry = struct {
-        id: AssetId,
-        kind: zimp.AssetKind,
-        /// Relative to the project cooked dir, normalized.
-        cooked_path: []const u8,
-        content_hash: u64,
-    };
+arena: std.heap.ArenaAllocator,
+entries: []Entry,
+by_id: std.AutoHashMapUnmanaged(AssetId, u32),
+by_cooked_path: std.StringHashMapUnmanaged(u32),
 
-    /// Load `<manifest_path>` relative to `root_dir` (the project root).
-    pub fn loadFromDir(
-        allocator: std.mem.Allocator,
-        io: std.Io,
-        root_dir: std.Io.Dir,
-        manifest_path: []const u8,
-    ) !RuntimeAssetManifest {
-        var full = try zimp.manifest.codec.loadFromDir(allocator, io, root_dir, manifest_path);
-        defer full.deinit();
-
-        var self = RuntimeAssetManifest{
-            .arena = std.heap.ArenaAllocator.init(allocator),
-            .entries = &.{},
-            .by_id = .empty,
-            .by_cooked_path = .empty,
-        };
-        errdefer self.deinit();
-        const a = self.arena.allocator();
-
-        const entries = try a.alloc(Entry, full.entries.len);
-        for (full.entries, entries, 0..) |src, *entry, i| {
-            const cooked_path = try zimp.path.normalizeVirtual(a, src.cooked_path);
-            entry.* = .{
-                .id = src.id,
-                .kind = src.kind,
-                .cooked_path = cooked_path,
-                .content_hash = src.content_hash,
-            };
-
-            // The codec already rejects duplicate ids; cooked paths are not
-            // covered by its uniqueness rules, so defend here.
-            const id_gop = try self.by_id.getOrPut(a, src.id);
-            if (id_gop.found_existing) return error.DuplicateAssetId;
-            id_gop.value_ptr.* = @intCast(i);
-
-            const path_gop = try self.by_cooked_path.getOrPut(a, cooked_path);
-            if (path_gop.found_existing) {
-                log.err("asset manifest maps two assets to cooked path '{s}'", .{cooked_path});
-                return error.DuplicateCookedPath;
-            }
-            path_gop.value_ptr.* = @intCast(i);
-        }
-        self.entries = entries;
-        return self;
-    }
-
-    pub fn deinit(self: *RuntimeAssetManifest) void {
-        self.arena.deinit();
-    }
-
-    pub fn byId(self: *const RuntimeAssetManifest, id: AssetId) ?*const Entry {
-        const idx = self.by_id.get(id) orelse return null;
-        return &self.entries[idx];
-    }
-
-    /// `cooked_path` must already be normalized (the asset manager
-    /// normalizes every registration path before lookup).
-    pub fn byCookedPath(self: *const RuntimeAssetManifest, cooked_path: []const u8) ?*const Entry {
-        const idx = self.by_cooked_path.get(cooked_path) orelse return null;
-        return &self.entries[idx];
-    }
+pub const Entry = struct {
+    id: AssetId,
+    kind: zimp.AssetKind,
+    /// Relative to the project cooked dir, normalized.
+    cooked_path: []const u8,
+    content_hash: u64,
 };
+
+/// Load `<manifest_path>` relative to `root_dir` (the project root).
+pub fn loadFromDir(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    root_dir: std.Io.Dir,
+    manifest_path: []const u8,
+) !RuntimeAssetManifest {
+    var full = try zimp.manifest.codec.loadFromDir(allocator, io, root_dir, manifest_path);
+    defer full.deinit();
+
+    var self = RuntimeAssetManifest{
+        .arena = std.heap.ArenaAllocator.init(allocator),
+        .entries = &.{},
+        .by_id = .empty,
+        .by_cooked_path = .empty,
+    };
+    errdefer self.deinit();
+    const a = self.arena.allocator();
+
+    const entries = try a.alloc(Entry, full.entries.len);
+    for (full.entries, entries, 0..) |src, *entry, i| {
+        const cooked_path = try zimp.path.normalizeVirtual(a, src.cooked_path);
+        entry.* = .{
+            .id = src.id,
+            .kind = src.kind,
+            .cooked_path = cooked_path,
+            .content_hash = src.content_hash,
+        };
+
+        // The codec already rejects duplicate ids; cooked paths are not
+        // covered by its uniqueness rules, so defend here.
+        const id_gop = try self.by_id.getOrPut(a, src.id);
+        if (id_gop.found_existing) {
+            return error.DuplicateAssetId;
+        }
+        id_gop.value_ptr.* = @intCast(i);
+
+        const path_gop = try self.by_cooked_path.getOrPut(a, cooked_path);
+        if (path_gop.found_existing) {
+            log.err("asset manifest maps two assets to cooked path '{s}'", .{cooked_path});
+            return error.DuplicateCookedPath;
+        }
+        path_gop.value_ptr.* = @intCast(i);
+    }
+    self.entries = entries;
+    return self;
+}
+
+pub fn deinit(self: *RuntimeAssetManifest) void {
+    self.arena.deinit();
+}
+
+pub fn byId(self: *const RuntimeAssetManifest, id: AssetId) ?*const Entry {
+    const idx = self.by_id.get(id) orelse return null;
+    return &self.entries[idx];
+}
+
+/// `cooked_path` must already be normalized (the asset manager
+/// normalizes every registration path before lookup).
+pub fn byCookedPath(self: *const RuntimeAssetManifest, cooked_path: []const u8) ?*const Entry {
+    const idx = self.by_cooked_path.get(cooked_path) orelse return null;
+    return &self.entries[idx];
+}
 
 const testing = std.testing;
 

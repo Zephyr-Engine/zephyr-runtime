@@ -3,7 +3,7 @@ const zimp = @import("zimp");
 
 const manifest_mod = zimp.project.manifest;
 const ProjectManifest = zimp.ProjectManifest;
-const Project = @import("project.zig").Project;
+const Project = @import("project.zig");
 
 pub const OpenProjectOptions = struct {
     root_path: []const u8,
