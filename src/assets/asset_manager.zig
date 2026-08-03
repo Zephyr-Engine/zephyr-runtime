@@ -4,10 +4,10 @@ const zob = @import("zob");
 
 const source_mod = @import("source.zig");
 
-const RuntimeAssetManifest = @import("manifest.zig").RuntimeAssetManifest;
-const Shader = @import("../graphics/opengl/shader.zig").Shader;
-const Material = @import("../graphics/material.zig").Material;
 const Texture2D = @import("../graphics/opengl/texture.zig");
+const Shader = @import("../graphics/opengl/shader.zig");
+const RuntimeAssetManifest = @import("manifest.zig");
+const Material = @import("../graphics/material.zig");
 const Project = @import("../project/project.zig");
 const Mesh = @import("../graphics/mesh.zig");
 const log = @import("../core/log.zig");

@@ -6,9 +6,9 @@ const zcs = @import("zcs");
 const setActiveCamera = @import("camera.zig").setActive;
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
 const activeCamera = @import("camera.zig").active;
-const Material = @import("../graphics/material.zig").Material;
 const Texture2D = @import("../graphics/opengl/texture.zig");
 const SchemaRegistry = @import("schema_registry.zig");
+const Material = @import("../graphics/material.zig");
 const Project = @import("../project/project.zig");
 const Mesh = @import("../graphics/mesh.zig");
 

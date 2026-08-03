@@ -16,7 +16,7 @@ const applyFixedState = @import("opengl/render_state.zig").apply;
 const beginRenderPass = @import("opengl/render_state.zig").begin;
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
 const Framebuffer = @import("opengl/framebuffer.zig");
-const Material = @import("material.zig").Material;
+const Material = @import("material.zig");
 const Mesh = @import("mesh.zig");
 
 const DrawItem = render_submission.DrawItem;
