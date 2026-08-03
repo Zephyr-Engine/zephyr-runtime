@@ -46,7 +46,7 @@ pub fn loadFromZMesh(allocator: std.mem.Allocator, model: *const ZMesh, material
     errdefer allocator.free(parts);
 
     var initialized: usize = 0;
-    errdefer for (parts[0..initialized]) |*part| part.vao.deinit();
+    errdefer for (parts[0..initialized]) |*part| part.deinit(allocator);
 
     for (model.parts, parts) |source, *part| {
         part.* = try loadPart(allocator, source.mesh, mat4FromArray(source.transform));
