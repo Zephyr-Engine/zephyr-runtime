@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const Runtime = @import("runtime.zig").Runtime;
-const Framebuffer = @import("../graphics/opengl/framebuffer.zig");
+const Framebuffer = @import("../graphics/rhi/framebuffer.zig");
 const DebugStats = @import("../graphics/debug_stats.zig");
 const Renderer = @import("../graphics/renderer.zig");
 const Project = @import("../project/project.zig");
@@ -88,12 +88,12 @@ pub fn Application(comptime game: Game) type {
         }
 
         pub fn renderScene(self: *@This(), framebuffer: ?*Framebuffer) !void {
-            defer if (framebuffer != null) self.bindDefaultFramebuffer();
+            defer if (framebuffer != null) self.restoreSwapchainRenderTarget();
 
             const target: Renderer.RenderTarget = if (framebuffer) |value|
                 .{ .framebuffer = value }
             else blk: {
-                break :blk .{ .default_framebuffer = self.defaultViewport() };
+                break :blk .{ .swapchain = self.defaultViewport() };
             };
             try self.runtime.render(target);
             self.runtime.completeFrame(Window.GetTime());
@@ -120,9 +120,12 @@ pub fn Application(comptime game: Game) type {
             return .{ .width = size.width, .height = size.height };
         }
 
-        fn bindDefaultFramebuffer(self: *const @This()) void {
+        fn restoreSwapchainRenderTarget(self: *@This()) void {
             const viewport = self.defaultViewport();
-            Framebuffer.bindDefault(viewport.width, viewport.height);
+            self.runtime.renderer.device.beginRenderPass(.{
+                .target = .{ .swapchain = viewport },
+            }) catch {};
+            self.runtime.renderer.device.endRenderPass();
         }
 
         pub fn deinit(self: *@This()) void {

@@ -8,14 +8,13 @@ const camera_system = @import("../scene/camera.zig");
 const components = @import("../ecs/components.zig");
 const render_state = @import("render_state.zig");
 const DebugStats = @import("debug_stats.zig");
+const Device = @import("rhi/device.zig");
 const math = @import("../core/math.zig");
 const ecs = @import("../ecs/world.zig");
 const log = @import("../core/log.zig");
 
 const applyFixedState = @import("opengl/render_state.zig").apply;
-const beginRenderPass = @import("opengl/render_state.zig").begin;
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
-const Framebuffer = @import("opengl/framebuffer.zig");
 const Material = @import("material.zig");
 const Mesh = @import("mesh.zig");
 
@@ -23,57 +22,37 @@ const DrawItem = render_submission.DrawItem;
 
 const Renderer = @This();
 
-pub const RenderViewport = struct {
-    width: u32 = 1,
-    height: u32 = 1,
+pub const RenderViewport = Device.RenderViewport;
+pub const RenderTarget = Device.RenderTarget;
 
-    pub fn aspect(self: RenderViewport) f32 {
-        return @as(f32, @floatFromInt(self.width)) / @as(f32, @floatFromInt(@max(1, self.height)));
-    }
-};
-
-pub const RenderTarget = union(enum) {
-    default_framebuffer: RenderViewport,
-    framebuffer: *Framebuffer,
-
-    fn bind(self: RenderTarget) RenderViewport {
-        return switch (self) {
-            .default_framebuffer => |viewport| blk: {
-                Framebuffer.bindDefault(viewport.width, viewport.height);
-                break :blk viewport;
-            },
-            .framebuffer => |framebuffer| blk: {
-                framebuffer.bind();
-                break :blk .{ .width = framebuffer.width, .height = framebuffer.height };
-            },
-        };
-    }
-};
-
+device: Device,
 submissions: std.ArrayList(DrawItem) = .empty,
 stats: Collector = .{},
 allocator: std.mem.Allocator,
 
-pub fn init(allocator: std.mem.Allocator) !Renderer {
+pub fn init(allocator: std.mem.Allocator, backend: Device.Backend) !Renderer {
     return .{
         .allocator = allocator,
+        .device = try Device.init(allocator, backend),
     };
 }
 
 pub fn render(self: *Renderer, world: *zcs.World, assets: *AssetManager, target: RenderTarget) !void {
-    const viewport = target.bind();
+    const viewport = target.viewport();
     self.stats.beginGpuTimer();
     defer self.stats.endGpuTimer();
 
     self.submissions.clearRetainingCapacity();
-    try self.renderWorld(world, assets, viewport);
+    try self.renderWorld(world, assets, target, viewport);
 }
 
-fn renderWorld(self: *Renderer, world: *zcs.World, assets: *AssetManager, viewport: RenderViewport) !void {
-    beginRenderPass(.{
+fn renderWorld(self: *Renderer, world: *zcs.World, assets: *AssetManager, target: RenderTarget, viewport: RenderViewport) !void {
+    try self.device.beginRenderPass(.{
+        .target = target,
         .color = .{ .clear = .{ 0.4, 0.4, 0.4, 1 } },
         .depth = .{ .clear = 1 },
     });
+    defer self.device.endRenderPass();
 
     const camera_entity = camera_system.active(world) orelse {
         std.log.warn("Skipping scene render: no active camera", .{});
@@ -98,6 +77,7 @@ pub fn recordCpuFrame(self: *Renderer, delta_time: f32, elapsed_ms: f32) void {
 pub fn deinit(self: *Renderer) void {
     self.stats.deinit();
     self.submissions.deinit(self.allocator);
+    self.device.deinit();
 
     self.* = undefined;
 }

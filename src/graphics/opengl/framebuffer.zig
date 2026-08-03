@@ -42,7 +42,9 @@ pub fn resize(self: *Framebuffer, width: u32, height: u32) FramebufferError!void
 
     if (self.id == 0) {
         gl.glGenFramebuffers(1, &self.id);
-        if (self.id == 0) return FramebufferError.FramebufferCreationFailed;
+        if (self.id == 0) {
+            return FramebufferError.FramebufferCreationFailed;
+        }
     }
 
     self.width = target_width;
@@ -122,10 +124,6 @@ pub fn resize(self: *Framebuffer, width: u32, height: u32) FramebufferError!void
 pub fn bind(self: *const Framebuffer) void {
     gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self.id);
     gl.glViewport(0, 0, @intCast(self.width), @intCast(self.height));
-}
-
-pub fn textureId(self: *const Framebuffer) u32 {
-    return self.color_texture;
 }
 
 fn destroyAttachments(self: *Framebuffer) void {

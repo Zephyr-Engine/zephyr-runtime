@@ -1,7 +1,7 @@
 pub const Application = @import("core/application.zig").Application;
 pub const Runtime = @import("core/runtime.zig").Runtime;
 pub const VertexArray = @import("graphics/opengl/vertex_array.zig");
-pub const Framebuffer = @import("graphics/opengl/framebuffer.zig");
+pub const Framebuffer = @import("graphics/rhi/framebuffer.zig");
 pub const MouseButton = @import("core/event.zig").MouseButton;
 pub const CursorKind = @import("core/window.zig").CursorKind;
 pub const Texture = @import("graphics/opengl/texture.zig");

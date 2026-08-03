@@ -58,7 +58,7 @@ pub fn Runtime(comptime game: Game) type {
 
             try runtime.world.setResource(Input, .{});
 
-            runtime.renderer = try Renderer.init(allocator);
+            runtime.renderer = try Renderer.init(allocator, .opengl);
             errdefer runtime.renderer.deinit();
 
             return runtime;
