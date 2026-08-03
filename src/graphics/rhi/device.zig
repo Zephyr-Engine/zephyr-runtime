@@ -3,6 +3,8 @@ const std = @import("std");
 const OpenGLDevice = @import("../opengl/device.zig");
 const render_state = @import("../render_state.zig");
 const Framebuffer = @import("framebuffer.zig");
+const GraphicsPipeline = @import("graphics_pipeline.zig");
+const TextureView = @import("texture_view.zig");
 
 pub const Backend = enum {
     opengl,
@@ -49,12 +51,20 @@ vtable: *const VTable,
 
 pub const VTable = struct {
     deinit: *const fn (impl: *anyopaque) void,
+
+    // renderer
+    bindRenderTarget: *const fn (impl: *anyopaque, target: RenderTarget) void,
+    beginRenderPass: *const fn (impl: *anyopaque, info: RenderPassInfo) anyerror!void,
+    endRenderPass: *const fn (impl: *anyopaque) void,
+
+    // framebuffers
     createFramebuffer: *const fn (impl: *anyopaque, desc: Framebuffer.FramebufferDesc) anyerror!Framebuffer,
     destroyFramebuffer: *const fn (impl: *anyopaque, target: *Framebuffer) void,
     resizeFramebuffer: *const fn (impl: *anyopaque, target: *Framebuffer, extent: Framebuffer.Extent2D) anyerror!void,
-    beginRenderPass: *const fn (impl: *anyopaque, info: RenderPassInfo) anyerror!void,
-    endRenderPass: *const fn (impl: *anyopaque) void,
-    framebufferTextureId: *const fn (impl: *anyopaque, target: *const Framebuffer) u32,
+    framebufferColorView: *const fn (impl: *anyopaque, target: *const Framebuffer) TextureView,
+
+    // graphics pipelines
+    createGraphicsPipeline: *const fn (impl: *anyopaque, desc: GraphicsPipeline.GraphicsPipelineDesc) anyerror!GraphicsPipeline,
 };
 
 pub fn init(allocator: std.mem.Allocator, backend: Backend) !Device {
@@ -88,10 +98,23 @@ pub fn beginRenderPass(self: *Device, info: RenderPassInfo) anyerror!void {
     return self.vtable.beginRenderPass(self.impl, info);
 }
 
+pub fn bindRenderTarget(self: *Device, target: RenderTarget) void {
+    self.vtable.bindRenderTarget(self.impl, target);
+}
+
 pub fn endRenderPass(self: *Device) void {
     self.vtable.endRenderPass(self.impl);
 }
 
-pub fn framebufferTextureId(self: *Device, target: *const Framebuffer) u32 {
-    return self.vtable.framebufferTextureId(self.impl, target);
+pub fn framebufferColorView(self: *Device, target: *const Framebuffer) TextureView {
+    return self.vtable.framebufferColorView(self.impl, target);
+}
+
+pub fn createGraphicsPipeline(self: *Device, desc: GraphicsPipeline.GraphicsPipelineDesc) anyerror!GraphicsPipeline {
+    return self.vtable.createGraphicsPipeline(self.impl, desc);
+}
+
+test "OpenGL device satisfies the complete RHI vtable" {
+    var device = try init(std.testing.allocator, .opengl);
+    device.deinit();
 }

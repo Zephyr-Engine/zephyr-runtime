@@ -103,11 +103,6 @@ pub fn bind(self: *const VertexArray) void {
     gl.glBindVertexArray(self.id);
 }
 
-pub fn unbind(self: *const VertexArray) void {
-    _ = self;
-    gl.glBindVertexArray(0);
-}
-
 pub fn indexCount(self: *const VertexArray) usize {
     const ebo = self.ebo orelse return 0;
     return ebo.count;

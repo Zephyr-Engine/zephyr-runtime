@@ -1,11 +1,11 @@
 pub const Application = @import("core/application.zig").Application;
 pub const Runtime = @import("core/runtime.zig").Runtime;
+pub const GraphicsPipeline = @import("graphics/rhi/graphics_pipeline.zig");
 pub const VertexArray = @import("graphics/opengl/vertex_array.zig");
 pub const Framebuffer = @import("graphics/rhi/framebuffer.zig");
 pub const MouseButton = @import("core/event.zig").MouseButton;
 pub const CursorKind = @import("core/window.zig").CursorKind;
 pub const Texture = @import("graphics/opengl/texture.zig");
-pub const Shader = @import("graphics/opengl/shader.zig");
 pub const Material = @import("graphics/material.zig");
 pub const ZEvent = @import("core/event.zig").ZEvent;
 pub const Key = @import("core/event.zig").Key;
@@ -98,7 +98,8 @@ test {
     _ = @import("graphics/opengl/framebuffer.zig");
     _ = @import("graphics/opengl/buffer.zig");
     _ = @import("graphics/opengl/diagnostics.zig");
-    _ = @import("graphics/opengl/shader.zig");
+    _ = @import("graphics/opengl/graphics_pipeline.zig");
+    _ = @import("graphics/rhi/device.zig");
     _ = @import("graphics/opengl/texture.zig");
     _ = @import("graphics/opengl/vertex_array.zig");
     _ = @import("graphics/opengl/stats_collector.zig");

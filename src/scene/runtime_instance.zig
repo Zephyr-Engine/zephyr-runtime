@@ -7,6 +7,7 @@ const setActiveCamera = @import("camera.zig").setActive;
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
 const activeCamera = @import("camera.zig").active;
 const Texture2D = @import("../graphics/opengl/texture.zig");
+const Device = @import("../graphics/rhi/device.zig");
 const SchemaRegistry = @import("schema_registry.zig");
 const Material = @import("../graphics/material.zig");
 const Project = @import("../project/project.zig");
@@ -304,7 +305,9 @@ test "SceneRuntimeInstance registers asset references without loading them" {
     defer tmp.cleanup();
     var project = try testProjectWithAssets(&tmp);
     defer project.root_dir.close(testing.io);
-    var assets = try AssetManager.init(testing.allocator, testing.io, &project);
+    var device = try Device.init(testing.allocator, .opengl);
+    defer device.deinit();
+    var assets = try AssetManager.init(testing.allocator, testing.io, &project, &device);
     defer assets.deinit();
 
     var fields = [_]zimp.scene.SceneField{
@@ -353,7 +356,9 @@ test "SceneRuntimeInstance fails when an asset reference is absent from the mani
     defer tmp.cleanup();
     var project = try testProjectWithAssets(&tmp);
     defer project.root_dir.close(testing.io);
-    var assets = try AssetManager.init(testing.allocator, testing.io, &project);
+    var device = try Device.init(testing.allocator, .opengl);
+    defer device.deinit();
+    var assets = try AssetManager.init(testing.allocator, testing.io, &project, &device);
     defer assets.deinit();
 
     var fields = [_]zimp.scene.SceneField{.{ .number = 1, .value = .{ .asset_ref = missing_asset_id } }};

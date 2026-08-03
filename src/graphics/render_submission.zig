@@ -32,27 +32,15 @@ pub const DrawItem = struct {
 };
 
 pub const PipelineKey = struct {
-    shader_program_id: u32,
-
-    depth_test: bool,
-    depth_write: bool,
-
-    cull_mode: zimp.CullMode,
-    blend_mode: zimp.BlendMode,
+    graphics_pipeline: u64,
 
     pub fn eql(a: PipelineKey, b: PipelineKey) bool {
         return std.meta.eql(a, b);
     }
 
     pub fn generate(material: *const Material) PipelineKey {
-        const state = material.source.render_state;
-
         return .{
-            .shader_program_id = material.shader.id,
-            .depth_test = state.depth_test,
-            .depth_write = state.depth_write,
-            .cull_mode = if (state.double_sided) .none else state.cull_mode,
-            .blend_mode = state.blend_mode,
+            .graphics_pipeline = material.pipeline.sort_key,
         };
     }
 };
@@ -111,27 +99,9 @@ fn pipelineLessThan(
     a: PipelineKey,
     b: PipelineKey,
 ) bool {
-    if (a.shader_program_id != b.shader_program_id) {
-        return a.shader_program_id <
-            b.shader_program_id;
-    }
-
-    if (a.depth_test != b.depth_test) {
-        return !a.depth_test and b.depth_test;
-    }
-
-    if (a.depth_write != b.depth_write) {
-        return !a.depth_write and b.depth_write;
-    }
-
-    if (a.cull_mode != b.cull_mode) {
-        return @intFromEnum(a.cull_mode) <
-            @intFromEnum(b.cull_mode);
-    }
-
-    if (a.blend_mode != b.blend_mode) {
-        return @intFromEnum(a.blend_mode) <
-            @intFromEnum(b.blend_mode);
+    if (a.graphics_pipeline != b.graphics_pipeline) {
+        return a.graphics_pipeline <
+            b.graphics_pipeline;
     }
 
     return false;
@@ -151,19 +121,11 @@ fn drawItem(phase: zimp.AlphaMode, depth_key: f32, material_id: zimp.AssetId, pi
 }
 
 const pipeline_a = PipelineKey{
-    .shader_program_id = 1,
-    .depth_test = true,
-    .depth_write = true,
-    .cull_mode = .back,
-    .blend_mode = .disabled,
+    .graphics_pipeline = 1,
 };
 
 const pipeline_b = PipelineKey{
-    .shader_program_id = 2,
-    .depth_test = true,
-    .depth_write = true,
-    .cull_mode = .back,
-    .blend_mode = .disabled,
+    .graphics_pipeline = 2,
 };
 
 const material_a = zimp.AssetId.parseComptime("11111111-1111-4111-8111-111111111111");
@@ -218,21 +180,7 @@ test "transparent draw items sort back-to-front before batching ties" {
     try std.testing.expectEqual(@as(f32, 2), items[3].depth_key);
 }
 
-test "pipeline ordering includes every fixed-state field" {
-    const base = pipeline_a;
-    const Case = struct { value: PipelineKey, base_first: bool };
-    const cases = [_]Case{
-        .{ .value = .{ .shader_program_id = 2, .depth_test = true, .depth_write = true, .cull_mode = .back, .blend_mode = .disabled }, .base_first = true },
-        .{ .value = .{ .shader_program_id = 1, .depth_test = false, .depth_write = true, .cull_mode = .back, .blend_mode = .disabled }, .base_first = false },
-        .{ .value = .{ .shader_program_id = 1, .depth_test = true, .depth_write = false, .cull_mode = .back, .blend_mode = .disabled }, .base_first = false },
-        .{ .value = .{ .shader_program_id = 1, .depth_test = true, .depth_write = true, .cull_mode = .front, .blend_mode = .disabled }, .base_first = false },
-        .{ .value = .{ .shader_program_id = 1, .depth_test = true, .depth_write = true, .cull_mode = .back, .blend_mode = .alpha }, .base_first = true },
-    };
-
-    try std.testing.expect(base.eql(base));
-    for (cases) |case| {
-        try std.testing.expect(!base.eql(case.value));
-        try std.testing.expectEqual(case.base_first, pipelineLessThan(base, case.value));
-        try std.testing.expectEqual(!case.base_first, pipelineLessThan(case.value, base));
-    }
+test "pipeline ordering uses the backend-neutral pipeline sort key" {
+    try std.testing.expect(pipelineLessThan(pipeline_a, pipeline_b));
+    try std.testing.expect(!pipelineLessThan(pipeline_b, pipeline_a));
 }

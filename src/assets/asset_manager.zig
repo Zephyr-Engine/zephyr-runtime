@@ -5,7 +5,9 @@ const zob = @import("zob");
 const source_mod = @import("source.zig");
 
 const Texture2D = @import("../graphics/opengl/texture.zig");
-const Shader = @import("../graphics/opengl/shader.zig");
+const Device = @import("../graphics/rhi/device.zig");
+const GraphicsPipeline = @import("../graphics/rhi/graphics_pipeline.zig");
+const render_state = @import("../graphics/render_state.zig");
 const RuntimeAssetManifest = @import("manifest.zig");
 const Material = @import("../graphics/material.zig");
 const Project = @import("../project/project.zig");
@@ -98,6 +100,7 @@ const LoadJob = struct {
 
 pub const AssetManager = struct {
     allocator: std.mem.Allocator,
+    device: *Device,
     io: std.Io,
     source: CookedStore,
     scheduler: zob.Scheduler,
@@ -106,7 +109,7 @@ pub const AssetManager = struct {
 
     assets: std.AutoHashMap(AssetId, *AssetRecord),
     asset_keys: std.StringHashMap(AssetId),
-    shader_programs: std.StringHashMap(*Shader),
+    graphics_pipelines: std.StringHashMap(*GraphicsPipeline),
     /// Durable id <-> cooked path mapping from `assets.zmanifest`. The
     /// manifest is required: every asset id the runtime hands out is the
     /// durable id the cook assigned.
@@ -118,6 +121,7 @@ pub const AssetManager = struct {
         allocator: std.mem.Allocator,
         io: std.Io,
         project: *const Project,
+        device: *Device,
     ) !AssetManager {
         const cooked_root = try zimp.path.normalizeVirtual(allocator, project.manifest.cookedAssetsPath());
         defer allocator.free(cooked_root);
@@ -146,6 +150,7 @@ pub const AssetManager = struct {
 
         return .{
             .allocator = allocator,
+            .device = device,
             .io = io,
             .source = owned_source,
             .scheduler = zob.Scheduler.initWithOptions(io, allocator, .{
@@ -153,7 +158,7 @@ pub const AssetManager = struct {
             }),
             .assets = std.AutoHashMap(AssetId, *AssetRecord).init(allocator),
             .asset_keys = std.StringHashMap(AssetId).init(allocator),
-            .shader_programs = std.StringHashMap(*Shader).init(allocator),
+            .graphics_pipelines = std.StringHashMap(*GraphicsPipeline).init(allocator),
             .manifest = manifest,
         };
     }
@@ -177,13 +182,13 @@ pub const AssetManager = struct {
         }
         self.asset_keys.deinit();
 
-        var shader_it = self.shader_programs.iterator();
-        while (shader_it.next()) |entry| {
+        var pipeline_it = self.graphics_pipelines.iterator();
+        while (pipeline_it.next()) |entry| {
             self.allocator.free(entry.key_ptr.*);
             entry.value_ptr.*.deinit();
             self.allocator.destroy(entry.value_ptr.*);
         }
-        self.shader_programs.deinit();
+        self.graphics_pipelines.deinit();
 
         self.source.deinit(self.allocator, self.io);
         self.manifest.deinit();
@@ -502,7 +507,7 @@ pub const AssetManager = struct {
     fn finalizeMaterial(self: *AssetManager, record: *AssetRecord) !FinalizeResult {
         const material_source_ptr = try cookedMaterialSource(record);
 
-        const shader = try self.materialShaderReady(material_source_ptr) orelse return .waiting;
+        const pipeline = try self.materialPipelineReady(material_source_ptr) orelse return .waiting;
 
         var texture_bindings: std.ArrayList(Material.TextureBinding) = .empty;
         errdefer texture_bindings.deinit(self.allocator);
@@ -527,7 +532,7 @@ pub const AssetManager = struct {
         material.* = try Material.initFromSource(
             self.allocator,
             material_source,
-            shader,
+            pipeline,
             texture_slice,
         );
         source_owned = false;
@@ -537,20 +542,21 @@ pub const AssetManager = struct {
         return .{ .loaded = .{ .material = material } };
     }
 
-    fn materialShaderReady(
+    fn materialPipelineReady(
         self: *AssetManager,
         material_source: *const zimp.Zamat,
-    ) !?*Shader {
+    ) !?*GraphicsPipeline {
         const vertex_path = try materialDependencyPath(self.allocator, material_source.vertex_shader_path);
         defer self.allocator.free(vertex_path);
 
         const fragment_path = try materialDependencyPath(self.allocator, material_source.fragment_shader_path);
         defer self.allocator.free(fragment_path);
 
-        return self.loadShaderProgramReady(
+        return self.loadGraphicsPipelineReady(
             vertex_path,
             fragment_path,
             material_source.required_variants,
+            render_state.FixedState.generate(material_source.render_state),
         );
     }
 
@@ -597,12 +603,13 @@ pub const AssetManager = struct {
         return ids;
     }
 
-    fn loadShaderProgramReady(
+    fn loadGraphicsPipelineReady(
         self: *AssetManager,
         vertex_path: []const u8,
         fragment_path: []const u8,
         required_variants: []const []const u8,
-    ) !?*Shader {
+        fixed_state: render_state.FixedState,
+    ) !?*GraphicsPipeline {
         const normalized_vertex = try self.normalizeExpected(vertex_path, .shader_stage);
         defer self.allocator.free(normalized_vertex);
         const normalized_fragment = try self.normalizeExpected(fragment_path, .shader_stage);
@@ -628,47 +635,49 @@ pub const AssetManager = struct {
         const vertex_variant = try stageVariantKey(vertex_stage, required_variants);
         const fragment_variant = try stageVariantKey(fragment_stage, required_variants);
 
-        const lookup_key = try makeShaderProgramKey(
+        const lookup_key = try makeGraphicsPipelineKey(
             self.allocator,
             normalized_vertex,
             vertex_variant,
             normalized_fragment,
             fragment_variant,
+            fixed_state,
         );
         var key_owned = true;
         defer if (key_owned) self.allocator.free(lookup_key);
 
         self.lock();
-        if (self.shader_programs.get(lookup_key)) |shader| {
+        if (self.graphics_pipelines.get(lookup_key)) |pipeline| {
             self.unlock();
-            return shader;
+            return pipeline;
         }
         self.unlock();
 
-        const shader = try self.allocator.create(Shader);
-        errdefer self.allocator.destroy(shader);
-        shader.* = try linkShaderProgram(
-            self.allocator,
+        const pipeline = try self.allocator.create(GraphicsPipeline);
+        errdefer self.allocator.destroy(pipeline);
+        pipeline.* = try createGraphicsPipeline(
+            self.device,
             vertex_stage,
             vertex_variant,
             fragment_stage,
             fragment_variant,
+            fixed_state,
         );
-        errdefer shader.deinit();
+        errdefer pipeline.deinit();
 
         self.lock();
         defer self.unlock();
 
-        if (self.shader_programs.get(lookup_key)) |cached| {
-            shader.deinit();
-            self.allocator.destroy(shader);
+        if (self.graphics_pipelines.get(lookup_key)) |cached| {
+            pipeline.deinit();
+            self.allocator.destroy(pipeline);
             return cached;
         }
 
-        try self.shader_programs.put(lookup_key, shader);
+        try self.graphics_pipelines.put(lookup_key, pipeline);
         key_owned = false;
 
-        return shader;
+        return pipeline;
     }
 
     fn loadedAsset(self: *AssetManager, id: AssetId, expected: AssetKind) !?Asset {
@@ -728,7 +737,7 @@ pub const AssetManager = struct {
 };
 
 fn assetPath(record: *const AssetRecord) []const u8 {
-    return record.path orelse "<generated shader program>";
+    return record.path orelse "<generated graphics pipeline>";
 }
 
 /// Dependencies serialized in a cooked material are virtual paths rooted at
@@ -757,16 +766,21 @@ fn defaultLoadConcurrency() usize {
     return @min(cpu_count - 1, 4);
 }
 
-fn linkShaderProgram(
-    allocator: std.mem.Allocator,
+fn createGraphicsPipeline(
+    device: *Device,
     vertex_stage: *const zimp.ZShader,
     vertex_variant: zimp.VariantKey,
     fragment_stage: *const zimp.ZShader,
     fragment_variant: zimp.VariantKey,
-) !Shader {
+    fixed_state: render_state.FixedState,
+) !GraphicsPipeline {
     const vertex_source = try vertex_stage.sourceFor(vertex_variant);
     const fragment_source = try fragment_stage.sourceFor(fragment_variant);
-    return Shader.init(allocator, vertex_source, fragment_source);
+    return device.createGraphicsPipeline(.{
+        .vertex = .{ .glsl = vertex_source },
+        .fragment = .{ .glsl = fragment_source },
+        .fixed_state = fixed_state,
+    });
 }
 
 fn stageVariantKey(
@@ -809,61 +823,102 @@ fn makePathAssetKey(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
     return std.fmt.allocPrint(allocator, "path:{s}", .{path});
 }
 
-fn makeShaderProgramKey(
+fn makeGraphicsPipelineKey(
     allocator: std.mem.Allocator,
     vertex_path: []const u8,
     vertex_variant: zimp.VariantKey,
     fragment_path: []const u8,
     fragment_variant: zimp.VariantKey,
+    fixed_state: render_state.FixedState,
 ) ![]u8 {
     return std.fmt.allocPrint(
         allocator,
-        "shader:{s}\x00{d}\x00{s}\x00{d}",
+        "pipeline:{s}\x00{d}\x00{s}\x00{d}\x00{}\x00{}\x00{s}\x00{s}",
         .{
             vertex_path,
             vertex_variant.bits,
             fragment_path,
             fragment_variant.bits,
+            fixed_state.depth_test,
+            fixed_state.depth_write,
+            @tagName(fixed_state.cull_mode),
+            @tagName(fixed_state.blend_mode),
         },
     );
 }
 
-test "makeShaderProgramKey includes stage paths and variant keys" {
-    const key = try makeShaderProgramKey(
+const test_fixed_state: render_state.FixedState = .{
+    .depth_test = true,
+    .depth_write = true,
+    .cull_mode = .back,
+    .blend_mode = .disabled,
+};
+
+test "makeGraphicsPipelineKey includes stages, variants, and fixed state" {
+    const key = try makeGraphicsPipelineKey(
         std.testing.allocator,
         "basic.vert.zshdr",
         .fromBits(1),
         "basic.frag.zshdr",
         .fromBits(2),
+        test_fixed_state,
     );
     defer std.testing.allocator.free(key);
 
     try std.testing.expectEqualStrings(
-        "shader:basic.vert.zshdr\x001\x00basic.frag.zshdr\x002",
+        "pipeline:basic.vert.zshdr\x001\x00basic.frag.zshdr\x002\x00true\x00true\x00back\x00disabled",
         key,
     );
 }
 
-test "makeShaderProgramKey distinguishes shader variants" {
-    const base = try makeShaderProgramKey(
+test "makeGraphicsPipelineKey distinguishes shader variants" {
+    const base = try makeGraphicsPipelineKey(
         std.testing.allocator,
         "basic.vert.zshdr",
         .base,
         "basic.frag.zshdr",
         .base,
+        test_fixed_state,
     );
     defer std.testing.allocator.free(base);
 
-    const alpha_test = try makeShaderProgramKey(
+    const alpha_test = try makeGraphicsPipelineKey(
         std.testing.allocator,
         "basic.vert.zshdr",
         .base,
         "basic.frag.zshdr",
         .fromBits(1),
+        test_fixed_state,
     );
     defer std.testing.allocator.free(alpha_test);
 
     try std.testing.expect(!std.mem.eql(u8, base, alpha_test));
+}
+
+test "makeGraphicsPipelineKey distinguishes fixed state" {
+    const base = try makeGraphicsPipelineKey(
+        std.testing.allocator,
+        "basic.vert.zshdr",
+        .base,
+        "basic.frag.zshdr",
+        .base,
+        test_fixed_state,
+    );
+    defer std.testing.allocator.free(base);
+
+    var no_depth_write = test_fixed_state;
+    no_depth_write.depth_write = false;
+    const alternate = try makeGraphicsPipelineKey(
+        std.testing.allocator,
+        "basic.vert.zshdr",
+        .base,
+        "basic.frag.zshdr",
+        .base,
+        no_depth_write,
+    );
+    defer std.testing.allocator.free(alternate);
+
+    try std.testing.expect(!std.mem.eql(u8, base, alternate));
 }
 
 test "stageVariantKey selects only variants declared by that stage" {
@@ -939,11 +994,14 @@ test "init opens cooked assets from project root" {
 
     var project = try testProject(&tmp);
     defer project.deinit(testing.allocator, testing.io);
+    var device = try Device.init(testing.allocator, .opengl);
+    defer device.deinit();
 
     var manager = try AssetManager.init(
         testing.allocator,
         testing.io,
         &project,
+        &device,
     );
     defer manager.deinit();
 
@@ -957,11 +1015,14 @@ test "registerId deduplicates requests before background load finishes" {
     defer tmp.cleanup();
     var project = try testProject(&tmp);
     defer project.deinit(testing.allocator, testing.io);
+    var device = try Device.init(testing.allocator, .opengl);
+    defer device.deinit();
 
     var manager = try AssetManager.init(
         std.testing.allocator,
         std.testing.io,
         &project,
+        &device,
     );
     defer manager.deinit();
 
@@ -981,11 +1042,14 @@ test "background load failures are observable through wait and state" {
 
     var project = try testProject(&tmp);
     defer project.deinit(testing.allocator, testing.io);
+    var device = try Device.init(testing.allocator, .opengl);
+    defer device.deinit();
 
     var manager = try AssetManager.init(
         std.testing.allocator,
         std.testing.io,
         &project,
+        &device,
     );
     defer manager.deinit();
 
@@ -1000,8 +1064,10 @@ test "registerId resolves the durable id from the asset manifest" {
     defer tmp.cleanup();
     var project = try testProject(&tmp);
     defer project.deinit(testing.allocator, testing.io);
+    var device = try Device.init(testing.allocator, .opengl);
+    defer device.deinit();
 
-    var manager = try AssetManager.init(testing.allocator, testing.io, &project);
+    var manager = try AssetManager.init(testing.allocator, testing.io, &project, &device);
     defer manager.deinit();
 
     const id = try manager.registerId(Mesh, mesh_manifest_id);
@@ -1030,8 +1096,10 @@ test "init fails without an asset manifest" {
         .root_dir = try std.Io.Dir.openDir(tmp.dir, testing.io, ".", .{}),
     };
     defer project.deinit(testing.allocator, testing.io);
+    var device = try Device.init(testing.allocator, .opengl);
+    defer device.deinit();
 
-    try testing.expectError(error.FileNotFound, AssetManager.init(testing.allocator, testing.io, &project));
+    try testing.expectError(error.FileNotFound, AssetManager.init(testing.allocator, testing.io, &project, &device));
 }
 
 test "detectKind maps supported cooked extensions" {

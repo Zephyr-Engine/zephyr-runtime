@@ -13,7 +13,6 @@ const math = @import("../core/math.zig");
 const ecs = @import("../ecs/world.zig");
 const log = @import("../core/log.zig");
 
-const applyFixedState = @import("opengl/render_state.zig").apply;
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
 const Material = @import("material.zig");
 const Mesh = @import("mesh.zig");
@@ -148,13 +147,12 @@ fn renderFromCamera(self: *Renderer, world: *zcs.World, assets: *AssetManager, v
 
 fn renderQueue(queue: std.ArrayList(DrawItem), view: math.Mat4, projection: math.Mat4) void {
     for (queue.items) |draw_item| {
-        draw_item.material.shader.bind();
-        applyFixedState(.generate(draw_item.material.source.render_state));
+        draw_item.material.pipeline.bind();
 
         draw_item.material.bindResources();
-        draw_item.material.shader.setUniform("u_view", view);
-        draw_item.material.shader.setUniform("u_projection", projection);
-        draw_item.material.shader.setUniform("u_model", draw_item.model);
+        draw_item.material.pipeline.setUniform("u_view", .{ .mat4 = view.fields });
+        draw_item.material.pipeline.setUniform("u_projection", .{ .mat4 = projection.fields });
+        draw_item.material.pipeline.setUniform("u_model", .{ .mat4 = draw_item.model.fields });
 
         draw_item.part.drawSubmesh(draw_item.submesh);
     }

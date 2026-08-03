@@ -122,10 +122,7 @@ pub fn Application(comptime game: Game) type {
 
         fn restoreSwapchainRenderTarget(self: *@This()) void {
             const viewport = self.defaultViewport();
-            self.runtime.renderer.device.beginRenderPass(.{
-                .target = .{ .swapchain = viewport },
-            }) catch {};
-            self.runtime.renderer.device.endRenderPass();
+            self.runtime.renderer.device.bindRenderTarget(.{ .swapchain = viewport });
         }
 
         pub fn deinit(self: *@This()) void {
