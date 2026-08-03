@@ -47,7 +47,6 @@ pub const TransformComponent = struct {
 };
 
 pub const MeshRenderComponent = struct {
-    material: AssetId,
     mesh: AssetId,
 
     pub const schema_meta = scene.SchemaMeta{
@@ -61,13 +60,6 @@ pub const MeshRenderComponent = struct {
                 .number = 1,
                 .display_name = "Mesh",
                 .kind_override = .{ .asset_ref = .mesh },
-                .default_override = .{ .asset_ref = AssetId.zero },
-            },
-            .{
-                .name = "material",
-                .number = 2,
-                .display_name = "Material",
-                .kind_override = .{ .asset_ref = .material },
                 .default_override = .{ .asset_ref = AssetId.zero },
             },
         },
@@ -102,7 +94,24 @@ pub const CameraComponent = struct {
             transform.up(),
         );
     }
+
+    pub fn calculateDepth(_: *const CameraComponent, model: Mat4, view: Mat4, bounds_min: [3]f32, bounds_max: [3]f32) f32 {
+        const local_center = boundsCenter(bounds_min, bounds_max);
+
+        const world_center = local_center.transformPosition(model);
+        const view_center = world_center.transformPosition(view);
+
+        return -view_center.z;
+    }
 };
+
+fn boundsCenter(min: [3]f32, max: [3]f32) Vec3 {
+    return Vec3.new(
+        (min[0] + max[0]) * 0.5,
+        (min[1] + max[1]) * 0.5,
+        (min[2] + max[2]) * 0.5,
+    );
+}
 
 const expectApproxEq = std.testing.expectApproxEqAbs;
 const tolerance: f32 = 1e-5;

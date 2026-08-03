@@ -1,153 +1,172 @@
 const std = @import("std");
 const zimp = @import("zimp");
 
-const VertexArray = @import("opengl/vertex_array.zig").VertexArray;
 const IndexBuffer = @import("opengl/buffer.zig").IndexBuffer;
-const ZMesh = zimp.ZMesh;
+const VertexArray = @import("opengl/vertex_array.zig");
+const math = @import("../core/math.zig");
 const MeshPart = zimp.formats.zmesh.MeshPart;
-const Mat4 = @import("../core/math.zig").Mat4;
+const ZMesh = zimp.ZMesh;
 
-pub const Mesh = struct {
-    allocator: std.mem.Allocator,
-    parts: []Part,
-    aabb_min: [3]f32,
-    aabb_max: [3]f32,
+const Mesh = @This();
 
-    pub const Part = struct {
-        vao: VertexArray,
-        transform: Mat4,
+allocator: std.mem.Allocator,
+material_ids: []zimp.AssetId,
+parts: []Part,
 
-        pub fn draw(self: *const Part) void {
-            self.vao.draw();
-        }
-    };
+pub const Part = struct {
+    vao: VertexArray,
+    transform: math.Mat4,
 
-    pub fn loadFromZMesh(allocator: std.mem.Allocator, model: ZMesh) !Mesh {
-        const parts = try allocator.alloc(Part, model.parts.len);
-        errdefer allocator.free(parts);
+    bounds_min: [3]f32,
+    bounds_max: [3]f32,
 
-        var initialized: usize = 0;
-        errdefer for (parts[0..initialized]) |*part| part.vao.deinit();
+    submeshes: []Submesh,
 
-        var aabb_min = [3]f32{ std.math.inf(f32), std.math.inf(f32), std.math.inf(f32) };
-        var aabb_max = [3]f32{ -std.math.inf(f32), -std.math.inf(f32), -std.math.inf(f32) };
-        for (model.parts, parts) |source, *part| {
-            part.* = try loadPart(source.mesh, mat4FromArray(source.transform));
-            initialized += 1;
-            expandBounds(&aabb_min, &aabb_max, source.mesh, part.transform);
-        }
-
-        return .{
-            .allocator = allocator,
-            .parts = parts,
-            .aabb_min = aabb_min,
-            .aabb_max = aabb_max,
-        };
-    }
-
-    fn loadPart(mesh: MeshPart, transform: Mat4) !Part {
-        var vao = try VertexArray.init();
-        errdefer vao.deinit();
-
-        var location: u32 = 1;
-        try vao.addStream(
-            std.mem.sliceAsBytes(mesh.positions),
-            .{ .location = 0, .data_type = .Float3, .normalized = false },
+    pub fn drawSubmesh(self: *const Part, submesh: *const Submesh) void {
+        self.vao.drawRange(
+            submesh.index_offset,
+            submesh.index_count,
         );
-
-        if (mesh.normals) |normals| {
-            try vao.addStream(
-                std.mem.sliceAsBytes(normals),
-                .{ .location = location, .data_type = .Short2, .normalized = true },
-            );
-            location += 1;
-        }
-
-        if (mesh.uv0) |uvs| {
-            try vao.addStream(
-                std.mem.sliceAsBytes(uvs),
-                .{ .location = location, .data_type = .UShort2, .normalized = true },
-            );
-            location += 1;
-        }
-
-        if (mesh.uv1) |uvs| {
-            try vao.addStream(
-                std.mem.sliceAsBytes(uvs),
-                .{ .location = location, .data_type = .UShort2, .normalized = true },
-            );
-            location += 1;
-        }
-
-        if (mesh.tangents) |tangents| {
-            try vao.addStream(
-                std.mem.sliceAsBytes(tangents),
-                .{ .location = location, .data_type = .Half4, .normalized = false },
-            );
-            location += 1;
-        }
-
-        if (mesh.joint_indices) |joints| {
-            try vao.addStream(
-                std.mem.sliceAsBytes(joints),
-                .{ .location = location, .data_type = .UShort4, .normalized = false },
-            );
-            location += 1;
-        }
-
-        if (mesh.joint_weights) |weights| {
-            try vao.addStream(
-                std.mem.sliceAsBytes(weights),
-                .{ .location = location, .data_type = .Half4, .normalized = false },
-            );
-        }
-
-        if (mesh.indices_u16) |indices| {
-            vao.setIndexBuffer(try IndexBuffer.initU16(indices));
-        } else if (mesh.indices_u32) |indices| {
-            vao.setIndexBuffer(try IndexBuffer.initU32(indices));
-        }
-
-        return .{
-            .vao = vao,
-            .transform = transform,
-        };
     }
 
-    pub fn draw(self: *const Mesh) void {
-        for (self.parts) |*part| part.draw();
-    }
-
-    pub fn deinit(self: *Mesh) void {
-        for (self.parts) |*part| part.vao.deinit();
-        self.allocator.free(self.parts);
-        self.* = undefined;
+    pub fn deinit(self: *Part, allocator: std.mem.Allocator) void {
+        allocator.free(self.submeshes);
+        self.vao.deinit();
     }
 };
 
-fn mat4FromArray(values: [16]f32) Mat4 {
+pub const Submesh = struct {
+    material_index: u16,
+    index_offset: u32,
+    index_count: u32,
+};
+
+pub fn loadFromZMesh(allocator: std.mem.Allocator, model: *const ZMesh, material_ids: []zimp.AssetId) !Mesh {
+    const parts = try allocator.alloc(Part, model.parts.len);
+    errdefer allocator.free(parts);
+
+    var initialized: usize = 0;
+    errdefer for (parts[0..initialized]) |*part| part.deinit(allocator);
+
+    for (model.parts, parts) |source, *part| {
+        part.* = try loadPart(allocator, source.mesh, mat4FromArray(source.transform));
+        initialized += 1;
+    }
+
+    return .{
+        .material_ids = material_ids,
+        .allocator = allocator,
+        .parts = parts,
+    };
+}
+
+fn loadPart(allocator: std.mem.Allocator, mesh: MeshPart, transform: math.Mat4) !Part {
+    var vao = try VertexArray.init();
+    errdefer vao.deinit();
+
+    const submeshes = try allocator.alloc(Submesh, mesh.submeshes.len);
+    errdefer allocator.free(submeshes);
+
+    for (mesh.submeshes, submeshes) |source_submesh, *runtime_submesh| {
+        runtime_submesh.* = .{
+            .material_index = source_submesh.material_index,
+            .index_offset = source_submesh.index_offset,
+            .index_count = source_submesh.index_count,
+        };
+    }
+
+    var location: u32 = 1;
+    try vao.addStream(
+        std.mem.sliceAsBytes(mesh.positions),
+        .{ .location = 0, .data_type = .Float3, .normalized = false },
+    );
+
+    if (mesh.normals) |normals| {
+        try vao.addStream(
+            std.mem.sliceAsBytes(normals),
+            .{ .location = location, .data_type = .Short2, .normalized = true },
+        );
+        location += 1;
+    }
+
+    if (mesh.uv0) |uvs| {
+        try vao.addStream(
+            std.mem.sliceAsBytes(uvs),
+            .{ .location = location, .data_type = .UShort2, .normalized = true },
+        );
+        location += 1;
+    }
+
+    if (mesh.uv1) |uvs| {
+        try vao.addStream(
+            std.mem.sliceAsBytes(uvs),
+            .{ .location = location, .data_type = .UShort2, .normalized = true },
+        );
+        location += 1;
+    }
+
+    if (mesh.tangents) |tangents| {
+        try vao.addStream(
+            std.mem.sliceAsBytes(tangents),
+            .{ .location = location, .data_type = .Half4, .normalized = false },
+        );
+        location += 1;
+    }
+
+    if (mesh.joint_indices) |joints| {
+        try vao.addStream(
+            std.mem.sliceAsBytes(joints),
+            .{ .location = location, .data_type = .UShort4, .normalized = false },
+        );
+        location += 1;
+    }
+
+    if (mesh.joint_weights) |weights| {
+        try vao.addStream(
+            std.mem.sliceAsBytes(weights),
+            .{ .location = location, .data_type = .Half4, .normalized = false },
+        );
+    }
+
+    if (mesh.indices_u16) |indices| {
+        vao.setIndexBuffer(try IndexBuffer.initU16(indices));
+    } else if (mesh.indices_u32) |indices| {
+        vao.setIndexBuffer(try IndexBuffer.initU32(indices));
+    }
+
+    return .{
+        .vao = vao,
+        .transform = transform,
+        .bounds_max = mesh.aabb_max,
+        .bounds_min = mesh.aabb_min,
+        .submeshes = submeshes,
+    };
+}
+
+pub fn materialIdForSlot(self: *const Mesh, slot: u16) ?zimp.AssetId {
+    const index: usize = @intCast(slot);
+    if (index >= self.material_ids.len) {
+        return null;
+    }
+
+    return self.material_ids[index];
+}
+
+pub fn deinit(self: *Mesh) void {
+    for (self.parts) |*part| {
+        part.deinit(self.allocator);
+    }
+    self.allocator.free(self.parts);
+    self.allocator.free(self.material_ids);
+}
+
+fn mat4FromArray(values: [16]f32) math.Mat4 {
     return .{ .fields = .{
         .{ values[0], values[1], values[2], values[3] },
         .{ values[4], values[5], values[6], values[7] },
         .{ values[8], values[9], values[10], values[11] },
         .{ values[12], values[13], values[14], values[15] },
     } };
-}
-
-fn expandBounds(min: *[3]f32, max: *[3]f32, mesh: MeshPart, transform: Mat4) void {
-    for (0..8) |corner_index| {
-        const corner = @import("../core/math.zig").Vec3.new(
-            if (corner_index & 1 == 0) mesh.aabb_min[0] else mesh.aabb_max[0],
-            if (corner_index & 2 == 0) mesh.aabb_min[1] else mesh.aabb_max[1],
-            if (corner_index & 4 == 0) mesh.aabb_min[2] else mesh.aabb_max[2],
-        ).transformPosition(transform);
-        min[0] = @min(min[0], corner.x);
-        min[1] = @min(min[1], corner.y);
-        min[2] = @min(min[2], corner.z);
-        max[0] = @max(max[0], corner.x);
-        max[1] = @max(max[1], corner.y);
-        max[2] = @max(max[2], corner.z);
-    }
 }
 
 test "mat4FromArray preserves model part translation" {
@@ -170,7 +189,7 @@ test "mesh part transform is applied before the entity transform" {
         0, 0, 1, 0,
         1, 0, 0, 1,
     });
-    const entity = Mat4.createScale(2, 2, 2);
+    const entity = math.Mat4.createScale(2, 2, 2);
     const transformed = @import("../core/math.zig").Vec3.zero.transformPosition(part.mul(entity));
     try std.testing.expectEqual(@as(f32, 2), transformed.x);
 }

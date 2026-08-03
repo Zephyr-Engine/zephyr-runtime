@@ -9,10 +9,10 @@ const AssetError = source_mod.AssetError;
 const CookedStore = source_mod.CookedStore;
 const RuntimeAssetManifest = @import("manifest.zig").RuntimeAssetManifest;
 const Project = @import("../project/project.zig").Project;
-const Mesh = @import("../graphics/mesh.zig").Mesh;
 const Material = @import("../graphics/material.zig").Material;
 const Shader = @import("../graphics/opengl/shader.zig").Shader;
 const Texture2D = @import("../graphics/opengl/texture.zig").Texture2D;
+const Mesh = @import("../graphics/mesh.zig");
 const log = @import("../core/log.zig");
 
 const AssetKind = zimp.AssetKind;
@@ -456,7 +456,11 @@ pub const AssetManager = struct {
 
         const mesh = try self.allocator.create(Mesh);
         errdefer self.allocator.destroy(mesh);
-        mesh.* = try Mesh.loadFromZMesh(self.allocator, cooked_mesh);
+
+        const material_ids = try self.requestMeshMaterials(&cooked_mesh);
+        errdefer self.allocator.free(material_ids);
+
+        mesh.* = try Mesh.loadFromZMesh(self.allocator, &cooked_mesh, material_ids);
         errdefer mesh.deinit();
 
         return mesh;
@@ -543,7 +547,11 @@ pub const AssetManager = struct {
         const fragment_path = try materialDependencyPath(self.allocator, material_source.fragment_shader_path);
         defer self.allocator.free(fragment_path);
 
-        return self.loadShaderProgramReady(vertex_path, fragment_path);
+        return self.loadShaderProgramReady(
+            vertex_path,
+            fragment_path,
+            material_source.required_variants,
+        );
     }
 
     fn materialTexturesReady(
@@ -572,26 +580,33 @@ pub const AssetManager = struct {
         return true;
     }
 
+    fn requestMeshMaterials(self: *AssetManager, source: *const zimp.ZMesh) ![]AssetId {
+        const ids = try self.allocator.alloc(
+            AssetId,
+            source.material_slots.len,
+        );
+        errdefer self.allocator.free(ids);
+
+        for (source.material_slots, ids) |cooked_path, *id| {
+            id.* = try self.requestKind(
+                .material,
+                cooked_path,
+            );
+        }
+
+        return ids;
+    }
+
     fn loadShaderProgramReady(
         self: *AssetManager,
         vertex_path: []const u8,
         fragment_path: []const u8,
+        required_variants: []const []const u8,
     ) !?*Shader {
         const normalized_vertex = try self.normalizeExpected(vertex_path, .shader_stage);
         defer self.allocator.free(normalized_vertex);
         const normalized_fragment = try self.normalizeExpected(fragment_path, .shader_stage);
         defer self.allocator.free(normalized_fragment);
-
-        const lookup_key = try makeShaderProgramKey(self.allocator, normalized_vertex, normalized_fragment);
-        var key_owned = true;
-        defer if (key_owned) self.allocator.free(lookup_key);
-
-        self.lock();
-        if (self.shader_programs.get(lookup_key)) |shader| {
-            self.unlock();
-            return shader;
-        }
-        self.unlock();
 
         const vertex_id = try self.requestKind(.shader_stage, normalized_vertex);
         const fragment_id = try self.requestKind(.shader_stage, normalized_fragment);
@@ -610,9 +625,35 @@ pub const AssetManager = struct {
             return AssetError.WrongAssetKind;
         }
 
+        const vertex_variant = try stageVariantKey(vertex_stage, required_variants);
+        const fragment_variant = try stageVariantKey(fragment_stage, required_variants);
+
+        const lookup_key = try makeShaderProgramKey(
+            self.allocator,
+            normalized_vertex,
+            vertex_variant,
+            normalized_fragment,
+            fragment_variant,
+        );
+        var key_owned = true;
+        defer if (key_owned) self.allocator.free(lookup_key);
+
+        self.lock();
+        if (self.shader_programs.get(lookup_key)) |shader| {
+            self.unlock();
+            return shader;
+        }
+        self.unlock();
+
         const shader = try self.allocator.create(Shader);
         errdefer self.allocator.destroy(shader);
-        shader.* = try linkShaderProgram(self.allocator, vertex_stage, fragment_stage);
+        shader.* = try linkShaderProgram(
+            self.allocator,
+            vertex_stage,
+            vertex_variant,
+            fragment_stage,
+            fragment_variant,
+        );
         errdefer shader.deinit();
 
         self.lock();
@@ -719,11 +760,39 @@ fn defaultLoadConcurrency() usize {
 fn linkShaderProgram(
     allocator: std.mem.Allocator,
     vertex_stage: *const zimp.ZShader,
+    vertex_variant: zimp.VariantKey,
     fragment_stage: *const zimp.ZShader,
+    fragment_variant: zimp.VariantKey,
 ) !Shader {
-    const vertex_source = try vertex_stage.baseSource();
-    const fragment_source = try fragment_stage.baseSource();
+    const vertex_source = try vertex_stage.sourceFor(vertex_variant);
+    const fragment_source = try fragment_stage.sourceFor(fragment_variant);
     return Shader.init(allocator, vertex_source, fragment_source);
+}
+
+fn stageVariantKey(
+    stage: *const zimp.ZShader,
+    required_variants: []const []const u8,
+) !zimp.VariantKey {
+    var selected: [32][]const u8 = undefined;
+    var selected_len: usize = 0;
+
+    for (stage.variant_names) |declared| {
+        if (!containsString(required_variants, declared)) continue;
+        selected[selected_len] = declared;
+        selected_len += 1;
+    }
+
+    return stage.variantKey(selected[0..selected_len]);
+}
+
+fn containsString(
+    strings: []const []const u8,
+    needle: []const u8,
+) bool {
+    for (strings) |value| {
+        if (std.mem.eql(u8, value, needle)) return true;
+    }
+    return false;
 }
 
 fn kindFor(comptime T: type) AssetKind {
@@ -743,17 +812,83 @@ fn makePathAssetKey(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
 fn makeShaderProgramKey(
     allocator: std.mem.Allocator,
     vertex_path: []const u8,
+    vertex_variant: zimp.VariantKey,
     fragment_path: []const u8,
+    fragment_variant: zimp.VariantKey,
 ) ![]u8 {
-    return std.fmt.allocPrint(allocator, "shader:{s}\x00{s}", .{ vertex_path, fragment_path });
+    return std.fmt.allocPrint(
+        allocator,
+        "shader:{s}\x00{d}\x00{s}\x00{d}",
+        .{
+            vertex_path,
+            vertex_variant.bits,
+            fragment_path,
+            fragment_variant.bits,
+        },
+    );
 }
 
-test "makeShaderProgramKey includes both stage paths" {
-    const key = try makeShaderProgramKey(std.testing.allocator, "basic.vert.zshdr", "basic.frag.zshdr");
+test "makeShaderProgramKey includes stage paths and variant keys" {
+    const key = try makeShaderProgramKey(
+        std.testing.allocator,
+        "basic.vert.zshdr",
+        .fromBits(1),
+        "basic.frag.zshdr",
+        .fromBits(2),
+    );
     defer std.testing.allocator.free(key);
-    try std.testing.expectEqualStrings("shader:basic.vert.zshdr", key[0.."shader:basic.vert.zshdr".len]);
-    try std.testing.expectEqual(@as(u8, 0), key["shader:basic.vert.zshdr".len]);
-    try std.testing.expectEqualStrings("basic.frag.zshdr", key["shader:basic.vert.zshdr".len + 1 ..]);
+
+    try std.testing.expectEqualStrings(
+        "shader:basic.vert.zshdr\x001\x00basic.frag.zshdr\x002",
+        key,
+    );
+}
+
+test "makeShaderProgramKey distinguishes shader variants" {
+    const base = try makeShaderProgramKey(
+        std.testing.allocator,
+        "basic.vert.zshdr",
+        .base,
+        "basic.frag.zshdr",
+        .base,
+    );
+    defer std.testing.allocator.free(base);
+
+    const alpha_test = try makeShaderProgramKey(
+        std.testing.allocator,
+        "basic.vert.zshdr",
+        .base,
+        "basic.frag.zshdr",
+        .fromBits(1),
+    );
+    defer std.testing.allocator.free(alpha_test);
+
+    try std.testing.expect(!std.mem.eql(u8, base, alpha_test));
+}
+
+test "stageVariantKey selects only variants declared by that stage" {
+    const vertex_stage = zimp.ZShader{
+        .stage = .vertex,
+        .variant_names = &.{"SKINNED"},
+        .includes = &.{},
+        .permutations = &.{},
+    };
+    const fragment_stage = zimp.ZShader{
+        .stage = .fragment,
+        .variant_names = &.{ "HAS_ALBEDO_MAP", "ALPHA_TEST" },
+        .includes = &.{},
+        .permutations = &.{},
+    };
+    const required = &.{ "SKINNED", "ALPHA_TEST" };
+
+    try std.testing.expectEqual(
+        zimp.VariantKey.fromBits(1),
+        try stageVariantKey(&vertex_stage, required),
+    );
+    try std.testing.expectEqual(
+        zimp.VariantKey.fromBits(2),
+        try stageVariantKey(&fragment_stage, required),
+    );
 }
 
 const testing = std.testing;

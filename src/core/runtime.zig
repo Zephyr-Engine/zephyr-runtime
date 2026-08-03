@@ -1,12 +1,13 @@
 const std = @import("std");
 const zcs = @import("zcs");
 
-const SceneController = @import("../scene/controller.zig").SceneController;
 const SchemaRegistry = @import("../scene/schema_registry.zig").SchemaRegistry;
+const SceneController = @import("../scene/controller.zig").SceneController;
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
-const Renderer = @import("../graphics/renderer.zig").Renderer;
+const DebugStats = @import("../graphics/debug_stats.zig").DebugStats;
 const engine_components = @import("../ecs/components.zig");
 const Project = @import("../project/project.zig").Project;
+const Renderer = @import("../graphics/renderer.zig");
 const Input = @import("input.zig").Input;
 const ecs = @import("../ecs/world.zig");
 const Game = @import("game.zig").Game;
@@ -122,7 +123,7 @@ pub fn Runtime(comptime game: Game) type {
             self.renderer.setDebugStatsEnabled(enabled);
         }
 
-        pub fn debugStats(self: *const @This()) ?Renderer.DebugStats {
+        pub fn debugStats(self: *const @This()) ?DebugStats {
             return self.renderer.debugStats();
         }
 

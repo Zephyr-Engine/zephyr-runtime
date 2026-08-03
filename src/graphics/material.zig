@@ -51,10 +51,7 @@ pub const Material = struct {
         };
     }
 
-    pub fn bind(self: *const Material) void {
-        self.shader.bind();
-        applyAlphaMode(self.source.render_state.alpha_mode);
-
+    pub fn bindResources(self: *const Material) void {
         for (self.texture_bindings) |*binding| {
             binding.texture.bind(binding.unit);
             self.shader.setUniform(binding.resource_name, @as(i32, @intCast(binding.unit)));
@@ -96,10 +93,10 @@ pub const Material = struct {
                 .bool => gl.glUniform1i(binding.location, if (std.mem.readInt(u32, bytes[0..4], .little) != 0) 1 else 0),
             }
         }
-    }
 
-    pub fn setUniform(self: *const Material, name: []const u8, value: anytype) void {
-        self.shader.setUniform(name, value);
+        if (self.source.render_state.alpha_mode == .alpha_test) {
+            self.shader.setUniform("u_alpha_cutoff", self.source.render_state.alpha_cutoff);
+        }
     }
 
     pub fn deinit(self: *Material) void {
@@ -108,24 +105,6 @@ pub const Material = struct {
         self.source.deinit(self.allocator);
     }
 };
-
-fn applyAlphaMode(mode: anytype) void {
-    switch (mode) {
-        .solid => {
-            gl.glDisable(gl.GL_BLEND);
-            gl.glDepthMask(gl.GL_TRUE);
-        },
-        .alpha_test => {
-            gl.glDisable(gl.GL_BLEND);
-            gl.glDepthMask(gl.GL_TRUE);
-        },
-        .alpha_blend => {
-            gl.glEnable(gl.GL_BLEND);
-            gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA);
-            gl.glDepthMask(gl.GL_FALSE);
-        },
-    }
-}
 
 fn readF32(bytes: *const [4]u8) f32 {
     return @bitCast(std.mem.readInt(u32, bytes, .little));
