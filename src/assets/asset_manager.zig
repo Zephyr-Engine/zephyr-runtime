@@ -3,10 +3,11 @@ const std = @import("std");
 const zob = @import("zob");
 
 const GraphicsPipeline = @import("../graphics/rhi/graphics_pipeline.zig");
-const Texture2D = @import("../graphics/opengl/texture.zig");
-const render_state = @import("../graphics/render_state.zig");
-const Device = @import("../graphics/rhi/device.zig");
 const device_factory = @import("../graphics/device_factory.zig");
+const TextureAsset = @import("../graphics/texture_asset.zig");
+const render_state = @import("../graphics/render_state.zig");
+const RhiTexture = @import("../graphics/rhi/texture.zig");
+const Device = @import("../graphics/rhi/device.zig");
 const RuntimeAssetManifest = @import("manifest.zig");
 const Material = @import("../graphics/material.zig");
 const Project = @import("../project/project.zig");
@@ -35,7 +36,7 @@ const AssetState = enum {
 
 const Asset = union(AssetKind) {
     mesh: *Mesh,
-    texture: *Texture2D,
+    texture: *TextureAsset,
     shader_stage: *zimp.ZShader,
     material: *Material,
 
@@ -464,13 +465,13 @@ pub const AssetManager = struct {
         const material_ids = try self.requestMeshMaterials(&cooked_mesh);
         errdefer self.allocator.free(material_ids);
 
-        mesh.* = try Mesh.loadFromZMesh(self.allocator, &cooked_mesh, material_ids);
+        mesh.* = try Mesh.loadFromZMesh(self.allocator, self.device, &cooked_mesh, material_ids);
         errdefer mesh.deinit();
 
         return mesh;
     }
 
-    fn finalizeTexture(self: *AssetManager, record: *AssetRecord) !*Texture2D {
+    fn finalizeTexture(self: *AssetManager, record: *AssetRecord) !*TextureAsset {
         var cooked_asset = try takeCooked(record);
         defer cooked_asset.deinit(self.allocator);
 
@@ -479,9 +480,22 @@ pub const AssetManager = struct {
             else => return AssetError.WrongAssetKind,
         };
 
-        const texture = try self.allocator.create(Texture2D);
+        var mips: std.ArrayList(RhiTexture.MipData) = .empty;
+        defer mips.deinit(self.allocator);
+        for (cooked_texture.mips) |mip| try mips.append(self.allocator, .{ .extent = .{ .width = mip.width, .height = mip.height }, .bytes = mip.data });
+
+        const texture = try self.allocator.create(TextureAsset);
         errdefer self.allocator.destroy(texture);
-        texture.* = try Texture2D.init(cooked_texture);
+        var gpu_texture = try self.device.createTexture(.{
+            .extent = .{ .width = cooked_texture.width, .height = cooked_texture.height },
+            .format = try rhiTextureFormat(cooked_texture.format, cooked_texture.color_space),
+            .usage = .{ .sampled = true },
+            .mips = mips.items,
+        });
+        errdefer self.device.destroyTexture(&gpu_texture);
+        var sampler = try self.device.createSampler(.{});
+        errdefer self.device.destroySampler(&sampler);
+        texture.* = .{ .texture = gpu_texture, .view = self.device.textureView(gpu_texture), .sampler = sampler, .device = self.device };
         errdefer texture.deinit();
 
         return texture;
@@ -579,7 +593,8 @@ pub const AssetManager = struct {
             };
             try out_bindings.append(self.allocator, .{
                 .unit = slot.shader_binding,
-                .texture = texture,
+                .view = texture.view,
+                .sampler = texture.sampler,
                 .resource_name = slot.resource_name,
             });
         }
@@ -757,6 +772,19 @@ fn takeCooked(record: *AssetRecord) !zimp.runtime.Asset {
     return cooked_asset;
 }
 
+fn rhiTextureFormat(format: zimp.TexelFormat, color_space: zimp.ColorSpace) !RhiTexture.Format {
+    return switch (format) {
+        .r8 => .r8_unorm,
+        .rg8 => .rg8_unorm,
+        .rgba8 => if (color_space == .srgb) .rgba8_srgb else .rgba8_unorm,
+        .rgb16f => .rgb16_float,
+        .bc4 => .bc4_unorm,
+        .bc5 => .bc5_unorm,
+        .bc6h => .bc6h_ufloat,
+        .bc7 => if (color_space == .srgb) .bc7_srgb else .bc7_unorm,
+    };
+}
+
 fn defaultLoadConcurrency() usize {
     const cpu_count = std.Thread.getCpuCount() catch 2;
     if (cpu_count <= 1) return 1;
@@ -810,7 +838,7 @@ fn kindFor(comptime T: type) AssetKind {
     return switch (T) {
         Mesh => .mesh,
         Material => .material,
-        Texture2D => .texture,
+        TextureAsset => .texture,
         zimp.ZShader => .shader_stage,
         else => @compileError("unsupported asset type: " ++ @typeName(T)),
     };
@@ -1075,7 +1103,7 @@ test "registerId resolves the durable id from the asset manifest" {
     try testing.expect(by_id.eql(id));
 
     // Kind mismatches and unknown ids are rejected.
-    try testing.expectError(AssetError.WrongAssetKind, manager.registerId(Texture2D, mesh_manifest_id));
+    try testing.expectError(AssetError.WrongAssetKind, manager.registerId(TextureAsset, mesh_manifest_id));
     try testing.expectError(AssetError.AssetNotFound, manager.registerId(Mesh, AssetId.parseComptime("8c1d6602-b3f4-4910-9c44-4b7e9b1a2f6c")));
 
     manager.wait(id) catch {};

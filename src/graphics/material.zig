@@ -1,8 +1,9 @@
 const zimp = @import("zimp");
 const std = @import("std");
 
-const Texture2D = @import("opengl/texture.zig");
 const GraphicsPipeline = @import("rhi/graphics_pipeline.zig");
+const TextureView = @import("rhi/texture_view.zig");
+const Sampler = @import("rhi/sampler.zig");
 const Device = @import("rhi/device.zig");
 
 const Material = @This();
@@ -16,7 +17,8 @@ allocator: std.mem.Allocator,
 
 pub const TextureBinding = struct {
     unit: u16,
-    texture: *Texture2D,
+    view: TextureView,
+    sampler: Sampler,
     resource_name: []const u8,
 };
 
@@ -55,7 +57,7 @@ pub fn init(
 
 pub fn bindResources(self: *const Material) void {
     for (self.texture_bindings) |*binding| {
-        binding.texture.bind(binding.unit);
+        self.device.bindTexture(binding.view, binding.sampler, binding.unit);
         self.device.setGraphicsPipelineUniformByName(self.pipeline, binding.resource_name, .{ .int = @intCast(binding.unit) });
     }
 

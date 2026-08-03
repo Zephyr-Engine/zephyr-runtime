@@ -1,21 +1,39 @@
 const std = @import("std");
 
-const rhi_device = @import("../rhi/device.zig");
-const RhiFramebuffer = @import("../rhi/framebuffer.zig");
-const RhiGraphicsPipeline = @import("../rhi/graphics_pipeline.zig");
-const TextureView = @import("../rhi/texture_view.zig");
 const ResourcePool = @import("../rhi/resource_pool.zig").ResourcePool;
-const ResourceHandle = @import("../rhi/resource_handle.zig");
-const render_state = @import("render_state.zig");
-const OpenGLFramebuffer = @import("framebuffer.zig");
+const RhiGraphicsPipeline = @import("../rhi/graphics_pipeline.zig");
 const OpenGLGraphicsPipeline = @import("graphics_pipeline.zig");
+const ResourceHandle = @import("../rhi/resource_handle.zig");
+const RhiFramebuffer = @import("../rhi/framebuffer.zig");
+const TextureView = @import("../rhi/texture_view.zig");
+const OpenGLFramebuffer = @import("framebuffer.zig");
+const RhiGeometry = @import("../rhi/geometry.zig");
+const RhiTexture = @import("../rhi/texture.zig");
+const RhiSampler = @import("../rhi/sampler.zig");
+const render_state = @import("render_state.zig");
+const rhi_device = @import("../rhi/device.zig");
+const RhiBuffer = @import("../rhi/buffer.zig");
+const OpenGLGeometry = @import("geometry.zig");
+const OpenGLTexture = @import("texture.zig");
+const OpenGLSampler = @import("sampler.zig");
+const OpenGLBuffer = @import("buffer.zig");
+const gl = @import("../../c.zig").glad;
 
 const OpenGLDevice = @This();
+const query_count = 4;
 
 allocator: std.mem.Allocator,
 framebuffers: ResourcePool(OpenGLFramebuffer) = .{},
 pipelines: ResourcePool(OpenGLGraphicsPipeline) = .{},
+textures: ResourcePool(OpenGLTexture) = .{},
+samplers: ResourcePool(OpenGLSampler) = .{},
+buffers: ResourcePool(OpenGLBuffer) = .{},
+geometries: ResourcePool(OpenGLGeometry) = .{},
 next_pipeline_sort_key: u64 = 1,
+query_ids: [query_count]u32 = [_]u32{0} ** query_count,
+query_pending: [query_count]bool = [_]bool{false} ** query_count,
+active_query: ?usize = null,
+queries_initialized: bool = false,
 
 const vtable = rhi_device.VTable{
     .deinit = deinit,
@@ -28,8 +46,21 @@ const vtable = rhi_device.VTable{
     .destroyFramebuffer = destroyFramebuffer,
     .resizeFramebuffer = resizeFramebuffer,
     .framebufferColorView = framebufferColorView,
-    .bindTextureView = bindTextureView,
+    .bindTexture = bindTexture,
     .textureViewNativeId = textureViewNativeId,
+    .createTexture = createTexture,
+    .destroyTexture = destroyTexture,
+    .createSampler = createSampler,
+    .destroySampler = destroySampler,
+    .createBuffer = createBuffer,
+    .updateBuffer = updateBuffer,
+    .destroyBuffer = destroyBuffer,
+    .createGeometry = createGeometry,
+    .destroyGeometry = destroyGeometry,
+    .drawIndexed = drawIndexed,
+    .beginGpuTimer = beginGpuTimer,
+    .endGpuTimer = endGpuTimer,
+    .pollGpuTime = pollGpuTime,
 
     // graphics pipeline
     .createGraphicsPipeline = createGraphicsPipeline,
@@ -58,6 +89,18 @@ fn deinit(impl: *anyopaque) void {
         if (slot.resource) |*pipeline| {
             pipeline.deinit();
         }
+    }
+    inline for (.{ &self.geometries, &self.buffers, &self.samplers, &self.textures }) |pool| {
+        for (pool.slots.items) |*slot| {
+            if (slot.resource) |*resource| {
+                resource.deinit();
+            }
+        }
+        pool.deinit(self.allocator);
+    }
+
+    if (self.queries_initialized) {
+        gl.glDeleteQueries(query_count, &self.query_ids);
     }
     self.framebuffers.deinit(self.allocator);
     self.pipelines.deinit(self.allocator);
@@ -90,11 +133,11 @@ fn createFramebuffer(impl: *anyopaque, desc: RhiFramebuffer.FramebufferDesc) any
 
 fn destroyFramebuffer(impl: *anyopaque, target: *RhiFramebuffer) void {
     const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
-    self.assertOwner(target.handle);
+    self.requireOwner(target.handle, "framebuffer");
     var resource = self.framebuffers.remove(
         target.handle.index,
         target.handle.generation,
-    ) orelse unreachable;
+    ) orelse @panic("stale framebuffer handle");
 
     resource.deinit();
     target.* = undefined;
@@ -131,14 +174,111 @@ fn framebufferColorView(_: *anyopaque, target: *const RhiFramebuffer) TextureVie
     return TextureView.fromFramebuffer(target.*);
 }
 
-fn bindTextureView(impl: *anyopaque, view: TextureView, unit: u16) void {
+fn bindTexture(impl: *anyopaque, view: TextureView, sampler: RhiSampler, unit: u16) void {
     const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
-    self.resolveFramebufferView(view).bindColorTexture(unit);
+    gl.glActiveTexture(@intCast(gl.GL_TEXTURE0 + @as(c_int, @intCast(unit))));
+    gl.glBindTexture(gl.GL_TEXTURE_2D, self.textureId(view));
+    gl.glBindSampler(unit, self.resolveSampler(sampler).id);
 }
 
 fn textureViewNativeId(impl: *anyopaque, view: TextureView) u32 {
     const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
-    return self.resolveFramebufferView(view).colorTextureId();
+    return self.textureId(view);
+}
+
+fn createTexture(impl: *anyopaque, desc: RhiTexture.Desc) anyerror!RhiTexture {
+    const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
+    var resource = try OpenGLTexture.init(desc);
+    errdefer resource.deinit();
+
+    const a = try self.textures.insert(self.allocator, resource);
+    return .{
+        .handle = self.makeHandle(a),
+        .extent = desc.extent,
+        .format = desc.format,
+        .mip_count = @intCast(desc.mips.len),
+    };
+}
+fn destroyTexture(impl: *anyopaque, texture: *RhiTexture) void {
+    const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
+    var r = self.remove(&self.textures, texture.handle, "texture");
+    r.deinit();
+    texture.* = undefined;
+}
+
+fn createSampler(impl: *anyopaque, desc: RhiSampler.Desc) anyerror!RhiSampler {
+    const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
+    var r = try OpenGLSampler.init(desc);
+    errdefer r.deinit();
+
+    const a = try self.samplers.insert(self.allocator, r);
+    return .{
+        .handle = self.makeHandle(a),
+    };
+}
+
+fn destroySampler(impl: *anyopaque, sampler: *RhiSampler) void {
+    const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
+    var r = self.remove(&self.samplers, sampler.handle, "sampler");
+    r.deinit();
+    sampler.* = undefined;
+}
+
+fn createBuffer(impl: *anyopaque, desc: RhiBuffer.Desc) anyerror!RhiBuffer {
+    const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
+    var r = try OpenGLBuffer.init(desc);
+    errdefer r.deinit();
+
+    const a = try self.buffers.insert(self.allocator, r);
+    return .{
+        .handle = self.makeHandle(a),
+        .size = desc.size,
+        .usage = desc.usage,
+    };
+}
+
+fn updateBuffer(impl: *anyopaque, buffer: RhiBuffer, offset: usize, data: []const u8) anyerror!void {
+    const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
+    try self.resolveBuffer(buffer).update(offset, data);
+}
+
+fn destroyBuffer(impl: *anyopaque, buffer: *RhiBuffer) void {
+    const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
+    var r = self.remove(&self.buffers, buffer.handle, "buffer");
+    r.deinit();
+    buffer.* = undefined;
+}
+
+fn createGeometry(impl: *anyopaque, desc: RhiGeometry.Desc) anyerror!RhiGeometry {
+    const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
+    var streams: std.ArrayList(OpenGLGeometry.Stream) = .empty;
+    defer streams.deinit(self.allocator);
+
+    for (desc.streams) |stream| {
+        try streams.append(self.allocator, .{ .buffer_id = self.resolveBuffer(stream.buffer).id, .attribute = stream.attribute });
+    }
+
+    var r = try OpenGLGeometry.init(streams.items, self.resolveBuffer(desc.index_buffer).id, desc.index_format, desc.index_count);
+    errdefer r.deinit();
+
+    const a = try self.geometries.insert(self.allocator, r);
+    return .{
+        .handle = self.makeHandle(a),
+        .index_format = desc.index_format,
+        .index_count = desc.index_count,
+    };
+}
+
+fn destroyGeometry(impl: *anyopaque, geometry: *RhiGeometry) void {
+    const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
+    var r = self.remove(&self.geometries, geometry.handle, "geometry");
+    r.deinit();
+    geometry.* = undefined;
+}
+
+fn drawIndexed(impl: *anyopaque, geometry: RhiGeometry, first: u32, count: u32) void {
+    const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
+    self.resolveGeometry(geometry).draw(first, count);
 }
 
 fn createGraphicsPipeline(impl: *anyopaque, desc: RhiGraphicsPipeline.GraphicsPipelineDesc) anyerror!RhiGraphicsPipeline {
@@ -161,8 +301,8 @@ fn createGraphicsPipeline(impl: *anyopaque, desc: RhiGraphicsPipeline.GraphicsPi
 
 fn destroyGraphicsPipeline(impl: *anyopaque, pipeline: *RhiGraphicsPipeline) void {
     const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
-    self.assertOwner(pipeline.handle);
-    var resource = self.pipelines.remove(pipeline.handle.index, pipeline.handle.generation) orelse unreachable;
+    self.requireOwner(pipeline.handle, "graphics pipeline");
+    var resource = self.pipelines.remove(pipeline.handle.index, pipeline.handle.generation) orelse @panic("stale graphics pipeline handle");
     resource.deinit();
     pipeline.* = undefined;
 }
@@ -183,26 +323,101 @@ fn setGraphicsPipelineUniform(impl: *anyopaque, pipeline: RhiGraphicsPipeline, l
 }
 
 fn resolveFramebuffer(self: *OpenGLDevice, handle: RhiFramebuffer) *OpenGLFramebuffer {
-    self.assertOwner(handle.handle);
-    return self.framebuffers.get(handle.handle.index, handle.handle.generation) orelse unreachable;
+    self.requireOwner(handle.handle, "framebuffer");
+    return self.framebuffers.get(handle.handle.index, handle.handle.generation) orelse @panic("stale framebuffer handle");
 }
 
-fn resolveFramebufferView(self: *OpenGLDevice, view: TextureView) *OpenGLFramebuffer {
-    return self.resolveFramebuffer(.{
-        .handle = view.handle,
-        .extent = undefined,
-        .color_format = undefined,
-        .depth_stencil_format = undefined,
-    });
+fn textureId(self: *OpenGLDevice, view: TextureView) u32 {
+    return switch (view.source) {
+        .texture => |handle| self.resolve(&self.textures, handle, "texture").id,
+        .framebuffer_color => |handle| self.resolveFramebuffer(.{ .handle = handle, .extent = undefined, .color_format = undefined, .depth_stencil_format = undefined }).colorTextureId(),
+    };
 }
 
 fn resolvePipeline(self: *OpenGLDevice, handle: RhiGraphicsPipeline) *OpenGLGraphicsPipeline {
-    self.assertOwner(handle.handle);
-    return self.pipelines.get(handle.handle.index, handle.handle.generation) orelse unreachable;
+    self.requireOwner(handle.handle, "graphics pipeline");
+    return self.pipelines.get(handle.handle.index, handle.handle.generation) orelse @panic("stale graphics pipeline handle");
 }
 
-fn assertOwner(self: *OpenGLDevice, handle: ResourceHandle) void {
-    std.debug.assert(handle.belongsTo(@as(*const anyopaque, @ptrCast(self))));
+fn makeHandle(self: *OpenGLDevice, allocation: anytype) ResourceHandle {
+    return .{ .owner = self, .index = allocation.index, .generation = allocation.generation };
+}
+
+fn resolve(self: *OpenGLDevice, pool: anytype, resource_handle: ResourceHandle, comptime kind: []const u8) @TypeOf(pool.get(0, 0).?) {
+    if (!resource_handle.belongsTo(@as(*const anyopaque, @ptrCast(self)))) @panic("foreign " ++ kind ++ " handle");
+    return pool.get(resource_handle.index, resource_handle.generation) orelse @panic("stale " ++ kind ++ " handle");
+}
+
+fn remove(self: *OpenGLDevice, pool: anytype, resource_handle: ResourceHandle, comptime kind: []const u8) @TypeOf(pool.remove(0, 0).?) {
+    if (!resource_handle.belongsTo(@as(*const anyopaque, @ptrCast(self)))) @panic("foreign " ++ kind ++ " handle");
+    return pool.remove(resource_handle.index, resource_handle.generation) orelse @panic("stale " ++ kind ++ " handle");
+}
+
+fn resolveSampler(self: *OpenGLDevice, sampler: RhiSampler) *OpenGLSampler {
+    return self.resolve(&self.samplers, sampler.handle, "sampler");
+}
+
+fn resolveBuffer(self: *OpenGLDevice, buffer: RhiBuffer) *OpenGLBuffer {
+    return self.resolve(&self.buffers, buffer.handle, "buffer");
+}
+
+fn resolveGeometry(self: *OpenGLDevice, geometry: RhiGeometry) *OpenGLGeometry {
+    return self.resolve(&self.geometries, geometry.handle, "geometry");
+}
+
+fn beginGpuTimer(impl: *anyopaque) void {
+    const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
+    if (!self.queries_initialized) {
+        gl.glGenQueries(query_count, &self.query_ids);
+        self.queries_initialized = true;
+    }
+
+    if (self.active_query != null) {
+        return;
+    }
+
+    for (self.query_pending, 0..) |pending, i| if (!pending) {
+        gl.glBeginQuery(gl.GL_TIME_ELAPSED, self.query_ids[i]);
+        self.active_query = i;
+        return;
+    };
+}
+
+fn endGpuTimer(impl: *anyopaque) void {
+    const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
+    const i = self.active_query orelse return;
+    gl.glEndQuery(gl.GL_TIME_ELAPSED);
+    self.query_pending[i] = true;
+    self.active_query = null;
+}
+
+fn pollGpuTime(impl: *anyopaque) ?f32 {
+    const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
+    if (!self.queries_initialized) {
+        return null;
+    }
+
+    for (&self.query_pending, 0..) |*pending, i| {
+        if (!pending.*) {
+            continue;
+        }
+
+        var available: c_int = 0;
+        gl.glGetQueryObjectiv(self.query_ids[i], gl.GL_QUERY_RESULT_AVAILABLE, &available);
+        if (available == 0) {
+            continue;
+        }
+
+        var ns: u64 = 0;
+        gl.glGetQueryObjectui64v(self.query_ids[i], gl.GL_QUERY_RESULT, &ns);
+        pending.* = false;
+        return @as(f32, @floatFromInt(ns)) / std.time.ns_per_ms;
+    }
+    return null;
+}
+
+fn requireOwner(self: *OpenGLDevice, resource_handle: ResourceHandle, comptime kind: []const u8) void {
+    if (!resource_handle.belongsTo(@as(*const anyopaque, @ptrCast(self)))) @panic("foreign " ++ kind ++ " handle");
 }
 
 fn nextSortKey(current: u64) u64 {

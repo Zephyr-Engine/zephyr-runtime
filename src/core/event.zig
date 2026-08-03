@@ -4,7 +4,6 @@ const Window = @import("window.zig");
 const log = @import("log.zig");
 const c = @import("../c.zig");
 const glfw = c.glfw;
-const gl = c.glad;
 
 pub const MouseButton = enum(u8) {
     Left = 0,
@@ -346,7 +345,6 @@ pub fn windowResizeCallback(window: c.Window, width: c_int, height: c_int) callc
 
 pub fn framebufferSizeCallback(window: c.Window, width: c_int, height: c_int) callconv(.c) void {
     if (width < 0 or height < 0) return;
-    gl.glViewport(0, 0, @intCast(width), @intCast(height));
     const win = getWindowFromGLFW(window) orelse return;
 
     const ev = ZEvent{ .FramebufferResize = .{

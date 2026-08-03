@@ -1,11 +1,12 @@
 const builtin = @import("builtin");
 const std = @import("std");
 
+const Backend = @import("../graphics/device_factory.zig").Backend;
+const graphics_context = @import("../graphics/context.zig");
 const event = @import("event.zig");
 const log = @import("log.zig");
 const c = @import("../c.zig");
 const glfw = c.glfw;
-const gl = c.glad;
 
 const macos = if (builtin.os.tag == .macos) @cImport({
     @cInclude("objc/message.h");
@@ -35,6 +36,7 @@ pub const WindowParams = struct {
     height: ?u32,
     title: []const u8,
     msaa_samples: u32 = 4,
+    backend: Backend = .opengl,
 };
 
 pub const CursorKind = enum {
@@ -96,12 +98,7 @@ pub fn init(allocator: std.mem.Allocator, params: WindowParams) WindowError!*Win
     errdefer glfw.glfwTerminate();
 
     glfw.glfwDefaultWindowHints();
-    glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfw.glfwWindowHint(glfw.GLFW_OPENGL_PROFILE, glfw.GLFW_OPENGL_CORE_PROFILE);
-    if (params.msaa_samples > 1) {
-        glfw.glfwWindowHint(glfw.GLFW_SAMPLES, @intCast(params.msaa_samples));
-    }
+    graphics_context.configure(params.backend, params.msaa_samples);
 
     const title = allocator.dupeZ(u8, params.title) catch |err| {
         log.err("failed to allocate window title: {}", .{err});
@@ -129,17 +126,10 @@ pub fn init(allocator: std.mem.Allocator, params: WindowParams) WindowError!*Win
     }
     applyPlatformWindowAppearance(window);
 
-    glfw.glfwMakeContextCurrent(window);
-    Window.SetVsync(true);
-
-    const loader: gl.GLADloadproc = @ptrCast(&glfw.glfwGetProcAddress);
-    if (gl.gladLoadGLLoader(loader) == 0) {
+    graphics_context.initialize(params.backend, window, params.msaa_samples) catch {
         log.err("failed to load OpenGL functions", .{});
         return WindowError.ContextLoadFailed;
-    }
-    if (params.msaa_samples > 1) {
-        gl.glEnable(gl.GL_MULTISAMPLE);
-    }
+    };
 
     const win = allocator.create(Window) catch |err| {
         log.err("failed to allocate window state: {}", .{err});
@@ -158,11 +148,6 @@ pub fn init(allocator: std.mem.Allocator, params: WindowParams) WindowError!*Win
     win.text_cursor = glfw.glfwCreateStandardCursor(glfw.GLFW_IBEAM_CURSOR);
     win.resize_x_cursor = glfw.glfwCreateStandardCursor(glfw.GLFW_HRESIZE_CURSOR);
     win.resize_y_cursor = glfw.glfwCreateStandardCursor(glfw.GLFW_VRESIZE_CURSOR);
-
-    var fb_width: c_int = undefined;
-    var fb_height: c_int = undefined;
-    glfw.glfwGetFramebufferSize(window, &fb_width, &fb_height);
-    gl.glViewport(0, 0, fb_width, fb_height);
 
     return win;
 }

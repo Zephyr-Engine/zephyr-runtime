@@ -2,20 +2,19 @@ const zimp = @import("zimp");
 const std = @import("std");
 const zcs = @import("zcs");
 
+const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
 const render_submission = @import("render_submission.zig");
-const Collector = @import("opengl/stats_collector.zig");
 const camera_system = @import("../scene/camera.zig");
+const device_factory = @import("device_factory.zig");
 const components = @import("../ecs/components.zig");
 const render_state = @import("render_state.zig");
+const Collector = @import("stats_collector.zig");
 const DebugStats = @import("debug_stats.zig");
 const Device = @import("rhi/device.zig");
-const device_factory = @import("device_factory.zig");
+const Material = @import("material.zig");
 const math = @import("../core/math.zig");
 const ecs = @import("../ecs/world.zig");
 const log = @import("../core/log.zig");
-
-const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
-const Material = @import("material.zig");
 const Mesh = @import("mesh.zig");
 
 const DrawItem = render_submission.DrawItem;
@@ -39,8 +38,8 @@ pub fn init(allocator: std.mem.Allocator, backend: device_factory.Backend) !Rend
 
 pub fn render(self: *Renderer, world: *zcs.World, assets: *AssetManager, target: RenderTarget) !void {
     const viewport = target.viewport();
-    self.stats.beginGpuTimer();
-    defer self.stats.endGpuTimer();
+    self.stats.beginGpuTimer(&self.device);
+    defer self.stats.endGpuTimer(&self.device);
 
     self.submissions.clearRetainingCapacity();
     try self.renderWorld(world, assets, target, viewport);
@@ -75,7 +74,6 @@ pub fn recordCpuFrame(self: *Renderer, delta_time: f32, elapsed_ms: f32) void {
 }
 
 pub fn deinit(self: *Renderer) void {
-    self.stats.deinit();
     self.submissions.deinit(self.allocator);
     self.device.deinit();
 
@@ -155,7 +153,7 @@ fn renderQueue(self: *Renderer, view: math.Mat4, projection: math.Mat4) void {
         self.device.setGraphicsPipelineUniformByName(draw_item.material.pipeline, "u_projection", .{ .mat4 = projection.fields });
         self.device.setGraphicsPipelineUniformByName(draw_item.material.pipeline, "u_model", .{ .mat4 = draw_item.model.fields });
 
-        draw_item.part.drawSubmesh(draw_item.submesh);
+        self.device.drawIndexed(draw_item.part.geometry, draw_item.submesh.index_offset, draw_item.submesh.index_count);
     }
 }
 

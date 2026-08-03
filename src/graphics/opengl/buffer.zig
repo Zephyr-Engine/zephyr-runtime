@@ -1,106 +1,50 @@
-const std = @import("std");
-
-const IndexFormat = @import("zimp").mesh.IndexFormat;
 const diagnostics = @import("diagnostics.zig");
-const c = @import("../../c.zig");
-const gl = c.glad;
+const Buffer = @import("../rhi/buffer.zig");
+const gl = @import("../../c.zig").glad;
 
-pub const BufferError = error{
-    BufferCreationFailed,
-    OpenGLError,
-};
+const OpenGLBuffer = @This();
 
-pub const VertexBuffer = struct {
-    id: u32,
+id: u32,
+size: usize,
+usage: Buffer.Usage,
 
-    pub fn init(data: []const u8) BufferError!VertexBuffer {
-        var vbo = VertexBuffer{ .id = 0 };
-
-        gl.glGenBuffers(1, &vbo.id);
-        if (vbo.id == 0) {
-            return BufferError.BufferCreationFailed;
+pub fn init(desc: Buffer.Desc) !OpenGLBuffer {
+    if (desc.initial_data) |bytes| {
+        if (bytes.len > desc.size) {
+            return error.InitialDataTooLarge;
         }
-
-        gl.glBindBuffer(gl.GL_ARRAY_BUFFER, vbo.id);
-        gl.glBufferData(
-            gl.GL_ARRAY_BUFFER,
-            @intCast(data.len),
-            data.ptr,
-            gl.GL_STATIC_DRAW,
-        );
-
-        if (!diagnostics.checkError("uploading vertex buffer")) {
-            gl.glDeleteBuffers(1, &vbo.id);
-            return BufferError.OpenGLError;
-        }
-
-        return vbo;
     }
 
-    pub fn initFromSlice(comptime T: type, data: []const T) BufferError!VertexBuffer {
-        return init(std.mem.sliceAsBytes(data));
+    var id: u32 = 0;
+    gl.glGenBuffers(1, &id);
+    if (id == 0) {
+        return error.BufferCreationFailed;
     }
 
-    pub fn bind(self: VertexBuffer) void {
-        gl.glBindBuffer(gl.GL_ARRAY_BUFFER, self.id);
+    errdefer gl.glDeleteBuffers(1, &id);
+    gl.glBindBuffer(gl.GL_ARRAY_BUFFER, id);
+
+    const initial = desc.initial_data;
+    gl.glBufferData(gl.GL_ARRAY_BUFFER, @intCast(desc.size), if (initial) |bytes| bytes.ptr else null, gl.GL_STATIC_DRAW);
+    if (!diagnostics.checkError("creating buffer")) {
+        return error.OpenGLError;
+    }
+    return .{ .id = id, .size = desc.size, .usage = desc.usage };
+}
+
+pub fn update(self: *OpenGLBuffer, offset: usize, data: []const u8) !void {
+    if (offset > self.size or data.len > self.size - offset) {
+        return error.BufferWriteOutOfBounds;
     }
 
-    pub fn deinit(self: *VertexBuffer) void {
-        gl.glDeleteBuffers(1, &self.id);
-        self.id = 0;
+    gl.glBindBuffer(gl.GL_ARRAY_BUFFER, self.id);
+    gl.glBufferSubData(gl.GL_ARRAY_BUFFER, @intCast(offset), @intCast(data.len), data.ptr);
+    if (!diagnostics.checkError("updating buffer")) {
+        return error.OpenGLError;
     }
-};
+}
 
-pub const IndexBuffer = struct {
-    id: u32,
-    count: usize,
-    index_format: IndexFormat,
-
-    pub fn initU32(indices: []const u32) BufferError!IndexBuffer {
-        return initRaw(
-            std.mem.sliceAsBytes(indices),
-            indices.len,
-            IndexFormat.u32,
-        );
-    }
-
-    pub fn initU16(indices: []const u16) BufferError!IndexBuffer {
-        return initRaw(
-            std.mem.sliceAsBytes(indices),
-            indices.len,
-            IndexFormat.u16,
-        );
-    }
-
-    fn initRaw(data: []const u8, count: usize, index_format: IndexFormat) BufferError!IndexBuffer {
-        var ebo = IndexBuffer{ .id = 0, .count = count, .index_format = index_format };
-
-        gl.glGenBuffers(1, &ebo.id);
-        if (ebo.id == 0) {
-            return BufferError.BufferCreationFailed;
-        }
-
-        gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, ebo.id);
-        gl.glBufferData(
-            gl.GL_ELEMENT_ARRAY_BUFFER,
-            @intCast(data.len),
-            data.ptr,
-            gl.GL_STATIC_DRAW,
-        );
-        if (!diagnostics.checkError("uploading index buffer")) {
-            gl.glDeleteBuffers(1, &ebo.id);
-            return BufferError.OpenGLError;
-        }
-
-        return ebo;
-    }
-
-    pub fn bind(self: *const IndexBuffer) void {
-        gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, self.id);
-    }
-
-    pub fn deinit(self: *IndexBuffer) void {
-        gl.glDeleteBuffers(1, &self.id);
-        self.id = 0;
-    }
-};
+pub fn deinit(self: *OpenGLBuffer) void {
+    gl.glDeleteBuffers(1, &self.id);
+    self.id = 0;
+}
