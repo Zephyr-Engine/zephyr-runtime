@@ -1,17 +1,17 @@
 pub const Application = @import("core/application.zig").Application;
 pub const Runtime = @import("core/runtime.zig").Runtime;
-pub const Framebuffer = @import("graphics/opengl/framebuffer.zig").Framebuffer;
-pub const Texture = @import("graphics/opengl/texture.zig").Texture2D;
 pub const VertexArray = @import("graphics/opengl/vertex_array.zig");
+pub const Framebuffer = @import("graphics/opengl/framebuffer.zig");
 pub const Shader = @import("graphics/opengl/shader.zig").Shader;
 pub const Material = @import("graphics/material.zig").Material;
 pub const CursorKind = @import("core/window.zig").CursorKind;
 pub const MouseButton = @import("core/event.zig").MouseButton;
-pub const Window = @import("core/window.zig").Window;
+pub const Texture = @import("graphics/opengl/texture.zig");
 pub const ZEvent = @import("core/event.zig").ZEvent;
-pub const Input = @import("core/input.zig").Input;
 pub const Key = @import("core/event.zig").Key;
+pub const Window = @import("core/window.zig");
 pub const Mesh = @import("graphics/mesh.zig");
+pub const Input = @import("core/input.zig");
 
 pub const AssetManager = @import("assets/asset_manager.zig").AssetManager;
 pub const AssetError = @import("assets/source.zig").AssetError;
@@ -32,10 +32,10 @@ pub const Mat2 = math.Mat2;
 pub const Quat = math.Quat;
 
 pub const scene_schema = struct {
-    pub const SceneRuntimeInstance = @import("scene/runtime_instance.zig").SceneRuntimeInstance;
     pub const ComponentCodec = @import("scene/component_codec.zig").ComponentCodec;
-    pub const SchemaRegistry = @import("scene/schema_registry.zig").SchemaRegistry;
     pub const CodecError = @import("scene/component_codec.zig").CodecError;
+    pub const SceneRuntimeInstance = @import("scene/runtime_instance.zig");
+    pub const SchemaRegistry = @import("scene/schema_registry.zig");
     pub const SchemaMeta = zimp.scene.SchemaMeta;
 
     const derive_schema = @import("scene/derive_schema.zig");
@@ -50,7 +50,7 @@ pub const activeCamera = camera.active;
 pub const ActiveCamera = camera.ActiveCamera;
 
 pub const ProjectManifest = zimp.ProjectManifest;
-pub const Project = @import("project/project.zig").Project;
+pub const Project = @import("project/project.zig");
 pub const openProject = @import("project/open.zig").open;
 
 pub const Renderer = @import("graphics/renderer.zig");
@@ -58,8 +58,8 @@ pub const RenderQueue = @import("graphics/render_submission.zig");
 pub const RenderState = @import("graphics/render_state.zig");
 pub const RenderViewport = Renderer.RenderViewport;
 pub const RenderTarget = Renderer.RenderTarget;
-pub const DebugStats = @import("graphics/debug_stats.zig").DebugStats;
-pub const Game = @import("core/game.zig").Game;
+pub const DebugStats = @import("graphics/debug_stats.zig");
+pub const Game = @import("core/game.zig");
 
 pub const components = @import("ecs/components.zig");
 pub const ecs = @import("ecs/world.zig");
@@ -101,6 +101,7 @@ test {
     _ = @import("graphics/opengl/shader.zig");
     _ = @import("graphics/opengl/texture.zig");
     _ = @import("graphics/opengl/vertex_array.zig");
+    _ = @import("graphics/opengl/stats_collector.zig");
     _ = @import("graphics/debug_stats.zig");
     _ = @import("graphics/layout.zig");
     _ = @import("project/project.zig");

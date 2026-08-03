@@ -1,11 +1,10 @@
+const zimp = @import("zimp");
 const std = @import("std");
 
-const c = @import("../c.zig");
-const zimp = @import("zimp");
-const gl = c.glad;
+const math = @import("../core/math.zig");
 
 const Shader = @import("opengl/shader.zig").Shader;
-const Texture2D = @import("opengl/texture.zig").Texture2D;
+const Texture2D = @import("opengl/texture.zig");
 
 pub const Material = struct {
     shader: *Shader,
@@ -67,30 +66,39 @@ pub const Material = struct {
             const bytes = self.source.param_data[start..end];
 
             switch (param.param_type) {
-                .float => gl.glUniform1f(binding.location, readF32(bytes[0..4])),
-                .vec2 => gl.glUniform2f(
+                .float => self.shader.setUniformFromLocation(binding.location, readF32(bytes[0..4])),
+                .vec2 => self.shader.setUniformFromLocation(
                     binding.location,
-                    readF32(bytes[0..4]),
-                    readF32(bytes[4..8]),
+                    math.Vec2.new(
+                        readF32(bytes[0..4]),
+                        readF32(bytes[4..8]),
+                    ),
                 ),
-                .vec3 => gl.glUniform3f(
+                .vec3 => self.shader.setUniformFromLocation(
                     binding.location,
-                    readF32(bytes[0..4]),
-                    readF32(bytes[4..8]),
-                    readF32(bytes[8..12]),
+                    math.Vec3.new(
+                        readF32(bytes[0..4]),
+                        readF32(bytes[4..8]),
+                        readF32(bytes[8..12]),
+                    ),
                 ),
-                .vec4 => gl.glUniform4f(
+                .vec4 => self.shader.setUniformFromLocation(
                     binding.location,
-                    readF32(bytes[0..4]),
-                    readF32(bytes[4..8]),
-                    readF32(bytes[8..12]),
-                    readF32(bytes[12..16]),
+                    math.Vec4.new(
+                        readF32(bytes[0..4]),
+                        readF32(bytes[4..8]),
+                        readF32(bytes[8..12]),
+                        readF32(bytes[12..16]),
+                    ),
                 ),
-                .int => gl.glUniform1i(
+                .int => self.shader.setUniformFromLocation(
                     binding.location,
                     std.mem.readInt(i32, bytes[0..4], .little),
                 ),
-                .bool => gl.glUniform1i(binding.location, if (std.mem.readInt(u32, bytes[0..4], .little) != 0) 1 else 0),
+                .bool => {
+                    const val: i32 = if (std.mem.readInt(u32, bytes[0..4], .little) != 0) 1 else 0;
+                    self.shader.setUniformFromLocation(binding.location, val);
+                },
             }
         }
 

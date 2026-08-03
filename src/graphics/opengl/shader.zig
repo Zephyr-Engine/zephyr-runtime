@@ -154,8 +154,7 @@ pub const Shader = struct {
         return self.uniforms.get(name);
     }
 
-    pub fn setUniform(self: *const Shader, name: []const u8, value: anytype) void {
-        const location = self.uniformLocation(name) orelse return;
+    pub fn setUniformFromLocation(_: *const Shader, location: i32, value: anytype) void {
         const T = comptime @TypeOf(value);
         switch (comptime @typeInfo(T)) {
             .float, .comptime_float => {
@@ -194,6 +193,11 @@ pub const Shader = struct {
                 @compileError("Unsupported uniform type");
             },
         }
+    }
+
+    pub fn setUniform(self: *const Shader, name: []const u8, value: anytype) void {
+        const location = self.uniformLocation(name) orelse return;
+        self.setUniformFromLocation(location, value);
     }
 
     pub fn bind(self: Shader) void {

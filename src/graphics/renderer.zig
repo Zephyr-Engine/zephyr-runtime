@@ -3,10 +3,11 @@ const std = @import("std");
 const zcs = @import("zcs");
 
 const render_submission = @import("render_submission.zig");
+const Collector = @import("opengl/stats_collector.zig");
 const camera_system = @import("../scene/camera.zig");
 const components = @import("../ecs/components.zig");
 const render_state = @import("render_state.zig");
-const debug_stats = @import("debug_stats.zig");
+const DebugStats = @import("debug_stats.zig");
 const math = @import("../core/math.zig");
 const ecs = @import("../ecs/world.zig");
 const log = @import("../core/log.zig");
@@ -14,7 +15,7 @@ const log = @import("../core/log.zig");
 const applyFixedState = @import("opengl/render_state.zig").apply;
 const beginRenderPass = @import("opengl/render_state.zig").begin;
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
-const Framebuffer = @import("opengl/framebuffer.zig").Framebuffer;
+const Framebuffer = @import("opengl/framebuffer.zig");
 const Material = @import("material.zig").Material;
 const Mesh = @import("mesh.zig");
 
@@ -50,7 +51,7 @@ pub const RenderTarget = union(enum) {
 };
 
 submissions: std.ArrayList(DrawItem) = .empty,
-stats: debug_stats.Collector = .{},
+stats: Collector = .{},
 allocator: std.mem.Allocator,
 
 pub fn init(allocator: std.mem.Allocator) !Renderer {
@@ -86,7 +87,7 @@ pub fn setDebugStatsEnabled(self: *Renderer, enabled: bool) void {
     self.stats.setEnabled(enabled);
 }
 
-pub fn debugStats(self: *const Renderer) ?debug_stats.DebugStats {
+pub fn debugStats(self: *const Renderer) ?DebugStats {
     return self.stats.snapshot();
 }
 

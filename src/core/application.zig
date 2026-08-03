@@ -1,15 +1,14 @@
 const std = @import("std");
 
-const Framebuffer = @import("../graphics/opengl/framebuffer.zig").Framebuffer;
-const DebugStats = @import("../graphics/debug_stats.zig").DebugStats;
 const Runtime = @import("runtime.zig").Runtime;
-const Project = @import("../project/project.zig").Project;
-const WindowParams = @import("window.zig").WindowParams;
+const Framebuffer = @import("../graphics/opengl/framebuffer.zig");
+const DebugStats = @import("../graphics/debug_stats.zig");
 const Renderer = @import("../graphics/renderer.zig");
-const Window = @import("window.zig").Window;
-const Input = @import("input.zig").Input;
-const Game = @import("game.zig").Game;
+const Project = @import("../project/project.zig");
+const Window = @import("window.zig");
+const Input = @import("input.zig");
 const event = @import("event.zig");
+const Game = @import("game.zig");
 const log = @import("log.zig");
 
 pub fn Application(comptime game: Game) type {
@@ -23,7 +22,7 @@ pub fn Application(comptime game: Game) type {
         pub fn init(
             allocator: std.mem.Allocator,
             io: std.Io,
-            params: WindowParams,
+            params: Window.WindowParams,
             project: *const Project,
         ) !*@This() {
             const app = try allocator.create(@This());

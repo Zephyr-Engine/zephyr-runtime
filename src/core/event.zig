@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Window = @import("window.zig").Window;
+const Window = @import("window.zig");
 const log = @import("log.zig");
 const c = @import("../c.zig");
 const glfw = c.glfw;
