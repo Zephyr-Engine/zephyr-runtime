@@ -2,16 +2,16 @@ const zimp = @import("zimp");
 const std = @import("std");
 const zob = @import("zob");
 
-const source_mod = @import("source.zig");
-
-const Texture2D = @import("../graphics/opengl/texture.zig");
-const Device = @import("../graphics/rhi/device.zig");
 const GraphicsPipeline = @import("../graphics/rhi/graphics_pipeline.zig");
+const Texture2D = @import("../graphics/opengl/texture.zig");
 const render_state = @import("../graphics/render_state.zig");
+const Device = @import("../graphics/rhi/device.zig");
+const device_factory = @import("../graphics/device_factory.zig");
 const RuntimeAssetManifest = @import("manifest.zig");
 const Material = @import("../graphics/material.zig");
 const Project = @import("../project/project.zig");
 const Mesh = @import("../graphics/mesh.zig");
+const source_mod = @import("source.zig");
 const log = @import("../core/log.zig");
 
 const CookedStore = source_mod.CookedStore;
@@ -109,7 +109,7 @@ pub const AssetManager = struct {
 
     assets: std.AutoHashMap(AssetId, *AssetRecord),
     asset_keys: std.StringHashMap(AssetId),
-    graphics_pipelines: std.StringHashMap(*GraphicsPipeline),
+    graphics_pipelines: std.StringHashMap(GraphicsPipeline),
     /// Durable id <-> cooked path mapping from `assets.zmanifest`. The
     /// manifest is required: every asset id the runtime hands out is the
     /// durable id the cook assigned.
@@ -158,7 +158,7 @@ pub const AssetManager = struct {
             }),
             .assets = std.AutoHashMap(AssetId, *AssetRecord).init(allocator),
             .asset_keys = std.StringHashMap(AssetId).init(allocator),
-            .graphics_pipelines = std.StringHashMap(*GraphicsPipeline).init(allocator),
+            .graphics_pipelines = std.StringHashMap(GraphicsPipeline).init(allocator),
             .manifest = manifest,
         };
     }
@@ -185,8 +185,7 @@ pub const AssetManager = struct {
         var pipeline_it = self.graphics_pipelines.iterator();
         while (pipeline_it.next()) |entry| {
             self.allocator.free(entry.key_ptr.*);
-            entry.value_ptr.*.deinit();
-            self.allocator.destroy(entry.value_ptr.*);
+            self.device.destroyGraphicsPipeline(entry.value_ptr);
         }
         self.graphics_pipelines.deinit();
 
@@ -529,11 +528,12 @@ pub const AssetManager = struct {
 
         const material = try self.allocator.create(Material);
         errdefer self.allocator.destroy(material);
-        material.* = try Material.initFromSource(
+        material.* = try Material.init(
             self.allocator,
             material_source,
             pipeline,
             texture_slice,
+            self.device,
         );
         source_owned = false;
         texture_slice_owned = false;
@@ -545,7 +545,7 @@ pub const AssetManager = struct {
     fn materialPipelineReady(
         self: *AssetManager,
         material_source: *const zimp.Zamat,
-    ) !?*GraphicsPipeline {
+    ) !?GraphicsPipeline {
         const vertex_path = try materialDependencyPath(self.allocator, material_source.vertex_shader_path);
         defer self.allocator.free(vertex_path);
 
@@ -609,7 +609,7 @@ pub const AssetManager = struct {
         fragment_path: []const u8,
         required_variants: []const []const u8,
         fixed_state: render_state.FixedState,
-    ) !?*GraphicsPipeline {
+    ) !?GraphicsPipeline {
         const normalized_vertex = try self.normalizeExpected(vertex_path, .shader_stage);
         defer self.allocator.free(normalized_vertex);
         const normalized_fragment = try self.normalizeExpected(fragment_path, .shader_stage);
@@ -653,9 +653,7 @@ pub const AssetManager = struct {
         }
         self.unlock();
 
-        const pipeline = try self.allocator.create(GraphicsPipeline);
-        errdefer self.allocator.destroy(pipeline);
-        pipeline.* = try createGraphicsPipeline(
+        var pipeline = try createGraphicsPipeline(
             self.device,
             vertex_stage,
             vertex_variant,
@@ -663,14 +661,13 @@ pub const AssetManager = struct {
             fragment_variant,
             fixed_state,
         );
-        errdefer pipeline.deinit();
+        errdefer self.device.destroyGraphicsPipeline(&pipeline);
 
         self.lock();
         defer self.unlock();
 
         if (self.graphics_pipelines.get(lookup_key)) |cached| {
-            pipeline.deinit();
-            self.allocator.destroy(pipeline);
+            self.device.destroyGraphicsPipeline(&pipeline);
             return cached;
         }
 
@@ -994,7 +991,7 @@ test "init opens cooked assets from project root" {
 
     var project = try testProject(&tmp);
     defer project.deinit(testing.allocator, testing.io);
-    var device = try Device.init(testing.allocator, .opengl);
+    var device = try device_factory.init(testing.allocator, .opengl);
     defer device.deinit();
 
     var manager = try AssetManager.init(
@@ -1015,7 +1012,7 @@ test "registerId deduplicates requests before background load finishes" {
     defer tmp.cleanup();
     var project = try testProject(&tmp);
     defer project.deinit(testing.allocator, testing.io);
-    var device = try Device.init(testing.allocator, .opengl);
+    var device = try device_factory.init(testing.allocator, .opengl);
     defer device.deinit();
 
     var manager = try AssetManager.init(
@@ -1042,7 +1039,7 @@ test "background load failures are observable through wait and state" {
 
     var project = try testProject(&tmp);
     defer project.deinit(testing.allocator, testing.io);
-    var device = try Device.init(testing.allocator, .opengl);
+    var device = try device_factory.init(testing.allocator, .opengl);
     defer device.deinit();
 
     var manager = try AssetManager.init(
@@ -1064,7 +1061,7 @@ test "registerId resolves the durable id from the asset manifest" {
     defer tmp.cleanup();
     var project = try testProject(&tmp);
     defer project.deinit(testing.allocator, testing.io);
-    var device = try Device.init(testing.allocator, .opengl);
+    var device = try device_factory.init(testing.allocator, .opengl);
     defer device.deinit();
 
     var manager = try AssetManager.init(testing.allocator, testing.io, &project, &device);
@@ -1096,7 +1093,7 @@ test "init fails without an asset manifest" {
         .root_dir = try std.Io.Dir.openDir(tmp.dir, testing.io, ".", .{}),
     };
     defer project.deinit(testing.allocator, testing.io);
-    var device = try Device.init(testing.allocator, .opengl);
+    var device = try device_factory.init(testing.allocator, .opengl);
     defer device.deinit();
 
     try testing.expectError(error.FileNotFound, AssetManager.init(testing.allocator, testing.io, &project, &device));

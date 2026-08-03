@@ -100,6 +100,9 @@ test {
     _ = @import("graphics/opengl/diagnostics.zig");
     _ = @import("graphics/opengl/graphics_pipeline.zig");
     _ = @import("graphics/rhi/device.zig");
+    _ = @import("graphics/device_factory.zig");
+    _ = @import("graphics/rhi/resource_pool.zig");
+    _ = @import("graphics/rhi/resource_handle.zig");
     _ = @import("graphics/opengl/texture.zig");
     _ = @import("graphics/opengl/vertex_array.zig");
     _ = @import("graphics/opengl/stats_collector.zig");

@@ -26,13 +26,6 @@ allocator: std.mem.Allocator,
 uniforms: Map,
 fixed_state: @import("../render_state.zig").FixedState,
 
-pub const vtable = rhi.VTable{
-    .destroy = destroy,
-    .bind = bind,
-    .uniformLocation = uniformLocation,
-    .setUniformFromLocation = setUniformFromLocation,
-};
-
 pub fn init(allocator: std.mem.Allocator, desc: rhi.GraphicsPipelineDesc) GraphicsPipelineError!GraphicsPipeline {
     const vs_src = switch (desc.vertex) {
         .glsl => |source| source,
@@ -112,14 +105,15 @@ fn compileShader(comptime stage: enum { vertex, fragment }, source: []const u8) 
     return shader;
 }
 
-fn destroy(impl: *anyopaque) void {
-    const self: *GraphicsPipeline = @ptrCast(@alignCast(impl));
-    const allocator = self.allocator;
+pub fn deinit(self: *GraphicsPipeline) void {
     var it = self.uniforms.keyIterator();
-    while (it.next()) |key| allocator.free(key.*);
+    while (it.next()) |key| {
+        self.allocator.free(key.*);
+    }
+
     self.uniforms.deinit();
     gl.glDeleteProgram(self.id);
-    allocator.destroy(self);
+    self.id = 0;
 }
 
 fn getUniformLocations(program: u32, allocator: std.mem.Allocator) GraphicsPipelineError!Map {
@@ -151,14 +145,15 @@ fn getUniformLocations(program: u32, allocator: std.mem.Allocator) GraphicsPipel
     return map;
 }
 
-fn uniformLocation(impl: *const anyopaque, name: []const u8) ?rhi.UniformLocation {
-    const self: *const GraphicsPipeline = @ptrCast(@alignCast(impl));
+pub fn uniformLocation(self: *const GraphicsPipeline, name: []const u8) ?rhi.UniformLocation {
     const location = self.uniforms.get(name) orelse return null;
-    if (location < 0) return null;
+    if (location < 0) {
+        return null;
+    }
     return .{ .slot = @intCast(location) };
 }
 
-fn setUniformFromLocation(_: *const anyopaque, location: rhi.UniformLocation, value: rhi.UniformValue) void {
+pub fn setUniformFromLocation(_: *const GraphicsPipeline, location: rhi.UniformLocation, value: rhi.UniformValue) void {
     const slot: i32 = @intCast(location.slot);
     switch (value) {
         .float => |v| gl.glUniform1f(slot, v),
@@ -171,8 +166,7 @@ fn setUniformFromLocation(_: *const anyopaque, location: rhi.UniformLocation, va
     }
 }
 
-fn bind(impl: *const anyopaque) void {
-    const self: *const GraphicsPipeline = @ptrCast(@alignCast(impl));
+pub fn bind(self: *const GraphicsPipeline) void {
     gl.glUseProgram(self.id);
     render_state.apply(self.fixed_state);
 }

@@ -3,10 +3,12 @@ const std = @import("std");
 
 const Texture2D = @import("opengl/texture.zig");
 const GraphicsPipeline = @import("rhi/graphics_pipeline.zig");
+const Device = @import("rhi/device.zig");
 
 const Material = @This();
 
-pipeline: *GraphicsPipeline,
+pipeline: GraphicsPipeline,
+device: *Device,
 source: zimp.Zamat,
 texture_bindings: []TextureBinding,
 param_bindings: []ParamBinding,
@@ -23,17 +25,18 @@ pub const ParamBinding = struct {
     location: GraphicsPipeline.UniformLocation,
 };
 
-pub fn initFromSource(
+pub fn init(
     allocator: std.mem.Allocator,
     source: zimp.Zamat,
-    pipeline: *GraphicsPipeline,
+    pipeline: GraphicsPipeline,
     texture_bindings: []TextureBinding,
+    device: *Device,
 ) !Material {
     var param_bindings = std.ArrayList(ParamBinding).empty;
     errdefer param_bindings.deinit(allocator);
 
     for (source.param_entries, 0..) |param, i| {
-        const location = pipeline.uniformLocation(param.name) orelse continue;
+        const location = device.graphicsPipelineUniformLocation(pipeline, param.name) orelse continue;
         try param_bindings.append(allocator, .{
             .param_index = i,
             .location = location,
@@ -42,6 +45,7 @@ pub fn initFromSource(
 
     return .{
         .pipeline = pipeline,
+        .device = device,
         .source = source,
         .texture_bindings = texture_bindings,
         .param_bindings = try param_bindings.toOwnedSlice(allocator),
@@ -52,7 +56,7 @@ pub fn initFromSource(
 pub fn bindResources(self: *const Material) void {
     for (self.texture_bindings) |*binding| {
         binding.texture.bind(binding.unit);
-        self.pipeline.setUniform(binding.resource_name, .{ .int = @intCast(binding.unit) });
+        self.device.setGraphicsPipelineUniformByName(self.pipeline, binding.resource_name, .{ .int = @intCast(binding.unit) });
     }
 
     for (self.param_bindings) |binding| {
@@ -65,15 +69,17 @@ pub fn bindResources(self: *const Material) void {
         const bytes = self.source.param_data[start..end];
 
         switch (param.param_type) {
-            .float => self.pipeline.setUniformFromLocation(binding.location, .{ .float = readF32(bytes[0..4]) }),
-            .vec2 => self.pipeline.setUniformFromLocation(
+            .float => self.device.setGraphicsPipelineUniform(self.pipeline, binding.location, .{ .float = readF32(bytes[0..4]) }),
+            .vec2 => self.device.setGraphicsPipelineUniform(
+                self.pipeline,
                 binding.location,
                 .{ .vec2 = .{
                     readF32(bytes[0..4]),
                     readF32(bytes[4..8]),
                 } },
             ),
-            .vec3 => self.pipeline.setUniformFromLocation(
+            .vec3 => self.device.setGraphicsPipelineUniform(
+                self.pipeline,
                 binding.location,
                 .{ .vec3 = .{
                     readF32(bytes[0..4]),
@@ -81,7 +87,8 @@ pub fn bindResources(self: *const Material) void {
                     readF32(bytes[8..12]),
                 } },
             ),
-            .vec4 => self.pipeline.setUniformFromLocation(
+            .vec4 => self.device.setGraphicsPipelineUniform(
+                self.pipeline,
                 binding.location,
                 .{ .vec4 = .{
                     readF32(bytes[0..4]),
@@ -90,19 +97,24 @@ pub fn bindResources(self: *const Material) void {
                     readF32(bytes[12..16]),
                 } },
             ),
-            .int => self.pipeline.setUniformFromLocation(
+            .int => self.device.setGraphicsPipelineUniform(
+                self.pipeline,
                 binding.location,
                 .{ .int = std.mem.readInt(i32, bytes[0..4], .little) },
             ),
             .bool => {
                 const val: i32 = if (std.mem.readInt(u32, bytes[0..4], .little) != 0) 1 else 0;
-                self.pipeline.setUniformFromLocation(binding.location, .{ .int = val });
+                self.device.setGraphicsPipelineUniform(self.pipeline, binding.location, .{ .int = val });
             },
         }
     }
 
     if (self.source.render_state.alpha_mode == .alpha_test) {
-        self.pipeline.setUniform("u_alpha_cutoff", .{ .float = self.source.render_state.alpha_cutoff });
+        self.device.setGraphicsPipelineUniformByName(
+            self.pipeline,
+            "u_alpha_cutoff",
+            .{ .float = self.source.render_state.alpha_cutoff },
+        );
     }
 }
 

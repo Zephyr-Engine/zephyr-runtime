@@ -1,14 +1,7 @@
-const std = @import("std");
-
-const OpenGLDevice = @import("../opengl/device.zig");
-const render_state = @import("../render_state.zig");
-const Framebuffer = @import("framebuffer.zig");
 const GraphicsPipeline = @import("graphics_pipeline.zig");
+const render_state = @import("../render_state.zig");
 const TextureView = @import("texture_view.zig");
-
-pub const Backend = enum {
-    opengl,
-};
+const Framebuffer = @import("framebuffer.zig");
 
 pub const RenderViewport = struct {
     width: u32 = 1,
@@ -62,16 +55,16 @@ pub const VTable = struct {
     destroyFramebuffer: *const fn (impl: *anyopaque, target: *Framebuffer) void,
     resizeFramebuffer: *const fn (impl: *anyopaque, target: *Framebuffer, extent: Framebuffer.Extent2D) anyerror!void,
     framebufferColorView: *const fn (impl: *anyopaque, target: *const Framebuffer) TextureView,
+    bindTextureView: *const fn (impl: *anyopaque, view: TextureView, unit: u16) void,
+    textureViewNativeId: *const fn (impl: *anyopaque, view: TextureView) u32,
 
     // graphics pipelines
     createGraphicsPipeline: *const fn (impl: *anyopaque, desc: GraphicsPipeline.GraphicsPipelineDesc) anyerror!GraphicsPipeline,
+    destroyGraphicsPipeline: *const fn (impl: *anyopaque, pipeline: *GraphicsPipeline) void,
+    bindGraphicsPipeline: *const fn (impl: *anyopaque, pipeline: GraphicsPipeline) void,
+    graphicsPipelineUniformLocation: *const fn (impl: *anyopaque, pipeline: GraphicsPipeline, name: []const u8) ?GraphicsPipeline.UniformLocation,
+    setGraphicsPipelineUniform: *const fn (impl: *anyopaque, pipeline: GraphicsPipeline, location: GraphicsPipeline.UniformLocation, value: GraphicsPipeline.UniformValue) void,
 };
-
-pub fn init(allocator: std.mem.Allocator, backend: Backend) !Device {
-    return switch (backend) {
-        .opengl => OpenGLDevice.init(allocator),
-    };
-}
 
 pub fn deinit(self: *Device) void {
     self.vtable.deinit(self.impl);
@@ -110,11 +103,35 @@ pub fn framebufferColorView(self: *Device, target: *const Framebuffer) TextureVi
     return self.vtable.framebufferColorView(self.impl, target);
 }
 
+pub fn bindTextureView(self: *Device, view: TextureView, unit: u16) void {
+    self.vtable.bindTextureView(self.impl, view, unit);
+}
+
+pub fn textureViewNativeId(self: *Device, view: TextureView) u32 {
+    return self.vtable.textureViewNativeId(self.impl, view);
+}
+
 pub fn createGraphicsPipeline(self: *Device, desc: GraphicsPipeline.GraphicsPipelineDesc) anyerror!GraphicsPipeline {
     return self.vtable.createGraphicsPipeline(self.impl, desc);
 }
 
-test "OpenGL device satisfies the complete RHI vtable" {
-    var device = try init(std.testing.allocator, .opengl);
-    device.deinit();
+pub fn destroyGraphicsPipeline(self: *Device, pipeline: *GraphicsPipeline) void {
+    self.vtable.destroyGraphicsPipeline(self.impl, pipeline);
+}
+
+pub fn bindGraphicsPipeline(self: *Device, pipeline: GraphicsPipeline) void {
+    self.vtable.bindGraphicsPipeline(self.impl, pipeline);
+}
+
+pub fn graphicsPipelineUniformLocation(self: *Device, pipeline: GraphicsPipeline, name: []const u8) ?GraphicsPipeline.UniformLocation {
+    return self.vtable.graphicsPipelineUniformLocation(self.impl, pipeline, name);
+}
+
+pub fn setGraphicsPipelineUniform(self: *Device, pipeline: GraphicsPipeline, location: GraphicsPipeline.UniformLocation, value: GraphicsPipeline.UniformValue) void {
+    self.vtable.setGraphicsPipelineUniform(self.impl, pipeline, location, value);
+}
+
+pub fn setGraphicsPipelineUniformByName(self: *Device, pipeline: GraphicsPipeline, name: []const u8, value: GraphicsPipeline.UniformValue) void {
+    const location = self.graphicsPipelineUniformLocation(pipeline, name) orelse return;
+    self.setGraphicsPipelineUniform(pipeline, location, value);
 }

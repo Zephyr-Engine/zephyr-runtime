@@ -1,3 +1,5 @@
+const ResourceHandle = @import("resource_handle.zig");
+
 pub const Extent2D = struct {
     width: u32 = 1,
     height: u32 = 1,
@@ -28,7 +30,7 @@ pub const FramebufferDesc = struct {
 
 const Framebuffer = @This();
 
-impl: *anyopaque,
+handle: ResourceHandle,
 extent: Extent2D,
 color_format: ColorFormat,
 depth_stencil_format: ?DepthStencilFormat,

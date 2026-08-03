@@ -9,6 +9,7 @@ const components = @import("../ecs/components.zig");
 const render_state = @import("render_state.zig");
 const DebugStats = @import("debug_stats.zig");
 const Device = @import("rhi/device.zig");
+const device_factory = @import("device_factory.zig");
 const math = @import("../core/math.zig");
 const ecs = @import("../ecs/world.zig");
 const log = @import("../core/log.zig");
@@ -29,10 +30,10 @@ submissions: std.ArrayList(DrawItem) = .empty,
 stats: Collector = .{},
 allocator: std.mem.Allocator,
 
-pub fn init(allocator: std.mem.Allocator, backend: Device.Backend) !Renderer {
+pub fn init(allocator: std.mem.Allocator, backend: device_factory.Backend) !Renderer {
     return .{
         .allocator = allocator,
-        .device = try Device.init(allocator, backend),
+        .device = try device_factory.init(allocator, backend),
     };
 }
 
@@ -142,17 +143,17 @@ fn renderFromCamera(self: *Renderer, world: *zcs.World, assets: *AssetManager, v
     try self.gatherDrawItems(world, assets, camera, view);
     std.mem.sort(DrawItem, self.submissions.items, {}, DrawItem.lessThan);
 
-    renderQueue(self.submissions, view, projection);
+    self.renderQueue(view, projection);
 }
 
-fn renderQueue(queue: std.ArrayList(DrawItem), view: math.Mat4, projection: math.Mat4) void {
-    for (queue.items) |draw_item| {
-        draw_item.material.pipeline.bind();
+fn renderQueue(self: *Renderer, view: math.Mat4, projection: math.Mat4) void {
+    for (self.submissions.items) |draw_item| {
+        self.device.bindGraphicsPipeline(draw_item.material.pipeline);
 
         draw_item.material.bindResources();
-        draw_item.material.pipeline.setUniform("u_view", .{ .mat4 = view.fields });
-        draw_item.material.pipeline.setUniform("u_projection", .{ .mat4 = projection.fields });
-        draw_item.material.pipeline.setUniform("u_model", .{ .mat4 = draw_item.model.fields });
+        self.device.setGraphicsPipelineUniformByName(draw_item.material.pipeline, "u_view", .{ .mat4 = view.fields });
+        self.device.setGraphicsPipelineUniformByName(draw_item.material.pipeline, "u_projection", .{ .mat4 = projection.fields });
+        self.device.setGraphicsPipelineUniformByName(draw_item.material.pipeline, "u_model", .{ .mat4 = draw_item.model.fields });
 
         draw_item.part.drawSubmesh(draw_item.submesh);
     }

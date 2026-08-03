@@ -1,3 +1,4 @@
+const ResourceHandle = @import("resource_handle.zig");
 const render_state = @import("../render_state.zig");
 
 pub const ShaderCode = union(enum) {
@@ -27,35 +28,5 @@ pub const UniformValue = union(enum) {
 
 const GraphicsPipeline = @This();
 
-impl: *anyopaque,
-vtable: *const VTable,
+handle: ResourceHandle,
 sort_key: u64,
-
-pub const VTable = struct {
-    destroy: *const fn (impl: *anyopaque) void,
-    bind: *const fn (impl: *const anyopaque) void,
-    uniformLocation: *const fn (impl: *const anyopaque, name: []const u8) ?UniformLocation,
-    setUniformFromLocation: *const fn (impl: *const anyopaque, location: UniformLocation, value: UniformValue) void,
-};
-
-pub fn deinit(self: *GraphicsPipeline) void {
-    self.vtable.destroy(self.impl);
-    self.* = undefined;
-}
-
-pub fn bind(self: *const GraphicsPipeline) void {
-    self.vtable.bind(self.impl);
-}
-
-pub fn uniformLocation(self: *const GraphicsPipeline, name: []const u8) ?UniformLocation {
-    return self.vtable.uniformLocation(self.impl, name);
-}
-
-pub fn setUniformFromLocation(self: *const GraphicsPipeline, location: UniformLocation, value: UniformValue) void {
-    self.vtable.setUniformFromLocation(self.impl, location, value);
-}
-
-pub fn setUniform(self: *const GraphicsPipeline, name: []const u8, value: UniformValue) void {
-    const location = self.uniformLocation(name) orelse return;
-    self.setUniformFromLocation(location, value);
-}
