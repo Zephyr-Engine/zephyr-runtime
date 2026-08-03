@@ -1,247 +1,88 @@
-const std = @import("std");
-
+const Texture = @import("../rhi/texture.zig");
 const diagnostics = @import("diagnostics.zig");
 const log = @import("../../core/log.zig");
-const c = @import("../../c.zig");
-const zimp = @import("zimp");
-const gl = c.glad;
+const gl = @import("../../c.zig").glad;
 
-const anisotropic_filtering_extension = "GL_EXT_texture_filter_anisotropic";
-const bptc_compression_extension = "GL_ARB_texture_compression_bptc";
-const rgtc_compression_extension = "GL_ARB_texture_compression_rgtc";
-
-pub const TextureError = error{
-    TextureCreationFailed,
-    UnsupportedTextureType,
-    UnsupportedTextureFormat,
-    InvalidMipChain,
-    OpenGLError,
-};
-
-const Texture2D = @This();
+const OpenGLTexture = @This();
 
 id: u32,
-width: u32,
-height: u32,
 
-pub fn init(tex: zimp.Zatex) TextureError!Texture2D {
-    if (tex.texture_type != .texture_2d) {
-        return TextureError.UnsupportedTextureType;
+pub fn init(desc: Texture.Desc) !OpenGLTexture {
+    if (desc.mips.len == 0) {
+        return error.InvalidMipChain;
     }
-    if (tex.mips.len == 0) {
-        return TextureError.InvalidMipChain;
-    }
-    if (!supportsTextureFormat(tex.format)) {
-        return TextureError.UnsupportedTextureFormat;
+    if (!supports(desc.format)) {
+        return error.UnsupportedTextureFormat;
     }
 
     var id: u32 = 0;
     gl.glGenTextures(1, &id);
-    if (!diagnostics.checkError("creating texture")) {
-        return TextureError.OpenGLError;
-    }
     if (id == 0) {
-        return TextureError.TextureCreationFailed;
+        return error.TextureCreationFailed;
     }
     errdefer gl.glDeleteTextures(1, &id);
 
     gl.glBindTexture(gl.GL_TEXTURE_2D, id);
-    if (!diagnostics.checkError("binding texture")) {
-        return TextureError.OpenGLError;
-    }
-    gl.glTexParameteri(
-        gl.GL_TEXTURE_2D,
-        gl.GL_TEXTURE_MIN_FILTER,
-        if (tex.mips.len > 1) gl.GL_LINEAR_MIPMAP_LINEAR else gl.GL_LINEAR,
-    );
-    if (!diagnostics.checkError("setting texture minification filter")) {
-        return TextureError.OpenGLError;
-    }
-    gl.glTexParameteri(
-        gl.GL_TEXTURE_2D,
-        gl.GL_TEXTURE_MAG_FILTER,
-        gl.GL_LINEAR,
-    );
-    if (!diagnostics.checkError("setting texture magnification filter")) {
-        return TextureError.OpenGLError;
-    }
-    gl.glTexParameteri(
-        gl.GL_TEXTURE_2D,
-        gl.GL_TEXTURE_WRAP_S,
-        gl.GL_REPEAT,
-    );
-    if (!diagnostics.checkError("setting texture S wrapping")) {
-        return TextureError.OpenGLError;
-    }
-    gl.glTexParameteri(
-        gl.GL_TEXTURE_2D,
-        gl.GL_TEXTURE_WRAP_T,
-        gl.GL_REPEAT,
-    );
-    if (!diagnostics.checkError("setting texture T wrapping")) {
-        return TextureError.OpenGLError;
-    }
-    if (diagnostics.hasExtension(anisotropic_filtering_extension)) {
-        var max_anisotrophy: f32 = 1.0;
-        gl.glGetFloatv(gl.GL_MAX_TEXTURE_MAX_ANISOTROPY, &max_anisotrophy);
-        if (!diagnostics.checkError("querying maximum texture anisotropy")) {
-            return TextureError.OpenGLError;
-        }
+    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_BASE_LEVEL, 0);
+    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAX_LEVEL, @intCast(desc.mips.len - 1));
+    for (desc.mips, 0..) |mip, level| {
+        if (compressedInternalFormat(desc.format)) |internal| {
+            gl.glCompressedTexImage2D(gl.GL_TEXTURE_2D, @intCast(level), internal, @intCast(mip.extent.width), @intCast(mip.extent.height), 0, @intCast(mip.bytes.len), mip.bytes.ptr);
+        } else if (uploadFormat(desc.format)) |fmt| {
+            gl.glTexImage2D(gl.GL_TEXTURE_2D, @intCast(level), @intCast(fmt.internal), @intCast(mip.extent.width), @intCast(mip.extent.height), 0, fmt.external, fmt.ty, mip.bytes.ptr);
+        } else return error.UnsupportedTextureFormat;
 
-        if (max_anisotrophy > 1.0) {
-            gl.glTexParameterf(
-                gl.GL_TEXTURE_2D,
-                gl.GL_TEXTURE_MAX_ANISOTROPY,
-                @min(max_anisotrophy, 8.0),
-            );
-            if (!diagnostics.checkError("setting texture anisotropy")) {
-                return TextureError.OpenGLError;
-            }
+        if (!diagnostics.checkError("uploading texture mip")) {
+            return error.OpenGLError;
         }
     }
-    gl.glTexParameteri(
-        gl.GL_TEXTURE_2D,
-        gl.GL_TEXTURE_BASE_LEVEL,
-        0,
-    );
-    if (!diagnostics.checkError("setting texture base mip level")) {
-        return TextureError.OpenGLError;
-    }
-    gl.glTexParameteri(
-        gl.GL_TEXTURE_2D,
-        gl.GL_TEXTURE_MAX_LEVEL,
-        @intCast(tex.mips.len - 1),
-    );
-    if (!diagnostics.checkError("setting texture maximum mip level")) {
-        return TextureError.OpenGLError;
-    }
-
-    const is_block_compressed = tex.format.isBlockCompressed();
-    for (tex.mips, 0..) |mip, level| {
-        if (is_block_compressed) {
-            const internal_format = compressedInternalFormat(tex.format, tex.color_space) orelse return TextureError.UnsupportedTextureFormat;
-            gl.glCompressedTexImage2D(
-                gl.GL_TEXTURE_2D,
-                @intCast(level),
-                internal_format,
-                @intCast(mip.width),
-                @intCast(mip.height),
-                0,
-                @intCast(mip.data.len),
-                mip.data.ptr,
-            );
-            if (!diagnostics.checkError("uploading compressed texture mip")) {
-                return TextureError.OpenGLError;
-            }
-        } else {
-            const fmt = uncompressedFormat(tex.format, tex.color_space) orelse return TextureError.UnsupportedTextureFormat;
-            gl.glTexImage2D(
-                gl.GL_TEXTURE_2D,
-                @intCast(level),
-                @intCast(fmt.internal),
-                @intCast(mip.width),
-                @intCast(mip.height),
-                0,
-                fmt.format,
-                fmt.ty,
-                mip.data.ptr,
-            );
-            if (!diagnostics.checkError("uploading texture mip")) {
-                return TextureError.OpenGLError;
-            }
-        }
-    }
-
-    return .{ .id = id, .width = tex.width, .height = tex.height };
+    return .{ .id = id };
 }
 
-pub fn bind(self: *const Texture2D, unit: u16) void {
-    gl.glActiveTexture(@intCast(gl.GL_TEXTURE0 + @as(c_int, @intCast(unit))));
-    gl.glBindTexture(gl.GL_TEXTURE_2D, self.id);
-}
-
-pub fn deinit(self: *Texture2D) void {
+pub fn deinit(self: *OpenGLTexture) void {
     gl.glDeleteTextures(1, &self.id);
     self.id = 0;
 }
 
-fn supportsTextureFormat(format: anytype) bool {
-    const required_extension = switch (format) {
-        .bc4, .bc5 => rgtc_compression_extension,
-        .bc6h, .bc7 => bptc_compression_extension,
-        else => return true,
+fn supports(format: Texture.Format) bool {
+    const extension: ?[:0]const u8 = switch (format) {
+        .bc4_unorm, .bc5_unorm => "GL_ARB_texture_compression_rgtc",
+        .bc6h_ufloat, .bc7_unorm, .bc7_srgb => "GL_ARB_texture_compression_bptc",
+        else => null,
     };
-    if (diagnostics.hasExtension(required_extension)) {
+
+    if (extension == null or diagnostics.hasExtension(extension.?)) {
         return true;
     }
-
-    log.err(
-        "texture format '{s}' is unsupported by this OpenGL driver; it requires {s}",
-        .{ @tagName(format), required_extension },
-    );
+    log.err("texture format '{s}' requires {s}", .{ @tagName(format), extension.? });
     return false;
 }
 
 const UploadFormat = struct {
     internal: u32,
-    format: u32,
+    external: u32,
     ty: u32,
 };
 
-fn uncompressedFormat(format: anytype, color_space: anytype) ?UploadFormat {
+fn uploadFormat(format: Texture.Format) ?UploadFormat {
     return switch (format) {
-        .rgba8 => .{ .internal = if (color_space == .srgb) gl.GL_SRGB8_ALPHA8 else gl.GL_RGBA8, .format = gl.GL_RGBA, .ty = gl.GL_UNSIGNED_BYTE },
-        .rg8 => .{ .internal = gl.GL_RG8, .format = gl.GL_RG, .ty = gl.GL_UNSIGNED_BYTE },
-        .r8 => .{ .internal = gl.GL_R8, .format = gl.GL_RED, .ty = gl.GL_UNSIGNED_BYTE },
-        .rgb16f => .{ .internal = gl.GL_RGB16F, .format = gl.GL_RGB, .ty = gl.GL_HALF_FLOAT },
+        .r8_unorm => .{ .internal = gl.GL_R8, .external = gl.GL_RED, .ty = gl.GL_UNSIGNED_BYTE },
+        .rg8_unorm => .{ .internal = gl.GL_RG8, .external = gl.GL_RG, .ty = gl.GL_UNSIGNED_BYTE },
+        .rgba8_unorm => .{ .internal = gl.GL_RGBA8, .external = gl.GL_RGBA, .ty = gl.GL_UNSIGNED_BYTE },
+        .rgba8_srgb => .{ .internal = gl.GL_SRGB8_ALPHA8, .external = gl.GL_RGBA, .ty = gl.GL_UNSIGNED_BYTE },
+        .rgb16_float => .{ .internal = gl.GL_RGB16F, .external = gl.GL_RGB, .ty = gl.GL_HALF_FLOAT },
+        .rgba16_float => .{ .internal = gl.GL_RGBA16F, .external = gl.GL_RGBA, .ty = gl.GL_HALF_FLOAT },
         else => null,
     };
 }
 
-fn compressedInternalFormat(format: anytype, color_space: anytype) ?u32 {
+fn compressedInternalFormat(format: Texture.Format) ?u32 {
     return switch (format) {
-        .bc4 => gl.GL_COMPRESSED_RED_RGTC1,
-        .bc5 => gl.GL_COMPRESSED_RG_RGTC2,
-        .bc7 => if (color_space == .srgb) gl.GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM else gl.GL_COMPRESSED_RGBA_BPTC_UNORM,
-        .bc6h => gl.GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT,
+        .bc4_unorm => gl.GL_COMPRESSED_RED_RGTC1,
+        .bc5_unorm => gl.GL_COMPRESSED_RG_RGTC2,
+        .bc6h_ufloat => gl.GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT,
+        .bc7_unorm => gl.GL_COMPRESSED_RGBA_BPTC_UNORM,
+        .bc7_srgb => gl.GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM,
         else => null,
     };
-}
-
-test "texture format translation covers every cooked texel format" {
-    const Case = struct {
-        format: zimp.TexelFormat,
-        color_space: zimp.ColorSpace,
-        internal: u32,
-        external: ?u32 = null,
-        ty: ?u32 = null,
-    };
-    const cases = [_]Case{
-        .{ .format = .rgba8, .color_space = .linear, .internal = gl.GL_RGBA8, .external = gl.GL_RGBA, .ty = gl.GL_UNSIGNED_BYTE },
-        .{ .format = .rgba8, .color_space = .srgb, .internal = gl.GL_SRGB8_ALPHA8, .external = gl.GL_RGBA, .ty = gl.GL_UNSIGNED_BYTE },
-        .{ .format = .rg8, .color_space = .linear, .internal = gl.GL_RG8, .external = gl.GL_RG, .ty = gl.GL_UNSIGNED_BYTE },
-        .{ .format = .r8, .color_space = .linear, .internal = gl.GL_R8, .external = gl.GL_RED, .ty = gl.GL_UNSIGNED_BYTE },
-        .{ .format = .rgb16f, .color_space = .linear, .internal = gl.GL_RGB16F, .external = gl.GL_RGB, .ty = gl.GL_HALF_FLOAT },
-        .{ .format = .bc4, .color_space = .linear, .internal = gl.GL_COMPRESSED_RED_RGTC1 },
-        .{ .format = .bc5, .color_space = .linear, .internal = gl.GL_COMPRESSED_RG_RGTC2 },
-        .{ .format = .bc7, .color_space = .linear, .internal = gl.GL_COMPRESSED_RGBA_BPTC_UNORM },
-        .{ .format = .bc7, .color_space = .srgb, .internal = gl.GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM },
-        .{ .format = .bc6h, .color_space = .linear, .internal = gl.GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT },
-    };
-
-    for (cases) |case| {
-        if (case.external) |external| {
-            const actual = uncompressedFormat(case.format, case.color_space).?;
-            try std.testing.expectEqual(case.internal, actual.internal);
-            try std.testing.expectEqual(external, actual.format);
-            try std.testing.expectEqual(case.ty.?, actual.ty);
-        } else {
-            try std.testing.expectEqual(case.internal, compressedInternalFormat(case.format, case.color_space).?);
-        }
-    }
-
-    inline for (@typeInfo(zimp.TexelFormat).@"enum".fields) |field| {
-        const format: zimp.TexelFormat = @enumFromInt(field.value);
-        try std.testing.expect(uncompressedFormat(format, .linear) != null or compressedInternalFormat(format, .linear) != null);
-    }
 }

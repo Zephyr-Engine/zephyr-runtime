@@ -6,7 +6,8 @@ const zcs = @import("zcs");
 const setActiveCamera = @import("camera.zig").setActive;
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
 const activeCamera = @import("camera.zig").active;
-const Texture2D = @import("../graphics/opengl/texture.zig");
+const TextureAsset = @import("../graphics/texture_asset.zig");
+const device_factory = @import("../graphics/device_factory.zig");
 const SchemaRegistry = @import("schema_registry.zig");
 const Material = @import("../graphics/material.zig");
 const Project = @import("../project/project.zig");
@@ -89,7 +90,7 @@ pub fn spawnEntities(self: *SceneRuntimeInstance, world: *World, registry: *cons
 fn registerAssetId(assets: *AssetManager, kind: zimp.AssetKind, id: zimp.AssetId) !void {
     switch (kind) {
         .mesh => _ = try assets.registerId(Mesh, id),
-        .texture => _ = try assets.registerId(Texture2D, id),
+        .texture => _ = try assets.registerId(TextureAsset, id),
         .shader_stage => _ = try assets.registerId(zimp.ZShader, id),
         .material => _ = try assets.registerId(Material, id),
     }
@@ -304,7 +305,9 @@ test "SceneRuntimeInstance registers asset references without loading them" {
     defer tmp.cleanup();
     var project = try testProjectWithAssets(&tmp);
     defer project.root_dir.close(testing.io);
-    var assets = try AssetManager.init(testing.allocator, testing.io, &project);
+    var device = try device_factory.init(testing.allocator, .opengl);
+    defer device.deinit();
+    var assets = try AssetManager.init(testing.allocator, testing.io, &project, &device);
     defer assets.deinit();
 
     var fields = [_]zimp.scene.SceneField{
@@ -353,7 +356,9 @@ test "SceneRuntimeInstance fails when an asset reference is absent from the mani
     defer tmp.cleanup();
     var project = try testProjectWithAssets(&tmp);
     defer project.root_dir.close(testing.io);
-    var assets = try AssetManager.init(testing.allocator, testing.io, &project);
+    var device = try device_factory.init(testing.allocator, .opengl);
+    defer device.deinit();
+    var assets = try AssetManager.init(testing.allocator, testing.io, &project, &device);
     defer assets.deinit();
 
     var fields = [_]zimp.scene.SceneField{.{ .number = 1, .value = .{ .asset_ref = missing_asset_id } }};

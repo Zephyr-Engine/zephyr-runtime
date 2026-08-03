@@ -1,14 +1,15 @@
 const zimp = @import("zimp");
 const std = @import("std");
 
-const math = @import("../core/math.zig");
-
-const Texture2D = @import("opengl/texture.zig");
-const Shader = @import("opengl/shader.zig");
+const GraphicsPipeline = @import("rhi/graphics_pipeline.zig");
+const TextureView = @import("rhi/texture_view.zig");
+const Sampler = @import("rhi/sampler.zig");
+const Device = @import("rhi/device.zig");
 
 const Material = @This();
 
-shader: *Shader,
+pipeline: GraphicsPipeline,
+device: *Device,
 source: zimp.Zamat,
 texture_bindings: []TextureBinding,
 param_bindings: []ParamBinding,
@@ -16,26 +17,28 @@ allocator: std.mem.Allocator,
 
 pub const TextureBinding = struct {
     unit: u16,
-    texture: *Texture2D,
+    view: TextureView,
+    sampler: Sampler,
     resource_name: []const u8,
 };
 
 pub const ParamBinding = struct {
     param_index: usize,
-    location: i32,
+    location: GraphicsPipeline.UniformLocation,
 };
 
-pub fn initFromSource(
+pub fn init(
     allocator: std.mem.Allocator,
     source: zimp.Zamat,
-    shader: *Shader,
+    pipeline: GraphicsPipeline,
     texture_bindings: []TextureBinding,
+    device: *Device,
 ) !Material {
     var param_bindings = std.ArrayList(ParamBinding).empty;
     errdefer param_bindings.deinit(allocator);
 
     for (source.param_entries, 0..) |param, i| {
-        const location = shader.uniformLocation(param.name) orelse continue;
+        const location = device.graphicsPipelineUniformLocation(pipeline, param.name) orelse continue;
         try param_bindings.append(allocator, .{
             .param_index = i,
             .location = location,
@@ -43,7 +46,8 @@ pub fn initFromSource(
     }
 
     return .{
-        .shader = shader,
+        .pipeline = pipeline,
+        .device = device,
         .source = source,
         .texture_bindings = texture_bindings,
         .param_bindings = try param_bindings.toOwnedSlice(allocator),
@@ -53,8 +57,8 @@ pub fn initFromSource(
 
 pub fn bindResources(self: *const Material) void {
     for (self.texture_bindings) |*binding| {
-        binding.texture.bind(binding.unit);
-        self.shader.setUniform(binding.resource_name, @as(i32, @intCast(binding.unit)));
+        self.device.bindTexture(binding.view, binding.sampler, binding.unit);
+        self.device.setGraphicsPipelineUniformByName(self.pipeline, binding.resource_name, .{ .int = @intCast(binding.unit) });
     }
 
     for (self.param_bindings) |binding| {
@@ -67,44 +71,52 @@ pub fn bindResources(self: *const Material) void {
         const bytes = self.source.param_data[start..end];
 
         switch (param.param_type) {
-            .float => self.shader.setUniformFromLocation(binding.location, readF32(bytes[0..4])),
-            .vec2 => self.shader.setUniformFromLocation(
+            .float => self.device.setGraphicsPipelineUniform(self.pipeline, binding.location, .{ .float = readF32(bytes[0..4]) }),
+            .vec2 => self.device.setGraphicsPipelineUniform(
+                self.pipeline,
                 binding.location,
-                math.Vec2.new(
+                .{ .vec2 = .{
                     readF32(bytes[0..4]),
                     readF32(bytes[4..8]),
-                ),
+                } },
             ),
-            .vec3 => self.shader.setUniformFromLocation(
+            .vec3 => self.device.setGraphicsPipelineUniform(
+                self.pipeline,
                 binding.location,
-                math.Vec3.new(
+                .{ .vec3 = .{
                     readF32(bytes[0..4]),
                     readF32(bytes[4..8]),
                     readF32(bytes[8..12]),
-                ),
+                } },
             ),
-            .vec4 => self.shader.setUniformFromLocation(
+            .vec4 => self.device.setGraphicsPipelineUniform(
+                self.pipeline,
                 binding.location,
-                math.Vec4.new(
+                .{ .vec4 = .{
                     readF32(bytes[0..4]),
                     readF32(bytes[4..8]),
                     readF32(bytes[8..12]),
                     readF32(bytes[12..16]),
-                ),
+                } },
             ),
-            .int => self.shader.setUniformFromLocation(
+            .int => self.device.setGraphicsPipelineUniform(
+                self.pipeline,
                 binding.location,
-                std.mem.readInt(i32, bytes[0..4], .little),
+                .{ .int = std.mem.readInt(i32, bytes[0..4], .little) },
             ),
             .bool => {
                 const val: i32 = if (std.mem.readInt(u32, bytes[0..4], .little) != 0) 1 else 0;
-                self.shader.setUniformFromLocation(binding.location, val);
+                self.device.setGraphicsPipelineUniform(self.pipeline, binding.location, .{ .int = val });
             },
         }
     }
 
     if (self.source.render_state.alpha_mode == .alpha_test) {
-        self.shader.setUniform("u_alpha_cutoff", self.source.render_state.alpha_cutoff);
+        self.device.setGraphicsPipelineUniformByName(
+            self.pipeline,
+            "u_alpha_cutoff",
+            .{ .float = self.source.render_state.alpha_cutoff },
+        );
     }
 }
 

@@ -1,5 +1,3 @@
-const gl = @import("../c.zig").glad;
-
 pub const StreamAttribute = struct {
     location: u32,
     data_type: DataType,
@@ -63,17 +61,6 @@ pub const DataType = enum {
         };
     }
 
-    pub fn glType(dt: DataType) u32 {
-        return switch (dt) {
-            .Float, .Float2, .Float3, .Float4, .Mat3, .Mat4 => gl.GL_FLOAT,
-            .Int, .Int2, .Int3, .Int4 => gl.GL_INT,
-            .Bool => gl.GL_BOOL,
-            .Short2 => gl.GL_SHORT,
-            .UShort2, .UShort4 => gl.GL_UNSIGNED_SHORT,
-            .Half4 => gl.GL_HALF_FLOAT,
-        };
-    }
-
     pub fn isIntegerType(dt: DataType) bool {
         return switch (dt) {
             .UShort4, .Int, .Int2, .Int3, .Int4 => true,
@@ -87,25 +74,24 @@ test "DataType reports upload metadata" {
         data_type: DataType,
         size: u32,
         components: u32,
-        gl_type: u32,
         is_integer: bool,
     };
     const cases = [_]Case{
-        .{ .data_type = .Float, .size = 4, .components = 1, .gl_type = gl.GL_FLOAT, .is_integer = false },
-        .{ .data_type = .Float2, .size = 8, .components = 2, .gl_type = gl.GL_FLOAT, .is_integer = false },
-        .{ .data_type = .Float3, .size = 12, .components = 3, .gl_type = gl.GL_FLOAT, .is_integer = false },
-        .{ .data_type = .Float4, .size = 16, .components = 4, .gl_type = gl.GL_FLOAT, .is_integer = false },
-        .{ .data_type = .Mat3, .size = 36, .components = 9, .gl_type = gl.GL_FLOAT, .is_integer = false },
-        .{ .data_type = .Mat4, .size = 64, .components = 16, .gl_type = gl.GL_FLOAT, .is_integer = false },
-        .{ .data_type = .Int, .size = 4, .components = 1, .gl_type = gl.GL_INT, .is_integer = true },
-        .{ .data_type = .Int2, .size = 8, .components = 2, .gl_type = gl.GL_INT, .is_integer = true },
-        .{ .data_type = .Int3, .size = 12, .components = 3, .gl_type = gl.GL_INT, .is_integer = true },
-        .{ .data_type = .Int4, .size = 16, .components = 4, .gl_type = gl.GL_INT, .is_integer = true },
-        .{ .data_type = .Bool, .size = 1, .components = 1, .gl_type = gl.GL_BOOL, .is_integer = false },
-        .{ .data_type = .Short2, .size = 4, .components = 2, .gl_type = gl.GL_SHORT, .is_integer = false },
-        .{ .data_type = .UShort2, .size = 4, .components = 2, .gl_type = gl.GL_UNSIGNED_SHORT, .is_integer = false },
-        .{ .data_type = .UShort4, .size = 8, .components = 4, .gl_type = gl.GL_UNSIGNED_SHORT, .is_integer = true },
-        .{ .data_type = .Half4, .size = 8, .components = 4, .gl_type = gl.GL_HALF_FLOAT, .is_integer = false },
+        .{ .data_type = .Float, .size = 4, .components = 1, .is_integer = false },
+        .{ .data_type = .Float2, .size = 8, .components = 2, .is_integer = false },
+        .{ .data_type = .Float3, .size = 12, .components = 3, .is_integer = false },
+        .{ .data_type = .Float4, .size = 16, .components = 4, .is_integer = false },
+        .{ .data_type = .Mat3, .size = 36, .components = 9, .is_integer = false },
+        .{ .data_type = .Mat4, .size = 64, .components = 16, .is_integer = false },
+        .{ .data_type = .Int, .size = 4, .components = 1, .is_integer = true },
+        .{ .data_type = .Int2, .size = 8, .components = 2, .is_integer = true },
+        .{ .data_type = .Int3, .size = 12, .components = 3, .is_integer = true },
+        .{ .data_type = .Int4, .size = 16, .components = 4, .is_integer = true },
+        .{ .data_type = .Bool, .size = 1, .components = 1, .is_integer = false },
+        .{ .data_type = .Short2, .size = 4, .components = 2, .is_integer = false },
+        .{ .data_type = .UShort2, .size = 4, .components = 2, .is_integer = false },
+        .{ .data_type = .UShort4, .size = 8, .components = 4, .is_integer = true },
+        .{ .data_type = .Half4, .size = 8, .components = 4, .is_integer = false },
     };
 
     // Exhaustive: fail if a DataType variant is added without a matching case.
@@ -114,7 +100,6 @@ test "DataType reports upload metadata" {
     for (cases) |case| {
         try @import("std").testing.expectEqual(case.size, case.data_type.size());
         try @import("std").testing.expectEqual(case.components, case.data_type.componentCount());
-        try @import("std").testing.expectEqual(case.gl_type, case.data_type.glType());
         try @import("std").testing.expectEqual(case.is_integer, case.data_type.isIntegerType());
     }
 }

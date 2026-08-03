@@ -43,7 +43,10 @@ pub fn Runtime(comptime game: Game) type {
                 .world = undefined,
             };
 
-            runtime.assets = try AssetManager.init(allocator, io, project);
+            runtime.renderer = try Renderer.init(allocator, .opengl);
+            errdefer runtime.renderer.deinit();
+
+            runtime.assets = try AssetManager.init(allocator, io, project, &runtime.renderer.device);
             errdefer runtime.assets.deinit();
 
             runtime.schemas = SchemaRegistry.init(allocator);
@@ -57,9 +60,6 @@ pub fn Runtime(comptime game: Game) type {
             errdefer runtime.command_buffer.deinit();
 
             try runtime.world.setResource(Input, .{});
-
-            runtime.renderer = try Renderer.init(allocator);
-            errdefer runtime.renderer.deinit();
 
             return runtime;
         }
@@ -132,12 +132,12 @@ pub fn Runtime(comptime game: Game) type {
         }
 
         pub fn deinit(self: *@This()) void {
+            self.assets.deinit();
             self.renderer.deinit();
             self.command_buffer.deinit();
             self.scenes.deinit(&self.world);
             self.world.deinit();
             self.schemas.deinit();
-            self.assets.deinit();
             self.allocator.destroy(self);
         }
     };

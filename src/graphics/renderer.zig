@@ -2,78 +2,56 @@ const zimp = @import("zimp");
 const std = @import("std");
 const zcs = @import("zcs");
 
+const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
 const render_submission = @import("render_submission.zig");
-const Collector = @import("opengl/stats_collector.zig");
 const camera_system = @import("../scene/camera.zig");
+const device_factory = @import("device_factory.zig");
 const components = @import("../ecs/components.zig");
 const render_state = @import("render_state.zig");
+const Collector = @import("stats_collector.zig");
 const DebugStats = @import("debug_stats.zig");
+const Device = @import("rhi/device.zig");
+const Material = @import("material.zig");
 const math = @import("../core/math.zig");
 const ecs = @import("../ecs/world.zig");
 const log = @import("../core/log.zig");
-
-const applyFixedState = @import("opengl/render_state.zig").apply;
-const beginRenderPass = @import("opengl/render_state.zig").begin;
-const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
-const Framebuffer = @import("opengl/framebuffer.zig");
-const Material = @import("material.zig");
 const Mesh = @import("mesh.zig");
 
 const DrawItem = render_submission.DrawItem;
 
 const Renderer = @This();
 
-pub const RenderViewport = struct {
-    width: u32 = 1,
-    height: u32 = 1,
+pub const RenderViewport = Device.RenderViewport;
+pub const RenderTarget = Device.RenderTarget;
 
-    pub fn aspect(self: RenderViewport) f32 {
-        return @as(f32, @floatFromInt(self.width)) / @as(f32, @floatFromInt(@max(1, self.height)));
-    }
-};
-
-pub const RenderTarget = union(enum) {
-    default_framebuffer: RenderViewport,
-    framebuffer: *Framebuffer,
-
-    fn bind(self: RenderTarget) RenderViewport {
-        return switch (self) {
-            .default_framebuffer => |viewport| blk: {
-                Framebuffer.bindDefault(viewport.width, viewport.height);
-                break :blk viewport;
-            },
-            .framebuffer => |framebuffer| blk: {
-                framebuffer.bind();
-                break :blk .{ .width = framebuffer.width, .height = framebuffer.height };
-            },
-        };
-    }
-};
-
+device: Device,
 submissions: std.ArrayList(DrawItem) = .empty,
 stats: Collector = .{},
 allocator: std.mem.Allocator,
 
-pub fn init(allocator: std.mem.Allocator) !Renderer {
+pub fn init(allocator: std.mem.Allocator, backend: device_factory.Backend) !Renderer {
     return .{
         .allocator = allocator,
+        .device = try device_factory.init(allocator, backend),
     };
 }
 
 pub fn render(self: *Renderer, world: *zcs.World, assets: *AssetManager, target: RenderTarget) !void {
-    const viewport = target.bind();
-    self.stats.beginGpuTimer();
-    defer self.stats.endGpuTimer();
+    const viewport = target.viewport();
+    self.stats.beginGpuTimer(&self.device);
+    defer self.stats.endGpuTimer(&self.device);
 
     self.submissions.clearRetainingCapacity();
-    try self.renderWorld(world, assets, viewport);
+    try self.renderWorld(world, assets, target, viewport);
 }
 
-fn renderWorld(self: *Renderer, world: *zcs.World, assets: *AssetManager, viewport: RenderViewport) !void {
-    beginRenderPass(.{
+fn renderWorld(self: *Renderer, world: *zcs.World, assets: *AssetManager, target: RenderTarget, viewport: RenderViewport) !void {
+    try self.device.beginRenderPass(.{
+        .target = target,
         .color = .{ .clear = .{ 0.4, 0.4, 0.4, 1 } },
         .depth = .{ .clear = 1 },
     });
+    defer self.device.endRenderPass();
 
     const camera_entity = camera_system.active(world) orelse {
         std.log.warn("Skipping scene render: no active camera", .{});
@@ -96,8 +74,8 @@ pub fn recordCpuFrame(self: *Renderer, delta_time: f32, elapsed_ms: f32) void {
 }
 
 pub fn deinit(self: *Renderer) void {
-    self.stats.deinit();
     self.submissions.deinit(self.allocator);
+    self.device.deinit();
 
     self.* = undefined;
 }
@@ -163,20 +141,19 @@ fn renderFromCamera(self: *Renderer, world: *zcs.World, assets: *AssetManager, v
     try self.gatherDrawItems(world, assets, camera, view);
     std.mem.sort(DrawItem, self.submissions.items, {}, DrawItem.lessThan);
 
-    renderQueue(self.submissions, view, projection);
+    self.renderQueue(view, projection);
 }
 
-fn renderQueue(queue: std.ArrayList(DrawItem), view: math.Mat4, projection: math.Mat4) void {
-    for (queue.items) |draw_item| {
-        draw_item.material.shader.bind();
-        applyFixedState(.generate(draw_item.material.source.render_state));
+fn renderQueue(self: *Renderer, view: math.Mat4, projection: math.Mat4) void {
+    for (self.submissions.items) |draw_item| {
+        self.device.bindGraphicsPipeline(draw_item.material.pipeline);
 
         draw_item.material.bindResources();
-        draw_item.material.shader.setUniform("u_view", view);
-        draw_item.material.shader.setUniform("u_projection", projection);
-        draw_item.material.shader.setUniform("u_model", draw_item.model);
+        self.device.setGraphicsPipelineUniformByName(draw_item.material.pipeline, "u_view", .{ .mat4 = view.fields });
+        self.device.setGraphicsPipelineUniformByName(draw_item.material.pipeline, "u_projection", .{ .mat4 = projection.fields });
+        self.device.setGraphicsPipelineUniformByName(draw_item.material.pipeline, "u_model", .{ .mat4 = draw_item.model.fields });
 
-        draw_item.part.drawSubmesh(draw_item.submesh);
+        self.device.drawIndexed(draw_item.part.geometry, draw_item.submesh.index_offset, draw_item.submesh.index_count);
     }
 }
 
