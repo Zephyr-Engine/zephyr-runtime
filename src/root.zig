@@ -79,6 +79,7 @@ pub const ZShader = zimp.ZShader;
 pub const ZMesh = zimp.ZMesh;
 pub const Zatex = zimp.Zatex;
 pub const Zamat = zimp.Zamat;
+pub const RawTexture = zimp.assets.raw.texture.RawTexture;
 
 test {
     @import("std").testing.refAllDecls(@This());
