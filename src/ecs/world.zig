@@ -18,8 +18,9 @@ world: zcs.World,
 command_buffer: zcs.CommandBuffer,
 active_scene: ?LoadedScene = null,
 
-pub fn init(allocator: std.mem.Allocator, schemas: *SchemaRegistry, comptime game: Game) !WorldInstance {
+pub fn init(self: *WorldInstance, allocator: std.mem.Allocator, schemas: *SchemaRegistry, comptime game: Game) !void {
     var world = zcs.World.init(allocator);
+    errdefer world.deinit();
 
     try registerEngineComponents(&world);
     inline for (game.components) |Component| {
@@ -34,10 +35,11 @@ pub fn init(allocator: std.mem.Allocator, schemas: *SchemaRegistry, comptime gam
     });
     try schemas.registerComponents(game.components);
 
-    return .{
+    self.* = .{
         .world = world,
-        .command_buffer = zcs.CommandBuffer.init(&world),
+        .command_buffer = undefined,
     };
+    self.command_buffer = zcs.CommandBuffer.init(&self.world);
 }
 
 pub fn deinit(self: *WorldInstance) void {
@@ -45,8 +47,8 @@ pub fn deinit(self: *WorldInstance) void {
         scene.deinit(&self.world);
         self.active_scene = null;
     }
-    self.world.deinit();
     self.command_buffer.deinit();
+    self.world.deinit();
 }
 
 pub fn startScene(
@@ -54,25 +56,24 @@ pub fn startScene(
     allocator: std.mem.Allocator,
     schemas: *const SchemaRegistry,
     assets: *AssetManager,
-    document: *const zimp.scene.SceneDocument,
+    document: zimp.scene.SceneDocument,
 ) !void {
-    if (self.active_scene) |scene| {
-        if (scene.scene_id != document.scene_id) {
+    if (self.active_scene) |*scene| {
+        if (!scene.document.scene_id.eql(document.scene_id)) {
             scene.deinit(&self.world);
         } else {
-            scene.start(&self.world, schemas, assets, document);
             return;
         }
     }
 
-    const scene = try LoadedScene.init(allocator, document);
-    scene.start(&self.world, schemas, assets, document);
+    var scene = try LoadedScene.init(allocator, document);
+    try scene.start(&self.world, schemas, assets);
 
     self.active_scene = scene;
 }
 
 pub fn resetActiveScene(self: *WorldInstance, schemas: *const SchemaRegistry, assets: *AssetManager) !void {
-    if (self.scene) |*scene| {
+    if (self.active_scene) |*scene| {
         scene.reset(&self.world, schemas, assets);
     }
 }
@@ -81,7 +82,7 @@ pub fn setResource(self: *WorldInstance, comptime Resource: type, value: Resourc
     try self.world.setResource(Resource, value);
 }
 
-pub fn getResource(self: *const WorldInstance, comptime Resource: type) ?*const Resource {
+pub fn getResource(self: *WorldInstance, comptime Resource: type) *Resource {
     return self.world.getResource(Resource);
 }
 

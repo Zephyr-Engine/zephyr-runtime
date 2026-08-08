@@ -12,7 +12,7 @@ const LoadedScene = @This();
 instance: SceneRuntimeInstance,
 document: scene.SceneDocument,
 
-fn init(allocator: std.mem.Allocator, document: scene.SceneDocument) !@This() {
+pub fn init(allocator: std.mem.Allocator, document: scene.SceneDocument) !@This() {
     return .{
         .instance = .init(allocator, document.scene_id),
         .document = document,

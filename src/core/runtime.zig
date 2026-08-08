@@ -16,7 +16,6 @@ const Time = @import("time.zig");
 
 pub fn Runtime(comptime game: Game) type {
     return struct {
-        command_buffer: zcs.CommandBuffer,
         allocator: std.mem.Allocator,
         frame_cpu_start: f64 = 0,
         project: *const Project,
@@ -35,7 +34,6 @@ pub fn Runtime(comptime game: Game) type {
                 .allocator = allocator,
                 .io = io,
                 .project = project,
-                .command_buffer = undefined,
                 .schemas = undefined,
                 .assets = undefined,
                 .renderer = undefined,
@@ -51,7 +49,7 @@ pub fn Runtime(comptime game: Game) type {
             runtime.schemas = SchemaRegistry.init(allocator);
             errdefer runtime.schemas.deinit();
 
-            runtime.world = try .init(allocator, &runtime.schemas, game);
+            try runtime.world.init(allocator, &runtime.schemas, game);
             errdefer runtime.world.deinit();
 
             try runtime.world.setResource(Input, .{});
@@ -67,14 +65,14 @@ pub fn Runtime(comptime game: Game) type {
 
             try self.world.startScene(
                 self.allocator,
-                self.schemas,
-                self.assets,
+                &self.schemas,
+                &self.assets,
                 default_scene,
             );
         }
 
         pub fn resetActiveScene(self: *@This()) !void {
-            try self.world.resetActiveScene(self.schemas, self.assets);
+            try self.world.resetActiveScene(&self.schemas, &self.assets);
         }
 
         pub fn beginFrame(self: *@This(), now: f64, focused: bool) void {
@@ -114,15 +112,15 @@ pub fn Runtime(comptime game: Game) type {
 
         pub fn tickSchedule(self: *@This(), comptime schedule: zcs.Schedule.Spec) !void {
             try zcs.Schedule.tickDt(
-                &self.world,
-                &self.command_buffer,
+                &self.world.world,
+                &self.world.command_buffer,
                 self.time.delta_time,
                 schedule,
             );
         }
 
         pub fn render(self: *@This(), target: Renderer.RenderTarget) !void {
-            try self.renderer.render(&self.world, &self.assets, target);
+            try self.renderer.render(&self.world.world, &self.assets, target);
         }
 
         pub fn completeFrame(self: *@This(), now: f64) void {
@@ -145,7 +143,6 @@ pub fn Runtime(comptime game: Game) type {
         pub fn deinit(self: *@This()) void {
             self.assets.deinit();
             self.renderer.deinit();
-            self.command_buffer.deinit();
             self.world.deinit();
             self.schemas.deinit();
             self.allocator.destroy(self);

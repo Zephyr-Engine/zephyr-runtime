@@ -66,14 +66,15 @@ pub const DebugStats = @import("graphics/debug_stats.zig");
 pub const Game = @import("core/game.zig");
 
 pub const components = @import("ecs/components.zig");
-pub const ecs = @import("ecs/world.zig");
+pub const World = @import("ecs/world.zig");
 
 const zimp = @import("zimp");
 const zcs = @import("zcs");
 
+pub const EcsWorld = zcs.World;
+pub const EntityID = zcs.EntityID;
 pub const FrameCount = zcs.FrameCount;
 pub const DeltaTime = zcs.DeltaTime;
-pub const World = zcs.World;
 pub const CommandBuffer = zcs.CommandBuffer;
 pub const Schedule = zcs.Schedule;
 pub const ZShader = zimp.ZShader;
