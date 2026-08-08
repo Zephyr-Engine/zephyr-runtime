@@ -62,6 +62,7 @@ pub fn startScene(
     if (self.active_scene) |*scene| {
         if (!scene.document.scene_id.eql(document.scene_id)) {
             scene.deinit(&self.world);
+            self.active_scene = null;
         } else {
             return;
         }
@@ -87,7 +88,7 @@ pub fn getResource(self: *WorldInstance, comptime Resource: type) *Resource {
     return self.world.getResource(Resource);
 }
 
-fn registerEngineComponents(world: *zcs.World) !void {
+pub fn registerEngineComponents(world: *zcs.World) !void {
     _ = try registerComponent(world, components.TransformComponent, "zephyr.transform");
     _ = try registerComponent(world, components.MeshRenderComponent, "zephyr.meshrender");
     _ = try registerComponent(world, components.CameraComponent, "zephyr.camera");

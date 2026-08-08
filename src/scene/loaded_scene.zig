@@ -45,6 +45,6 @@ test "loadDefaultScene rejects projects without a configured default scene" {
 
     try std.testing.expectError(
         error.DefaultSceneNotFound,
-        LoadedScene.loadDefaultScene(std.testing.allocator, std.testing.io, &project),
+        project.loadDefaultScene(std.testing.allocator, std.testing.io),
     );
 }
