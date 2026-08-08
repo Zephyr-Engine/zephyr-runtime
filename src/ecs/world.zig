@@ -98,3 +98,74 @@ fn registerComponent(world: *zcs.World, comptime T: type, name: []const u8) !zcs
     const schema_hash = zimp.scene.descriptor.schemaHash(&.{codec.schema});
     return world.registerType(T, .{ .name = name, .schema_hash = schema_hash });
 }
+
+const testing = std.testing;
+
+const TestGameComponent = struct {
+    charge: i32 = 0,
+
+    pub const schema_meta = zimp.scene.SchemaMeta{
+        .id = "12341234-1234-4234-8234-123412341234",
+        .name = "test.game.component",
+        .display_name = "Test Game Component",
+        .version = 1,
+        .fields = &.{.{ .name = "charge", .number = 1 }},
+    };
+};
+
+const empty_game: Game = .{ .components = &.{}, .update_schedule = .{} };
+const game_with_component: Game = .{ .components = &.{TestGameComponent}, .update_schedule = .{} };
+
+test "init registers engine components and schemas" {
+    var schemas = SchemaRegistry.init(testing.allocator);
+    defer schemas.deinit();
+
+    var instance: WorldInstance = undefined;
+    try instance.init(testing.allocator, &schemas, empty_game);
+    defer instance.deinit();
+
+    try testing.expect(schemas.getByName("zephyr.runtime.transform") != null);
+    try testing.expect(schemas.getByName("zephyr.runtime.mesh.render") != null);
+    try testing.expect(schemas.getByName("zephyr.runtime.camera") != null);
+    try testing.expect(instance.active_scene == null);
+}
+
+test "init also registers game-specific components" {
+    var schemas = SchemaRegistry.init(testing.allocator);
+    defer schemas.deinit();
+
+    var instance: WorldInstance = undefined;
+    try instance.init(testing.allocator, &schemas, game_with_component);
+    defer instance.deinit();
+
+    const codec = schemas.getByName("test.game.component").?;
+    try testing.expectEqual(@as(usize, 1), codec.schema.fields.len);
+}
+
+test "setResource and getResource round-trip a value" {
+    var schemas = SchemaRegistry.init(testing.allocator);
+    defer schemas.deinit();
+
+    var instance: WorldInstance = undefined;
+    try instance.init(testing.allocator, &schemas, empty_game);
+    defer instance.deinit();
+
+    const Score = struct { value: i32 };
+    try instance.setResource(Score, .{ .value = 42 });
+    try testing.expectEqual(@as(i32, 42), instance.getResource(Score).value);
+
+    instance.getResource(Score).value = 7;
+    try testing.expectEqual(@as(i32, 7), instance.getResource(Score).value);
+}
+
+test "resetActiveScene is a no-op without an active scene" {
+    var schemas = SchemaRegistry.init(testing.allocator);
+    defer schemas.deinit();
+
+    var instance: WorldInstance = undefined;
+    try instance.init(testing.allocator, &schemas, empty_game);
+    defer instance.deinit();
+
+    var assets: AssetManager = undefined;
+    try instance.resetActiveScene(&assets);
+}

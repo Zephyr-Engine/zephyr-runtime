@@ -48,3 +48,76 @@ pub fn loadDefaultScene(self: *const Project, allocator: std.mem.Allocator, io: 
     const path = self.manifest.default_scene orelse return error.DefaultSceneNotFound;
     return self.loadScene(allocator, io, path);
 }
+
+const testing = std.testing;
+
+fn testManifest(default_scene: ?[]const u8) zimp.ProjectManifest {
+    return .{
+        .name = "Test Project",
+        .project_id = .parseComptime("bf5a424f-e93e-4977-9a7a-0c522318dfdc"),
+        .default_scene = default_scene,
+    };
+}
+
+test "loadScene decodes a JSON-encoded scene document from disk" {
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var document = try scene.SceneDocument.init(
+        testing.allocator,
+        .parseComptime("11111111-1111-4111-8111-111111111111"),
+        .parseComptime("bf5a424f-e93e-4977-9a7a-0c522318dfdc"),
+        "Test Scene",
+    );
+    defer document.deinit();
+
+    const bytes = try scene.json_codec.encodeAlloc(testing.allocator, &document);
+    defer testing.allocator.free(bytes);
+
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "scene.json", .data = bytes });
+
+    var project = Project{ .manifest = testManifest("scene.json"), .root_dir = tmp.dir };
+
+    var loaded = try project.loadScene(testing.allocator, testing.io, "scene.json");
+    defer loaded.deinit();
+
+    try testing.expectEqualStrings("Test Scene", loaded.name);
+    try testing.expect(loaded.scene_id.eql(.parseComptime("11111111-1111-4111-8111-111111111111")));
+}
+
+test "loadDefaultScene loads the manifest's configured default scene" {
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var document = try scene.SceneDocument.init(
+        testing.allocator,
+        .parseComptime("22222222-2222-4222-8222-222222222222"),
+        .parseComptime("bf5a424f-e93e-4977-9a7a-0c522318dfdc"),
+        "Default Scene",
+    );
+    defer document.deinit();
+
+    const bytes = try scene.json_codec.encodeAlloc(testing.allocator, &document);
+    defer testing.allocator.free(bytes);
+
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "default.json", .data = bytes });
+
+    var project = Project{ .manifest = testManifest("default.json"), .root_dir = tmp.dir };
+
+    var loaded = try project.loadDefaultScene(testing.allocator, testing.io);
+    defer loaded.deinit();
+
+    try testing.expectEqualStrings("Default Scene", loaded.name);
+}
+
+test "loadDefaultScene fails when the manifest has no default scene" {
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var project = Project{ .manifest = testManifest(null), .root_dir = tmp.dir };
+
+    try testing.expectError(
+        error.DefaultSceneNotFound,
+        project.loadDefaultScene(testing.allocator, testing.io),
+    );
+}
