@@ -38,6 +38,38 @@ pub const RenderPassInfo = struct {
     depth: ?render_state.DepthLoadOp = null,
 };
 
+const testing = @import("std").testing;
+
+test "RenderViewport.aspect divides width by height" {
+    const viewport = RenderViewport{ .width = 1920, .height = 1080 };
+    try testing.expectApproxEqAbs(@as(f32, 1920.0 / 1080.0), viewport.aspect(), 1e-5);
+}
+
+test "RenderViewport.aspect guards against a zero height" {
+    const viewport = RenderViewport{ .width = 100, .height = 0 };
+    try testing.expectEqual(@as(f32, 100.0), viewport.aspect());
+}
+
+test "RenderTarget.viewport passes through swapchain dimensions" {
+    const target = RenderTarget{ .swapchain = .{ .width = 640, .height = 480 } };
+    const viewport = target.viewport();
+    try testing.expectEqual(@as(u32, 640), viewport.width);
+    try testing.expectEqual(@as(u32, 480), viewport.height);
+}
+
+test "RenderTarget.viewport reads dimensions from a framebuffer" {
+    var framebuffer = Framebuffer{
+        .handle = .{ .owner = undefined, .index = 0, .generation = 0 },
+        .extent = .{ .width = 256, .height = 128 },
+        .color_format = .rgba8,
+        .depth_stencil_format = null,
+    };
+    const target = RenderTarget{ .framebuffer = &framebuffer };
+    const viewport = target.viewport();
+    try testing.expectEqual(@as(u32, 256), viewport.width);
+    try testing.expectEqual(@as(u32, 128), viewport.height);
+}
+
 const Device = @This();
 impl: *anyopaque,
 vtable: *const VTable,

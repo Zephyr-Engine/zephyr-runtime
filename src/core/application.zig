@@ -1,4 +1,5 @@
 const std = @import("std");
+const zcs = @import("zcs");
 
 const Runtime = @import("runtime.zig").Runtime;
 const Framebuffer = @import("../graphics/rhi/framebuffer.zig");
@@ -85,6 +86,10 @@ pub fn Application(comptime game: Game) type {
 
         pub fn update(self: *@This()) !void {
             try self.runtime.update();
+        }
+
+        pub fn updateWithSchedule(self: *@This(), comptime schedule: zcs.Schedule.Spec) !void {
+            try self.runtime.updateWithSchedule(schedule);
         }
 
         pub fn renderScene(self: *@This(), framebuffer: ?*Framebuffer) !void {

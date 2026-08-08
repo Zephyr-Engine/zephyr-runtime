@@ -12,33 +12,11 @@ const LoadedScene = @This();
 instance: SceneRuntimeInstance,
 document: scene.SceneDocument,
 
-fn init(allocator: std.mem.Allocator, document: scene.SceneDocument) !@This() {
+pub fn init(allocator: std.mem.Allocator, document: scene.SceneDocument) !LoadedScene {
     return .{
         .instance = .init(allocator, document.scene_id),
         .document = document,
     };
-}
-
-fn loadScene(allocator: std.mem.Allocator, io: std.Io, project: *const Project, path: []const u8) !@This() {
-    const bytes = try project.root_dir.readFileAlloc(
-        io,
-        path,
-        allocator,
-        .limited(scene.json_codec.max_scene_bytes),
-    );
-    defer allocator.free(bytes);
-
-    if (std.mem.startsWith(u8, bytes, scene.binary_codec.magic)) {
-        return .init(allocator, try scene.binary_codec.decode(allocator, bytes));
-    }
-
-    return .init(allocator, try scene.json_codec.decode(allocator, bytes));
-}
-
-pub fn loadDefaultScene(allocator: std.mem.Allocator, io: std.Io, project: *const Project) !@This() {
-    const path = project.manifest.default_scene orelse return error.DefaultSceneNotFound;
-
-    return loadScene(allocator, io, project, path);
 }
 
 pub fn start(self: *@This(), world: *zcs.World, schemas: *const SchemaRegistry, assets: *AssetManager) !void {
@@ -48,6 +26,11 @@ pub fn start(self: *@This(), world: *zcs.World, schemas: *const SchemaRegistry, 
 pub fn deinit(self: *@This(), world: *zcs.World) void {
     self.instance.deinit(world);
     self.document.deinit();
+}
+
+pub fn reset(self: *@This(), world: *zcs.World, schemas: *const SchemaRegistry, assets: *AssetManager) !void {
+    self.instance.reset(world);
+    try self.instance.spawnEntities(world, schemas, assets, &self.document);
 }
 
 test "loadDefaultScene rejects projects without a configured default scene" {
@@ -62,6 +45,6 @@ test "loadDefaultScene rejects projects without a configured default scene" {
 
     try std.testing.expectError(
         error.DefaultSceneNotFound,
-        LoadedScene.loadDefaultScene(std.testing.allocator, std.testing.io, &project),
+        project.loadDefaultScene(std.testing.allocator, std.testing.io),
     );
 }

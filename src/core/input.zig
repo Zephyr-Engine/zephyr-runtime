@@ -38,6 +38,21 @@ pub fn beginFrame(self: *Input) void {
     self.text_len = 0;
 }
 
+pub fn clear(self: *Input) void {
+    @memset(&self.key_down, false);
+    @memset(&self.key_pressed, false);
+    @memset(&self.key_released, false);
+
+    @memset(&self.mouse_button_down, false);
+    @memset(&self.mouse_button_pressed, false);
+    @memset(&self.mouse_button_released, false);
+
+    self.mouse_delta = .{};
+    self.mouse_scroll = .{};
+    self.text_len = 0;
+    self.has_mouse_position = false;
+}
+
 pub fn applyEvent(self: *Input, ev: event.ZEvent) void {
     switch (ev) {
         .KeyPressed => |key| self.setKeyDown(key),
@@ -231,4 +246,26 @@ test "Input focus loss clears held input and prevents a mouse jump" {
     try std.testing.expect(!input.isMouseButtonDown(.Right));
     try std.testing.expectEqual(@as(f32, 0), input.mouse_delta.x);
     try std.testing.expectEqual(@as(f32, 0), input.mouse_delta.y);
+}
+
+test "clear removes held and transient input" {
+    var input: Input = .{};
+
+    input.applyEvent(.{ .KeyPressed = .W });
+    input.applyEvent(.{ .MousePressed = .Right });
+    input.applyEvent(.{
+        .MouseScroll = .{ .x = 0, .y = 2 },
+    });
+
+    input.clear();
+
+    try std.testing.expect(!input.isKeyDown(.W));
+    try std.testing.expect(!input.wasKeyPressed(.W));
+    try std.testing.expect(
+        !input.isMouseButtonDown(.Right),
+    );
+    try std.testing.expectEqual(
+        @as(f32, 0),
+        input.mouse_scroll.y,
+    );
 }
