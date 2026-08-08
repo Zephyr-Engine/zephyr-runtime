@@ -15,6 +15,7 @@ pub const EntityID = zcs.EntityID;
 const WorldInstance = @This();
 
 world: zcs.World,
+schemas: *SchemaRegistry,
 command_buffer: zcs.CommandBuffer,
 active_scene: ?LoadedScene = null,
 
@@ -37,6 +38,7 @@ pub fn init(self: *WorldInstance, allocator: std.mem.Allocator, schemas: *Schema
 
     self.* = .{
         .world = world,
+        .schemas = schemas,
         .command_buffer = undefined,
     };
     self.command_buffer = zcs.CommandBuffer.init(&self.world);
@@ -54,7 +56,6 @@ pub fn deinit(self: *WorldInstance) void {
 pub fn startScene(
     self: *WorldInstance,
     allocator: std.mem.Allocator,
-    schemas: *const SchemaRegistry,
     assets: *AssetManager,
     document: zimp.scene.SceneDocument,
 ) !void {
@@ -67,14 +68,14 @@ pub fn startScene(
     }
 
     var scene = try LoadedScene.init(allocator, document);
-    try scene.start(&self.world, schemas, assets);
+    try scene.start(&self.world, self.schemas, assets);
 
     self.active_scene = scene;
 }
 
-pub fn resetActiveScene(self: *WorldInstance, schemas: *const SchemaRegistry, assets: *AssetManager) !void {
+pub fn resetActiveScene(self: *WorldInstance, assets: *AssetManager) !void {
     if (self.active_scene) |*scene| {
-        scene.reset(&self.world, schemas, assets);
+        try scene.reset(&self.world, self.schemas, assets);
     }
 }
 

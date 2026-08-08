@@ -65,7 +65,6 @@ pub fn Runtime(comptime game: Game) type {
 
             try self.world.startScene(
                 self.allocator,
-                &self.schemas,
                 &self.assets,
                 default_scene,
             );

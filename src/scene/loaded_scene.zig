@@ -12,7 +12,7 @@ const LoadedScene = @This();
 instance: SceneRuntimeInstance,
 document: scene.SceneDocument,
 
-pub fn init(allocator: std.mem.Allocator, document: scene.SceneDocument) !@This() {
+pub fn init(allocator: std.mem.Allocator, document: scene.SceneDocument) !LoadedScene {
     return .{
         .instance = .init(allocator, document.scene_id),
         .document = document,
@@ -28,7 +28,7 @@ pub fn deinit(self: *@This(), world: *zcs.World) void {
     self.document.deinit();
 }
 
-pub fn reset(self: *@This(), world: *zcs.World, schemas: *const SchemaRegistry, assets: *AssetManager) void {
+pub fn reset(self: *@This(), world: *zcs.World, schemas: *const SchemaRegistry, assets: *AssetManager) !void {
     self.instance.reset(world);
     try self.instance.spawnEntities(world, schemas, assets, &self.document);
 }
