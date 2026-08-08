@@ -13,6 +13,7 @@ device: *Device,
 source: zimp.Zamat,
 texture_bindings: []TextureBinding,
 param_bindings: []ParamBinding,
+alpha_cutoff_location: ?GraphicsPipeline.UniformLocation,
 allocator: std.mem.Allocator,
 
 pub const TextureBinding = struct {
@@ -20,6 +21,9 @@ pub const TextureBinding = struct {
     view: TextureView,
     sampler: Sampler,
     resource_name: []const u8,
+    /// Resolved once in `init`; `bindResources` runs per draw batch and should
+    /// not pay for a uniform name lookup there.
+    location: ?GraphicsPipeline.UniformLocation = null,
 };
 
 pub const ParamBinding = struct {
@@ -45,11 +49,21 @@ pub fn init(
         });
     }
 
+    for (texture_bindings) |*binding| {
+        binding.location = device.graphicsPipelineUniformLocation(pipeline, binding.resource_name);
+    }
+
+    const alpha_cutoff_location = if (source.render_state.alpha_mode == .alpha_test)
+        device.graphicsPipelineUniformLocation(pipeline, "u_alpha_cutoff")
+    else
+        null;
+
     return .{
         .pipeline = pipeline,
         .device = device,
         .source = source,
         .texture_bindings = texture_bindings,
+        .alpha_cutoff_location = alpha_cutoff_location,
         .param_bindings = try param_bindings.toOwnedSlice(allocator),
         .allocator = allocator,
     };
@@ -58,7 +72,9 @@ pub fn init(
 pub fn bindResources(self: *const Material) void {
     for (self.texture_bindings) |*binding| {
         self.device.bindTexture(binding.view, binding.sampler, binding.unit);
-        self.device.setGraphicsPipelineUniformByName(self.pipeline, binding.resource_name, .{ .int = @intCast(binding.unit) });
+        if (binding.location) |location| {
+            self.device.setGraphicsPipelineUniform(self.pipeline, location, .{ .int = @intCast(binding.unit) });
+        }
     }
 
     for (self.param_bindings) |binding| {
@@ -111,10 +127,10 @@ pub fn bindResources(self: *const Material) void {
         }
     }
 
-    if (self.source.render_state.alpha_mode == .alpha_test) {
-        self.device.setGraphicsPipelineUniformByName(
+    if (self.alpha_cutoff_location) |location| {
+        self.device.setGraphicsPipelineUniform(
             self.pipeline,
-            "u_alpha_cutoff",
+            location,
             .{ .float = self.source.render_state.alpha_cutoff },
         );
     }

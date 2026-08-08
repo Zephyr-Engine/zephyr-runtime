@@ -1,8 +1,19 @@
+const std = @import("std");
+
 const render_state = @import("../render_state.zig");
 const c = @import("../../c.zig");
 const gl = c.glad;
 
+var applied: ?render_state.FixedState = null;
+
 pub fn apply(state: render_state.FixedState) void {
+    if (applied) |current| {
+        if (std.meta.eql(current, state)) {
+            return;
+        }
+    }
+    applied = state;
+
     if (state.depth_test) {
         gl.glEnable(gl.GL_DEPTH_TEST);
     } else {
@@ -52,6 +63,8 @@ pub fn apply(state: render_state.FixedState) void {
 }
 
 pub fn begin(info: render_state.BeginInfo) void {
+    applied = null;
+
     var clear_mask: c_uint = 0;
 
     if (info.color) |col| {

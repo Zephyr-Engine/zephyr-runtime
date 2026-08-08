@@ -88,11 +88,8 @@ fn assetIdLessThan(
     a: zimp.AssetId,
     b: zimp.AssetId,
 ) bool {
-    return std.mem.order(
-        u8,
-        &a.uuid.bytes,
-        &b.uuid.bytes,
-    ) == .lt;
+    return std.mem.readInt(u128, &a.uuid.bytes, .big) <
+        std.mem.readInt(u128, &b.uuid.bytes, .big);
 }
 
 fn pipelineLessThan(
@@ -178,6 +175,19 @@ test "transparent draw items sort back-to-front before batching ties" {
     try std.testing.expect(items[1].pipeline_key.eql(pipeline_b));
     try std.testing.expect(items[1].material_id.eql(material_a));
     try std.testing.expectEqual(@as(f32, 2), items[3].depth_key);
+}
+
+test "asset id ordering stays byte-lexicographic over the uuid" {
+    const low = zimp.AssetId.parseComptime("00000000-0000-4000-8000-000000000001");
+    const high = zimp.AssetId.parseComptime("ff000000-0000-4000-8000-000000000000");
+
+    try std.testing.expect(assetIdLessThan(low, high));
+    try std.testing.expect(!assetIdLessThan(high, low));
+    try std.testing.expect(!assetIdLessThan(low, low));
+    try std.testing.expectEqual(
+        std.mem.order(u8, &low.uuid.bytes, &high.uuid.bytes) == .lt,
+        assetIdLessThan(low, high),
+    );
 }
 
 test "pipeline ordering uses the backend-neutral pipeline sort key" {

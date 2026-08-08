@@ -28,9 +28,13 @@ pub const TransformComponent = struct {
     };
 
     pub fn modelMatrix(self: *const TransformComponent) Mat4 {
-        return Mat4.createScale(self.scale.x, self.scale.y, self.scale.z)
-            .mul(self.rotation.toMat4())
-            .mul(Mat4.createTranslation(self.position));
+        const r = self.rotation.toMat4().fields;
+        return .{ .fields = .{
+            .{ r[0][0] * self.scale.x, r[0][1] * self.scale.x, r[0][2] * self.scale.x, 0 },
+            .{ r[1][0] * self.scale.y, r[1][1] * self.scale.y, r[1][2] * self.scale.y, 0 },
+            .{ r[2][0] * self.scale.z, r[2][1] * self.scale.z, r[2][2] * self.scale.z, 0 },
+            .{ self.position.x, self.position.y, self.position.z, 1 },
+        } };
     }
 
     pub fn forward(self: *const TransformComponent) Vec3 {

@@ -3,6 +3,7 @@ const std = @import("std");
 const zcs = @import("zcs");
 
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
+const GraphicsPipeline = @import("rhi/graphics_pipeline.zig");
 const render_submission = @import("render_submission.zig");
 const camera_system = @import("../scene/camera.zig");
 const device_factory = @import("device_factory.zig");
@@ -85,6 +86,10 @@ fn gatherDrawItems(self: *Renderer, world: *zcs.World, assets: *AssetManager, ca
         .read = &.{ components.TransformComponent, components.MeshRenderComponent },
     });
 
+    // sorted by material, so remember the last hit
+    var cached_material_id: ?zimp.AssetId = null;
+    var cached_material: *const Material = undefined;
+
     while (iter.each()) |row| {
         const transform = row.read(components.TransformComponent);
         const target = row.read(components.MeshRenderComponent);
@@ -102,7 +107,19 @@ fn gatherDrawItems(self: *Renderer, world: *zcs.World, assets: *AssetManager, ca
                     log.err("mesh submesh references invalid material slot {d}", .{submesh.material_index});
                     continue;
                 };
-                const material = assets.get(Material, material_id) orelse continue;
+
+                const material = blk: {
+                    if (cached_material_id) |cached_id| {
+                        if (cached_id.eql(material_id)) {
+                            break :blk cached_material;
+                        }
+                    }
+
+                    const looked_up = assets.get(Material, material_id) orelse continue;
+                    cached_material_id = material_id;
+                    cached_material = looked_up;
+                    break :blk looked_up;
+                };
 
                 const state = material.source.render_state;
 
@@ -139,19 +156,46 @@ fn renderFromCamera(self: *Renderer, world: *zcs.World, assets: *AssetManager, v
     const projection = camera.projectionMatrix(viewport.aspect());
 
     try self.gatherDrawItems(world, assets, camera, view);
-    std.mem.sort(DrawItem, self.submissions.items, {}, DrawItem.lessThan);
+    // Items that compare equal share pipeline, material and depth, so their
+    // relative order does not matter; pdq beats a stable sort on items this wide.
+    std.sort.pdq(DrawItem, self.submissions.items, {}, DrawItem.lessThan);
 
     self.renderQueue(view, projection);
 }
 
+/// The draw queue is sorted by pipeline then material, so consecutive items
+/// usually share both. Binding state only when it actually changes turns the
+/// per-draw cost into a single `u_model` upload for the common case.
 fn renderQueue(self: *Renderer, view: math.Mat4, projection: math.Mat4) void {
-    for (self.submissions.items) |draw_item| {
-        self.device.bindGraphicsPipeline(draw_item.material.pipeline);
+    var bound_pipeline: ?u64 = null;
+    var bound_material: ?*const Material = null;
+    var model_location: ?GraphicsPipeline.UniformLocation = null;
 
-        draw_item.material.bindResources();
-        self.device.setGraphicsPipelineUniformByName(draw_item.material.pipeline, "u_view", .{ .mat4 = view.fields });
-        self.device.setGraphicsPipelineUniformByName(draw_item.material.pipeline, "u_projection", .{ .mat4 = projection.fields });
-        self.device.setGraphicsPipelineUniformByName(draw_item.material.pipeline, "u_model", .{ .mat4 = draw_item.model.fields });
+    for (self.submissions.items) |draw_item| {
+        const pipeline = draw_item.material.pipeline;
+
+        if (bound_pipeline != pipeline.sort_key) {
+            self.device.bindGraphicsPipeline(pipeline);
+            bound_pipeline = pipeline.sort_key;
+
+            // Uniform locations are per-program, so resolving them once per
+            // pipeline switch avoids a name lookup on every draw.
+            model_location = self.device.graphicsPipelineUniformLocation(pipeline, "u_model");
+            self.device.setGraphicsPipelineUniformByName(pipeline, "u_view", .{ .mat4 = view.fields });
+            self.device.setGraphicsPipelineUniformByName(pipeline, "u_projection", .{ .mat4 = projection.fields });
+
+            // A new program means the previous material's bindings are stale.
+            bound_material = null;
+        }
+
+        if (bound_material != draw_item.material) {
+            draw_item.material.bindResources();
+            bound_material = draw_item.material;
+        }
+
+        if (model_location) |location| {
+            self.device.setGraphicsPipelineUniform(pipeline, location, .{ .mat4 = draw_item.model.fields });
+        }
 
         self.device.drawIndexed(draw_item.part.geometry, draw_item.submesh.index_offset, draw_item.submesh.index_count);
     }
