@@ -1,14 +1,15 @@
 pub const Application = @import("core/application.zig").Application;
 pub const Runtime = @import("core/runtime.zig").Runtime;
 pub const GraphicsPipeline = @import("graphics/rhi/graphics_pipeline.zig");
+pub const TextureView = @import("graphics/rhi/texture_view.zig");
 pub const Framebuffer = @import("graphics/rhi/framebuffer.zig");
 pub const MouseButton = @import("core/event.zig").MouseButton;
 pub const CursorKind = @import("core/window.zig").CursorKind;
+pub const Geometry = @import("graphics/rhi/geometry.zig");
 pub const Texture = @import("graphics/rhi/texture.zig");
-pub const TextureView = @import("graphics/rhi/texture_view.zig");
 pub const Sampler = @import("graphics/rhi/sampler.zig");
 pub const Buffer = @import("graphics/rhi/buffer.zig");
-pub const Geometry = @import("graphics/rhi/geometry.zig");
+pub const Device = @import("graphics/rhi/device.zig");
 pub const Material = @import("graphics/material.zig");
 pub const ZEvent = @import("core/event.zig").ZEvent;
 pub const Key = @import("core/event.zig").Key;
@@ -97,8 +98,6 @@ test {
     _ = @import("ecs/components.zig");
     _ = @import("assets/asset_manager.zig");
     _ = @import("core/runtime.zig");
-    _ = @import("scene/controller.zig");
-    _ = @import("scene/loader.zig");
     _ = @import("graphics/opengl/framebuffer.zig");
     _ = @import("graphics/opengl/buffer.zig");
     _ = @import("graphics/opengl/diagnostics.zig");

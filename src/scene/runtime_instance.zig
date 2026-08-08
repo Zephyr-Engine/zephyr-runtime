@@ -17,6 +17,7 @@ const SceneRuntimeInstance = @This();
 
 const World = zcs.World;
 const Registry = SchemaRegistry;
+
 allocator: std.mem.Allocator,
 scene_id: zimp.SceneId,
 scene_to_runtime: std.AutoHashMap(zimp.SceneEntityId, zcs.EntityID),
@@ -40,6 +41,18 @@ pub fn deinit(self: *SceneRuntimeInstance, world: *zcs.World) void {
     }
     self.scene_to_runtime.deinit();
     self.runtime_to_scene.deinit();
+}
+
+pub fn reset(self: *SceneRuntimeInstance, world: *zcs.World) void {
+    var entities = self.scene_to_runtime.valueIterator();
+    while (entities.next()) |entity| {
+        if (world.isAlive(entity.*)) {
+            world.despawn(entity.*);
+        }
+    }
+
+    self.scene_to_runtime.clearRetainingCapacity();
+    self.runtime_to_scene.clearRetainingCapacity();
 }
 
 pub fn resolve(self: *const SceneRuntimeInstance, id: zimp.SceneEntityId) !zcs.EntityID {
