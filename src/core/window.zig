@@ -14,11 +14,14 @@ const macos = if (builtin.os.tag == .macos) @cImport({
 }) else struct {};
 
 extern fn glfwGetCocoaWindow(window: c.Window) ?*anyopaque;
+extern fn glfwGetX11Window(window: c.Window) c_ulong;
+extern fn glfwGetWin32Window(window: c.Window) ?*anyopaque;
 
 pub const WindowError = error{
     InitializeFailed,
     ContextLoadFailed,
     MemoryError,
+    NativeWindowHandleUnavailable,
 };
 
 pub const WindowData = struct {
@@ -91,6 +94,9 @@ resize_x_cursor: ?*glfw.GLFWcursor = null,
 resize_y_cursor: ?*glfw.GLFWcursor = null,
 
 pub fn init(allocator: std.mem.Allocator, params: WindowParams) WindowError!*Window {
+    if (comptime builtin.os.tag == .linux) {
+        glfw.glfwInitHint(glfw.GLFW_PLATFORM, glfw.GLFW_PLATFORM_X11);
+    }
     if (glfw.glfwInit() == 0) {
         log.err("failed to initialize GLFW", .{});
         return WindowError.InitializeFailed;
@@ -98,6 +104,9 @@ pub fn init(allocator: std.mem.Allocator, params: WindowParams) WindowError!*Win
     errdefer glfw.glfwTerminate();
 
     glfw.glfwDefaultWindowHints();
+    if (comptime builtin.os.tag == .linux) {
+        glfw.glfwWindowHint(glfw.GLFW_DECORATED, glfw.GLFW_FALSE);
+    }
     graphics_context.configure(params.backend, params.msaa_samples);
 
     const title = allocator.dupeZ(u8, params.title) catch |err| {
@@ -121,6 +130,8 @@ pub fn init(allocator: std.mem.Allocator, params: WindowParams) WindowError!*Win
         return WindowError.InitializeFailed;
     }
     errdefer glfw.glfwDestroyWindow(window);
+
+    setBlankWindowIcon(window);
     if (!maximize and (params.width == null or params.height == null)) {
         glfw.glfwSetWindowPos(window, default_bounds.x, default_bounds.y);
     }
@@ -150,6 +161,16 @@ pub fn init(allocator: std.mem.Allocator, params: WindowParams) WindowError!*Win
     win.resize_y_cursor = glfw.glfwCreateStandardCursor(glfw.GLFW_VRESIZE_CURSOR);
 
     return win;
+}
+
+fn setBlankWindowIcon(window: c.Window) void {
+    var pixels = [_]u8{ 0, 0, 0, 0 };
+    var icon = glfw.GLFWimage{
+        .width = 1,
+        .height = 1,
+        .pixels = &pixels,
+    };
+    glfw.glfwSetWindowIcon(window, 1, &icon);
 }
 
 pub fn setEventCallback(self: *Window, context: anytype, comptime callback: fn (@TypeOf(context), event.ZEvent) anyerror!void) void {
@@ -249,6 +270,29 @@ pub fn swapBuffers(self: *const Window) void {
 
 pub fn shouldCloseWindow(self: *const Window) bool {
     return glfw.glfwWindowShouldClose(self.window) == 0;
+}
+
+pub fn requestClose(self: *Window) void {
+    glfw.glfwSetWindowShouldClose(self.window, glfw.GLFW_TRUE);
+}
+
+pub fn nativeMenuWindowHandle(self: *const Window) WindowError!usize {
+    if (builtin.os.tag == .linux) {
+        if (glfw.glfwGetPlatform() != glfw.GLFW_PLATFORM_X11) {
+            return WindowError.NativeWindowHandleUnavailable;
+        }
+        const x11_window = glfwGetX11Window(self.window);
+        return if (x11_window == 0) WindowError.NativeWindowHandleUnavailable else @intCast(x11_window);
+    }
+    if (builtin.os.tag == .macos) {
+        const cocoa_window = glfwGetCocoaWindow(self.window) orelse return WindowError.NativeWindowHandleUnavailable;
+        return @intFromPtr(cocoa_window);
+    }
+    if (builtin.os.tag == .windows) {
+        const win32_window = glfwGetWin32Window(self.window) orelse return WindowError.NativeWindowHandleUnavailable;
+        return @intFromPtr(win32_window);
+    }
+    return WindowError.NativeWindowHandleUnavailable;
 }
 
 pub fn deinit(self: *Window, allocator: std.mem.Allocator) void {
