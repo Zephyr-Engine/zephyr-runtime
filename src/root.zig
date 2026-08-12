@@ -19,13 +19,14 @@ pub const Input = @import("core/input.zig");
 
 pub const AssetManager = @import("assets/asset_manager.zig").AssetManager;
 pub const AssetError = @import("assets/source.zig").AssetError;
-pub const Uuid = zimp.Uuid;
+pub const ComponentTypeId = zimp.ComponentTypeId;
+pub const SceneEntityId = zimp.SceneEntityId;
+pub const WatchHandle = zimp.WatchHandle;
 pub const ProjectId = zimp.ProjectId;
+pub const SchemaId = zimp.SchemaId;
 pub const AssetId = zimp.AssetId;
 pub const SceneId = zimp.SceneId;
-pub const SceneEntityId = zimp.SceneEntityId;
-pub const ComponentTypeId = zimp.ComponentTypeId;
-pub const SchemaId = zimp.SchemaId;
+pub const Uuid = zimp.Uuid;
 
 const math = @import("core/math.zig");
 pub const Vec3 = math.Vec3;
