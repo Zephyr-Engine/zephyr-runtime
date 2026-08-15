@@ -29,19 +29,9 @@ pub fn deinit(self: *Project, allocator: std.mem.Allocator, io: std.Io) void {
 }
 
 pub fn loadScene(self: *const Project, allocator: std.mem.Allocator, io: std.Io, path: []const u8) !zimp.scene.SceneDocument {
-    const bytes = try self.root_dir.readFileAlloc(
-        io,
-        path,
-        allocator,
-        .limited(scene.json_codec.max_scene_bytes),
-    );
-    defer allocator.free(bytes);
-
-    if (std.mem.startsWith(u8, bytes, scene.binary_codec.magic)) {
-        return try scene.binary_codec.decode(allocator, bytes);
-    }
-
-    return try scene.json_codec.decode(allocator, bytes);
+    return try zimp.scene.SceneDocument.load(allocator, io, self.root_dir, path, .{
+        .expected_project_id = self.manifest.project_id,
+    });
 }
 
 pub fn loadDefaultScene(self: *const Project, allocator: std.mem.Allocator, io: std.Io) !zimp.scene.SceneDocument {

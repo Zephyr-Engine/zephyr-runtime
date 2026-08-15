@@ -176,6 +176,7 @@ fn testDocument(entities: []zimp.scene.SceneEntity) zimp.scene.SceneDocument {
         .scene_id = test_scene_id,
         .project_id = test_project_id,
         .name = "runtime-instance-test",
+        .file_name = "runtime-instance-test.zscene",
         .entities = entities,
     };
 }
