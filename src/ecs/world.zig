@@ -59,16 +59,19 @@ pub fn startScene(
     assets: *AssetManager,
     document: zimp.scene.SceneDocument,
 ) !void {
+    var owned_document = document;
     if (self.active_scene) |*scene| {
-        if (!scene.document.scene_id.eql(document.scene_id)) {
+        if (!scene.document.scene_id.eql(owned_document.scene_id)) {
             scene.deinit(&self.world);
             self.active_scene = null;
         } else {
+            owned_document.deinit();
             return;
         }
     }
 
-    var scene = try LoadedScene.init(allocator, document);
+    var scene = try LoadedScene.init(allocator, owned_document);
+    errdefer scene.deinit(&self.world);
     try scene.start(&self.world, self.schemas, assets);
 
     self.active_scene = scene;
@@ -78,6 +81,13 @@ pub fn resetActiveScene(self: *WorldInstance, assets: *AssetManager) !void {
     if (self.active_scene) |*scene| {
         try scene.reset(&self.world, self.schemas, assets);
     }
+}
+
+pub fn activeSceneDocument(self: *const WorldInstance) ?*const zimp.scene.SceneDocument {
+    if (self.active_scene) |*scene| {
+        return &scene.document;
+    }
+    return null;
 }
 
 pub fn setResource(self: *WorldInstance, comptime Resource: type, value: Resource) !void {

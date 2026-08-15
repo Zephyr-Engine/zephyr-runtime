@@ -208,8 +208,6 @@ pub const AssetManager = struct {
             return AssetError.WrongAssetKind;
         }
 
-        // Delegates to path registration: the path resolves back to this
-        // same durable id and dedupes on the path key.
         return self.requestKind(expected, entry.cooked_path);
     }
 
@@ -523,8 +521,10 @@ pub const AssetManager = struct {
         const pipeline = try self.materialPipelineReady(material_source_ptr) orelse return .waiting;
 
         var texture_bindings: std.ArrayList(Material.TextureBinding) = .empty;
-        errdefer texture_bindings.deinit(self.allocator);
-        if (!try self.materialTexturesReady(material_source_ptr, &texture_bindings)) return .waiting;
+        defer texture_bindings.deinit(self.allocator);
+        if (!try self.materialTexturesReady(material_source_ptr, &texture_bindings)) {
+            return .waiting;
+        }
 
         const cooked_asset = record.cooked orelse return AssetError.LoadFailed;
         record.cooked = null;
