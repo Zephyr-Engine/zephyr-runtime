@@ -9,28 +9,53 @@ const Project = @import("../project/project.zig");
 
 const LoadedScene = @This();
 
+registry: *const SchemaRegistry,
 instance: SceneRuntimeInstance,
 document: scene.SceneDocument,
+assets: *AssetManager,
+world: *zcs.World,
 
-pub fn init(allocator: std.mem.Allocator, document: scene.SceneDocument) !LoadedScene {
+pub fn init(allocator: std.mem.Allocator, document: scene.SceneDocument, registry: *SchemaRegistry, assets: *AssetManager, world: *zcs.World) !LoadedScene {
     return .{
         .instance = .init(allocator, document.scene_id),
+        .registry = registry,
         .document = document,
+        .assets = assets,
+        .world = world,
     };
 }
 
-pub fn start(self: *@This(), world: *zcs.World, schemas: *const SchemaRegistry, assets: *AssetManager) !void {
-    try self.instance.spawnEntities(world, schemas, assets, &self.document);
+pub fn start(self: *LoadedScene) !void {
+    try self.instance.spawnEntities(
+        self.world,
+        self.registry,
+        self.assets,
+        &self.document,
+    );
 }
 
-pub fn deinit(self: *@This(), world: *zcs.World) void {
-    self.instance.deinit(world);
+pub fn spawnEntity(self: *LoadedScene, entity: scene.SceneEntity) !zcs.EntityID {
+    return self.instance.spawnEntity(
+        self.world,
+        self.registry,
+        self.assets,
+        entity,
+    );
+}
+
+pub fn deinit(self: *LoadedScene) void {
+    self.instance.deinit(self.world);
     self.document.deinit();
 }
 
-pub fn reset(self: *@This(), world: *zcs.World, schemas: *const SchemaRegistry, assets: *AssetManager) !void {
-    self.instance.reset(world);
-    try self.instance.spawnEntities(world, schemas, assets, &self.document);
+pub fn reset(self: *LoadedScene) !void {
+    self.instance.reset(self.world);
+    try self.instance.spawnEntities(
+        self.world,
+        self.registry,
+        self.assets,
+        &self.document,
+    );
 }
 
 test "loadDefaultScene rejects projects without a configured default scene" {

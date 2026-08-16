@@ -61,43 +61,43 @@ pub fn resolve(self: *const SceneRuntimeInstance, id: zimp.SceneEntityId) !zcs.E
 
 pub fn spawnEntities(self: *SceneRuntimeInstance, world: *World, registry: *const Registry, assets: *AssetManager, scene: *const zimp.scene.SceneDocument) !void {
     for (scene.entities) |entity_data| {
-        const entity = try world.spawn();
-        errdefer world.despawn(entity);
-
-        try self.scene_to_runtime.put(entity_data.id, entity);
-        try self.runtime_to_scene.put(entity, entity_data.id);
-    }
-
-    for (scene.entities) |entity_data| {
-        const entity = try self.resolve(entity_data.id);
-        for (entity_data.components) |component_data| {
-            const codec = registry.get(component_data.type_id) orelse return error.UnknownComponent;
-            try codec.attach(world, entity, self.allocator, component_data.asData());
-
-            for (component_data.fields) |field| {
-                const schema_field = for (codec.schema.fields) |candidate| {
-                    if (candidate.number == field.number) {
-                        break candidate;
-                    }
-                } else continue;
-
-                const asset_kind = switch (schema_field.kind) {
-                    .asset_ref => |kind| kind,
-                    else => continue,
-                };
-                const asset_id = switch (field.value) {
-                    .asset_ref => |id| id,
-                    else => continue,
-                };
-                try registerAssetId(assets, asset_kind, asset_id);
-            }
-        }
+        _ = try self.spawnEntity(world, registry, assets, entity_data);
     }
 
     if (scene.active_camera) |camera_id| {
         const runtime_camera = try self.resolve(camera_id);
         try setActiveCamera(world, runtime_camera);
     }
+}
+
+pub fn spawnEntity(self: *SceneRuntimeInstance, world: *World, registry: *const Registry, assets: *AssetManager, entity: zimp.scene.SceneEntity) !zcs.EntityID {
+    const entity_id = try world.spawn();
+    try self.scene_to_runtime.put(entity.id, entity_id);
+    try self.runtime_to_scene.put(entity_id, entity.id);
+
+    for (entity.components) |component_data| {
+        const codec = registry.get(component_data.type_id) orelse return error.UnknownComponent;
+        try codec.attach(world, entity_id, self.allocator, component_data.asData());
+
+        for (component_data.fields) |field| {
+            const schema_field = for (codec.schema.fields) |candidate| {
+                if (candidate.number == field.number) {
+                    break candidate;
+                }
+            } else continue;
+
+            const asset_kind = switch (schema_field.kind) {
+                .asset_ref => |kind| kind,
+                else => continue,
+            };
+            const asset_id = switch (field.value) {
+                .asset_ref => |id| id,
+                else => continue,
+            };
+            try registerAssetId(assets, asset_kind, asset_id);
+        }
+    }
+    return entity_id;
 }
 
 fn registerAssetId(assets: *AssetManager, kind: zimp.AssetKind, id: zimp.AssetId) !void {

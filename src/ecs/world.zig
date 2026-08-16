@@ -46,7 +46,7 @@ pub fn init(self: *WorldInstance, allocator: std.mem.Allocator, schemas: *Schema
 
 pub fn deinit(self: *WorldInstance) void {
     if (self.active_scene) |*scene| {
-        scene.deinit(&self.world);
+        scene.deinit();
         self.active_scene = null;
     }
     self.command_buffer.deinit();
@@ -62,7 +62,7 @@ pub fn startScene(
     var owned_document = document;
     if (self.active_scene) |*scene| {
         if (!scene.document.scene_id.eql(owned_document.scene_id)) {
-            scene.deinit(&self.world);
+            scene.deinit();
             self.active_scene = null;
         } else {
             owned_document.deinit();
@@ -70,22 +70,28 @@ pub fn startScene(
         }
     }
 
-    var scene = try LoadedScene.init(allocator, owned_document);
-    errdefer scene.deinit(&self.world);
-    try scene.start(&self.world, self.schemas, assets);
+    var scene = try LoadedScene.init(
+        allocator,
+        owned_document,
+        self.schemas,
+        assets,
+        &self.world,
+    );
+    errdefer scene.deinit();
+    try scene.start();
 
     self.active_scene = scene;
 }
 
-pub fn resetActiveScene(self: *WorldInstance, assets: *AssetManager) !void {
+pub fn resetActiveScene(self: *WorldInstance) !void {
     if (self.active_scene) |*scene| {
-        try scene.reset(&self.world, self.schemas, assets);
+        try scene.reset();
     }
 }
 
-pub fn activeSceneDocument(self: *const WorldInstance) ?*const zimp.scene.SceneDocument {
+pub fn activeSceneDocument(self: *const WorldInstance) ?*const LoadedScene {
     if (self.active_scene) |*scene| {
-        return &scene.document;
+        return scene;
     }
     return null;
 }
@@ -177,6 +183,5 @@ test "resetActiveScene is a no-op without an active scene" {
     try instance.init(testing.allocator, &schemas, empty_game);
     defer instance.deinit();
 
-    var assets: AssetManager = undefined;
-    try instance.resetActiveScene(&assets);
+    try instance.resetActiveScene();
 }
