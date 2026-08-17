@@ -3,7 +3,6 @@ const std = @import("std");
 const zimp = @import("zimp");
 const zcs = @import("zcs");
 
-const setActiveCamera = @import("camera.zig").setActive;
 const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
 const activeCamera = @import("camera.zig").active;
 const TextureAsset = @import("../graphics/texture_asset.zig");
@@ -12,6 +11,7 @@ const SchemaRegistry = @import("schema_registry.zig");
 const Material = @import("../graphics/material.zig");
 const Project = @import("../project/project.zig");
 const Mesh = @import("../graphics/mesh.zig");
+const camera = @import("camera.zig");
 
 const SceneRuntimeInstance = @This();
 
@@ -66,38 +66,95 @@ pub fn spawnEntities(self: *SceneRuntimeInstance, world: *World, registry: *cons
 
     if (scene.active_camera) |camera_id| {
         const runtime_camera = try self.resolve(camera_id);
-        try setActiveCamera(world, runtime_camera);
+        try camera.setActive(world, runtime_camera);
     }
 }
 
-pub fn spawnEntity(self: *SceneRuntimeInstance, world: *World, registry: *const Registry, assets: *AssetManager, entity: zimp.scene.SceneEntity) !zcs.EntityID {
+pub fn spawnEntity(
+    self: *SceneRuntimeInstance,
+    world: *World,
+    registry: *const Registry,
+    assets: *AssetManager,
+    entity: zimp.scene.SceneEntity,
+) !zcs.EntityID {
     const entity_id = try world.spawn();
     try self.scene_to_runtime.put(entity.id, entity_id);
     try self.runtime_to_scene.put(entity_id, entity.id);
 
     for (entity.components) |component_data| {
-        const codec = registry.get(component_data.type_id) orelse return error.UnknownComponent;
-        try codec.attach(world, entity_id, self.allocator, component_data.asData());
-
-        for (component_data.fields) |field| {
-            const schema_field = for (codec.schema.fields) |candidate| {
-                if (candidate.number == field.number) {
-                    break candidate;
-                }
-            } else continue;
-
-            const asset_kind = switch (schema_field.kind) {
-                .asset_ref => |kind| kind,
-                else => continue,
-            };
-            const asset_id = switch (field.value) {
-                .asset_ref => |id| id,
-                else => continue,
-            };
-            try registerAssetId(assets, asset_kind, asset_id);
-        }
+        try self.addComponent(
+            world,
+            registry,
+            assets,
+            entity_id,
+            component_data,
+        );
     }
     return entity_id;
+}
+
+pub fn addComponent(
+    self: *SceneRuntimeInstance,
+    world: *World,
+    registry: *const Registry,
+    assets: *AssetManager,
+    entity: zcs.EntityID,
+    component: zimp.scene.SceneComponent,
+) !void {
+    const codec = registry.get(component.type_id) orelse return error.UnknownComponent;
+    try codec.attach(world, entity, self.allocator, component.asData());
+
+    for (component.fields) |field| {
+        const schema_field = for (codec.schema.fields) |candidate| {
+            if (candidate.number == field.number) {
+                break candidate;
+            }
+        } else continue;
+
+        const asset_kind = switch (schema_field.kind) {
+            .asset_ref => |kind| kind,
+            else => continue,
+        };
+        const asset_id = switch (field.value) {
+            .asset_ref => |id| id,
+            else => continue,
+        };
+        try registerAssetId(assets, asset_kind, asset_id);
+    }
+}
+
+pub fn despawnEntity(self: *SceneRuntimeInstance, world: *World, id: zimp.SceneEntityId) !void {
+    const entity = try self.resolve(id);
+    try world.despawn(entity);
+}
+
+pub fn setActiveCamera(self: *SceneRuntimeInstance, world: *World, id: zimp.SceneEntityId) !void {
+    const entity = try self.resolve(id);
+    try camera.setActive(world, entity);
+}
+
+pub fn removeComponent(
+    self: *SceneRuntimeInstance,
+    world: *World,
+    registry: *const Registry,
+    entity: zcs.EntityID,
+    component: zimp.ComponentTypeId,
+) !void {
+    const codec = registry.get(component) orelse return error.UnknownComponent;
+    try codec.detach(world, entity, self.allocator);
+}
+
+pub fn setField(
+    self: *SceneRuntimeInstance,
+    world: *World,
+    registry: *const Registry,
+    entity: zcs.EntityID,
+    component: zimp.ComponentTypeId,
+    number: u32,
+    value: zimp.scene.Value,
+) !void {
+    const codec = registry.get(component) orelse return error.UnknownComponent;
+    try codec.writeField(world, entity, self.allocator, number, value);
 }
 
 fn registerAssetId(assets: *AssetManager, kind: zimp.AssetKind, id: zimp.AssetId) !void {

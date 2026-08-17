@@ -1,4 +1,4 @@
-const scene = @import("zimp").scene;
+const zimp = @import("zimp");
 const std = @import("std");
 const zcs = @import("zcs");
 
@@ -6,6 +6,8 @@ const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
 const SceneRuntimeInstance = @import("runtime_instance.zig");
 const SchemaRegistry = @import("schema_registry.zig");
 const Project = @import("../project/project.zig");
+
+const scene = zimp.scene;
 
 const LoadedScene = @This();
 
@@ -40,6 +42,47 @@ pub fn spawnEntity(self: *LoadedScene, entity: scene.SceneEntity) !zcs.EntityID 
         self.registry,
         self.assets,
         entity,
+    );
+}
+
+pub fn removeEntity(self: *LoadedScene, id: zimp.SceneEntityId) !void {
+    return self.instance.despawnEntity(self.world, id);
+}
+
+pub fn setActiveCamera(self: *LoadedScene, id: zimp.SceneEntityId) !void {
+    try self.instance.setActiveCamera(self.world, id);
+}
+
+pub fn addComponent(self: *LoadedScene, entity: *const scene.SceneEntity, component: scene.SceneComponent) !void {
+    const entity_id = try self.instance.resolve(entity.id);
+    return self.instance.addComponent(
+        self.world,
+        self.registry,
+        self.assets,
+        entity_id,
+        component,
+    );
+}
+
+pub fn removeComponent(self: *LoadedScene, entity: *const scene.SceneEntity, component: zimp.ComponentTypeId) !void {
+    const entity_id = try self.instance.resolve(entity.id);
+    return self.instance.removeComponent(
+        self.world,
+        self.registry,
+        entity_id,
+        component,
+    );
+}
+
+pub fn setField(self: *LoadedScene, entity: *const scene.SceneEntity, component: zimp.ComponentTypeId, number: u32, value: zimp.scene.Value) !void {
+    const entity_id = try self.instance.resolve(entity.id);
+    return self.instance.setField(
+        self.world,
+        self.registry,
+        entity_id,
+        component,
+        number,
+        value,
     );
 }
 
