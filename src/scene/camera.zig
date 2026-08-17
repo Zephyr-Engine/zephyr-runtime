@@ -34,6 +34,10 @@ pub fn active(world: *zcs.World) ?ecs.EntityID {
     return entity;
 }
 
+pub fn clearActive(world: *zcs.World) void {
+    world.removeResource(ActiveCamera);
+}
+
 test "camera projection uses the render-view aspect" {
     const camera = components.CameraComponent{};
     const projection = camera.projectionMatrix(2.0);

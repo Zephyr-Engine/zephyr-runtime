@@ -125,12 +125,7 @@ pub fn addComponent(
 
 pub fn despawnEntity(self: *SceneRuntimeInstance, world: *World, id: zimp.SceneEntityId) !void {
     const entity = try self.resolve(id);
-    try world.despawn(entity);
-}
-
-pub fn setActiveCamera(self: *SceneRuntimeInstance, world: *World, id: zimp.SceneEntityId) !void {
-    const entity = try self.resolve(id);
-    try camera.setActive(world, entity);
+    world.despawn(entity);
 }
 
 pub fn removeComponent(
@@ -155,6 +150,35 @@ pub fn setField(
 ) !void {
     const codec = registry.get(component) orelse return error.UnknownComponent;
     try codec.writeField(world, entity, self.allocator, number, value);
+}
+
+pub fn addField(
+    self: *SceneRuntimeInstance,
+    world: *World,
+    registry: *const Registry,
+    entity: zcs.EntityID,
+    component: zimp.ComponentTypeId,
+    number: u32,
+    value: zimp.scene.Value,
+) !void {
+    return self.setField(world, registry, entity, component, number, value);
+}
+
+pub fn removeField(
+    self: *SceneRuntimeInstance,
+    world: *World,
+    registry: *const Registry,
+    entity: zcs.EntityID,
+    component: zimp.ComponentTypeId,
+    number: u32,
+) !void {
+    const codec = registry.get(component) orelse return error.UnknownComponent;
+    for (codec.schema.fields) |field| {
+        if (field.number == number) {
+            return codec.writeField(world, entity, self.allocator, number, field.default_value);
+        }
+    }
+    return error.UnknownFieldNumber;
 }
 
 fn registerAssetId(assets: *AssetManager, kind: zimp.AssetKind, id: zimp.AssetId) !void {
@@ -296,6 +320,31 @@ test "SceneRuntimeInstance resolves only instantiated scene entities" {
     defer instance.deinit(&world);
 
     try testing.expectError(error.SceneEntityNotFound, instance.resolve(test_source_id));
+}
+
+test "SceneRuntimeInstance adds fields and restores defaults when fields are removed" {
+    var components = [_]zimp.scene.SceneComponent{.{ .type_id = reference_component_id, .fields = &.{} }};
+    var entities = [_]zimp.scene.SceneEntity{.{ .id = test_source_id, .name = "source", .components = &components, .prefab = .{} }};
+    var scene = testDocument(&entities);
+    defer scene.deinit();
+    var world = try initTestWorld();
+    defer world.deinit();
+    var registry = SchemaRegistry.init(testing.allocator);
+    defer registry.deinit();
+    try registry.register(ReferenceComponent);
+    var instance = TestInstance.init(testing.allocator, test_scene_id);
+    defer instance.deinit(&world);
+    var assets: AssetManager = undefined;
+
+    try instance.spawnEntities(&world, &registry, &assets, &scene);
+    const entity = try instance.resolve(test_source_id);
+
+    try instance.addField(&world, &registry, entity, reference_component_id, 1, .{ .entity_ref = test_target_id });
+    try testing.expect((world.getComponent(entity, ReferenceComponent).?).target.eql(test_target_id));
+
+    try instance.removeField(&world, &registry, entity, reference_component_id, 1);
+    try testing.expect((world.getComponent(entity, ReferenceComponent).?).target.eql(zimp.SceneEntityId.zero));
+    try testing.expectError(error.UnknownFieldNumber, instance.removeField(&world, &registry, entity, reference_component_id, 2));
 }
 
 test "SceneRuntimeInstance instantiates an empty document" {
