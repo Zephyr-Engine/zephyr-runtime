@@ -85,6 +85,7 @@ pub fn setField(self: *LoadedScene, entity: *const scene.SceneEntity, component:
     return self.instance.setField(
         self.world,
         self.registry,
+        self.assets,
         entity_id,
         component,
         number,
@@ -97,6 +98,7 @@ pub fn addField(self: *LoadedScene, entity: *const scene.SceneEntity, component:
     return self.instance.addField(
         self.world,
         self.registry,
+        self.assets,
         entity_id,
         component,
         number,

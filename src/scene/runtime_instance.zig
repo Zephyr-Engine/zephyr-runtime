@@ -145,12 +145,14 @@ pub fn setField(
     self: *SceneRuntimeInstance,
     world: *World,
     registry: *const Registry,
+    assets: *AssetManager,
     entity: zcs.EntityID,
     component: zimp.ComponentTypeId,
     number: u32,
     value: zimp.scene.Value,
 ) !void {
     const codec = registry.get(component) orelse return error.UnknownComponent;
+    try registerFieldAssetId(assets, codec.schema, number, value);
     try codec.writeField(world, entity, self.allocator, number, value);
 }
 
@@ -158,12 +160,21 @@ pub fn addField(
     self: *SceneRuntimeInstance,
     world: *World,
     registry: *const Registry,
+    assets: *AssetManager,
     entity: zcs.EntityID,
     component: zimp.ComponentTypeId,
     number: u32,
     value: zimp.scene.Value,
 ) !void {
-    return self.setField(world, registry, entity, component, number, value);
+    return self.setField(
+        world,
+        registry,
+        assets,
+        entity,
+        component,
+        number,
+        value,
+    );
 }
 
 pub fn removeField(
@@ -190,6 +201,22 @@ fn registerAssetId(assets: *AssetManager, kind: zimp.AssetKind, id: zimp.AssetId
         .shader_stage => _ = try assets.registerId(zimp.ZShader, id),
         .material => _ = try assets.registerId(Material, id),
     }
+}
+
+fn registerFieldAssetId(assets: *AssetManager, schema: zimp.scene.ComponentSchema, number: u32, value: zimp.scene.Value) !void {
+    const schema_field = for (schema.fields) |field| {
+        if (field.number == number) break field;
+    } else return;
+
+    const asset_kind = switch (schema_field.kind) {
+        .asset_ref => |kind| kind,
+        else => return,
+    };
+    const asset_id = switch (value) {
+        .asset_ref => |id| id,
+        else => return,
+    };
+    try registerAssetId(assets, asset_kind, asset_id);
 }
 
 const testing = std.testing;
@@ -341,7 +368,7 @@ test "SceneRuntimeInstance adds fields and restores defaults when fields are rem
     try instance.spawnEntities(&world, &registry, &assets, &scene);
     const entity = try instance.resolve(test_source_id);
 
-    try instance.addField(&world, &registry, entity, reference_component_id, 1, .{ .entity_ref = test_target_id });
+    try instance.addField(&world, &registry, &assets, entity, reference_component_id, 1, .{ .entity_ref = test_target_id });
     try testing.expect((world.getComponent(entity, ReferenceComponent).?).target.eql(test_target_id));
 
     try instance.removeField(&world, &registry, entity, reference_component_id, 1);
@@ -469,6 +496,45 @@ test "SceneRuntimeInstance registers asset references without loading them" {
     try testing.expect(remaining.texture.eql(test_texture_id));
     try testing.expect(remaining.shader.eql(test_shader_id));
     try testing.expect(remaining.material.eql(test_material_id));
+}
+
+test "SceneRuntimeInstance registers asset references written through setField and addField" {
+    if (@import("builtin").single_threaded) return error.SkipZigTest;
+
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var project = try testProjectWithAssets(&tmp);
+    defer project.root_dir.close(testing.io);
+    var device = try device_factory.init(testing.allocator, .opengl);
+    defer device.deinit();
+    var assets = try AssetManager.init(testing.allocator, testing.io, &project, &device);
+    defer assets.deinit();
+
+    var components = [_]zimp.scene.SceneComponent{
+        .{ .type_id = mesh_component_id, .fields = &.{} },
+        .{ .type_id = remaining_asset_component_id, .fields = &.{} },
+    };
+    var entities = [_]zimp.scene.SceneEntity{.{ .id = test_source_id, .name = "renderable", .components = &components, .prefab = .{} }};
+    var scene = testDocument(&entities);
+    defer scene.deinit();
+    var world = try initTestWorld();
+    defer world.deinit();
+    var registry = SchemaRegistry.init(testing.allocator);
+    defer registry.deinit();
+    try registry.register(MeshRenderComponent);
+    try registry.register(RemainingAssetReferences);
+    var instance = TestInstance.init(testing.allocator, test_scene_id);
+    defer instance.deinit(&world);
+
+    try instance.spawnEntities(&world, &registry, &assets, &scene);
+    const entity = try instance.resolve(test_source_id);
+    try instance.setField(&world, &registry, &assets, entity, mesh_component_id, 1, .{ .asset_ref = test_mesh_id });
+    try instance.addField(&world, &registry, &assets, entity, remaining_asset_component_id, 1, .{ .asset_ref = test_texture_id });
+
+    try testing.expect(assets.assets.contains(test_mesh_id));
+    try testing.expect(assets.assets.contains(test_texture_id));
+    try testing.expect((world.getComponent(entity, MeshRenderComponent).?).mesh.eql(test_mesh_id));
+    try testing.expect((world.getComponent(entity, RemainingAssetReferences).?).texture.eql(test_texture_id));
 }
 
 test "SceneRuntimeInstance fails when an asset reference is absent from the manifest" {
