@@ -109,6 +109,17 @@ pub const CameraComponent = struct {
     }
 };
 
+/// Marks the camera entity currently selected for rendering.
+pub const ActiveCamera = struct {
+    pub const schema_meta = scene.SchemaMeta{
+        .id = "32ccdb02-85b1-4a9e-9db4-4034dc5679bf",
+        .name = "zephyr.runtime.active_camera",
+        .display_name = "Active Camera",
+        .version = 1,
+        .fields = &.{},
+    };
+};
+
 fn boundsCenter(min: [3]f32, max: [3]f32) Vec3 {
     return Vec3.new(
         (min[0] + max[0]) * 0.5,

@@ -83,8 +83,10 @@ fn getDefaultWindowBounds() DefaultWindowBounds {
 
 const Window = @This();
 
+allocator: std.mem.Allocator,
 window: c.Window,
 data: WindowData,
+clipboard_buffer: std.ArrayList(u8) = .empty,
 event_fn: ?*const fn (*anyopaque, event.ZEvent) anyerror!void = null,
 event_ctx: *anyopaque = undefined,
 arrow_cursor: ?*glfw.GLFWcursor = null,
@@ -148,6 +150,7 @@ pub fn init(allocator: std.mem.Allocator, params: WindowParams) WindowError!*Win
     };
 
     win.* = Window{
+        .allocator = allocator,
         .window = window,
         .data = WindowData{
             .width = width,
@@ -248,6 +251,22 @@ pub fn setCursor(self: *Window, cursor: CursorKind) void {
     glfw.glfwSetCursor(self.window, handle);
 }
 
+pub fn getClipboard(self: *const Window) []const u8 {
+    const ptr = glfw.glfwGetClipboardString(self.window) orelse return "";
+    return std.mem.span(ptr);
+}
+
+pub fn setClipboard(self: *Window, text: []const u8) void {
+    if (!std.unicode.utf8ValidateSlice(text)) {
+        return;
+    }
+
+    self.clipboard_buffer.clearRetainingCapacity();
+    self.clipboard_buffer.appendSlice(self.allocator, text) catch return;
+    self.clipboard_buffer.append(self.allocator, 0) catch return;
+    glfw.glfwSetClipboardString(self.window, @ptrCast(self.clipboard_buffer.items.ptr));
+}
+
 pub fn getProcAddress(name: [*:0]const u8) ?*const anyopaque {
     return @ptrCast(glfw.glfwGetProcAddress(name));
 }
@@ -301,6 +320,7 @@ pub fn deinit(self: *Window, allocator: std.mem.Allocator) void {
     if (self.text_cursor) |cursor| glfw.glfwDestroyCursor(cursor);
     if (self.resize_x_cursor) |cursor| glfw.glfwDestroyCursor(cursor);
     if (self.resize_y_cursor) |cursor| glfw.glfwDestroyCursor(cursor);
+    self.clipboard_buffer.deinit(self.allocator);
     glfw.glfwDestroyWindow(self.window);
     glfw.glfwTerminate();
     allocator.destroy(self);

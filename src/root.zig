@@ -41,6 +41,7 @@ pub const scene_schema = struct {
     pub const CodecError = @import("scene/component_codec.zig").CodecError;
     pub const SceneRuntimeInstance = @import("scene/runtime_instance.zig");
     pub const SchemaRegistry = @import("scene/schema_registry.zig");
+    pub const LoadedScene = @import("scene/loaded_scene.zig");
     pub const SchemaMeta = zimp.scene.SchemaMeta;
 
     const derive_schema = @import("scene/derive_schema.zig");
@@ -52,7 +53,7 @@ const camera = @import("scene/camera.zig");
 
 pub const setActiveCamera = camera.setActive;
 pub const activeCamera = camera.active;
-pub const ActiveCamera = camera.ActiveCamera;
+pub const ActiveCamera = @import("ecs/components.zig").ActiveCamera;
 
 pub const ProjectManifest = zimp.ProjectManifest;
 pub const Project = @import("project/project.zig");
