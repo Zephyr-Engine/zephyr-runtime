@@ -53,7 +53,7 @@ const camera = @import("scene/camera.zig");
 
 pub const setActiveCamera = camera.setActive;
 pub const activeCamera = camera.active;
-pub const ActiveCamera = camera.ActiveCamera;
+pub const ActiveCamera = @import("ecs/components.zig").ActiveCamera;
 
 pub const ProjectManifest = zimp.ProjectManifest;
 pub const Project = @import("project/project.zig");

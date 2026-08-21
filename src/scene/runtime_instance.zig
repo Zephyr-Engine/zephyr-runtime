@@ -69,11 +69,6 @@ pub fn spawnEntities(self: *SceneRuntimeInstance, context: RuntimeContext, scene
     for (scene.entities) |entity_data| {
         _ = try self.spawnEntity(context, entity_data);
     }
-
-    if (scene.active_camera) |camera_id| {
-        const runtime_camera = try self.resolve(camera_id);
-        try camera.setActive(context.world, runtime_camera);
-    }
 }
 
 pub fn spawnEntity(
@@ -244,6 +239,8 @@ const RemainingAssetReferences = struct {
 const MeshRenderComponent = @import("../ecs/components.zig").MeshRenderComponent;
 const TransformComponent = @import("../ecs/components.zig").TransformComponent;
 const CameraComponent = @import("../ecs/components.zig").CameraComponent;
+const ActiveCameraComponent = @import("../ecs/components.zig").ActiveCamera;
+const ActiveCamera = @import("../ecs/components.zig").ActiveCamera;
 const TestInstance = SceneRuntimeInstance;
 const test_scene_id = zimp.SceneId.parseComptime("5a1efdc5-7a08-48a0-a59f-f1bbd932a7b7");
 const test_project_id = zimp.ProjectId.parseComptime("6f3279dd-695b-4bb1-a32b-ef9ac03b3260");
@@ -254,6 +251,7 @@ const unknown_component_id = zimp.ComponentTypeId.parseComptime("d7a5e9f2-3a2d-4
 const mesh_component_id = zimp.ComponentTypeId.parseComptime(MeshRenderComponent.schema_meta.id);
 const transform_component_id = zimp.ComponentTypeId.parseComptime(TransformComponent.schema_meta.id);
 const camera_component_id = zimp.ComponentTypeId.parseComptime(CameraComponent.schema_meta.id);
+const active_camera_component_id = zimp.ComponentTypeId.parseComptime(ActiveCameraComponent.schema_meta.id);
 const remaining_asset_component_id = zimp.ComponentTypeId.parseComptime(RemainingAssetReferences.schema_meta.id);
 const test_mesh_id = zimp.AssetId.parseComptime("8d522c0b-45e6-4e54-8c04-5f1bf913d1be");
 const test_material_id = zimp.AssetId.parseComptime("7e6d1a1f-209f-4945-a2f5-283c895803cf");
@@ -264,7 +262,7 @@ const missing_asset_id = zimp.AssetId.parseComptime("da396a84-d7d9-45f4-8f6a-2b1
 fn initTestWorld() !zcs.World {
     var world = zcs.World.init(testing.allocator);
     errdefer world.deinit();
-    inline for (.{ ReferenceComponent, RemainingAssetReferences, MeshRenderComponent, TransformComponent, CameraComponent }) |Component| {
+    inline for (.{ ReferenceComponent, RemainingAssetReferences, MeshRenderComponent, TransformComponent, CameraComponent, ActiveCamera }) |Component| {
         _ = try world.registerType(Component, .{ .schema_hash = 0 });
     }
     return world;
@@ -413,38 +411,24 @@ test "SceneRuntimeInstance applies the document active camera" {
     var components = [_]zimp.scene.SceneComponent{
         .{ .type_id = transform_component_id, .fields = &.{} },
         .{ .type_id = camera_component_id, .fields = &.{} },
+        .{ .type_id = active_camera_component_id, .fields = &.{} },
     };
     var entities = [_]zimp.scene.SceneEntity{.{ .id = test_source_id, .name = "camera", .components = &components, .prefab = .{} }};
     var scene = testDocument(&entities);
     defer scene.deinit();
-    scene.active_camera = test_source_id;
     var world = try initTestWorld();
     defer world.deinit();
     var registry = SchemaRegistry.init(testing.allocator);
     defer registry.deinit();
     try registry.register(TransformComponent);
     try registry.register(CameraComponent);
+    try registry.register(ActiveCameraComponent);
     var instance = TestInstance.init(testing.allocator, test_scene_id);
     defer instance.deinit(&world);
     var assets: AssetManager = undefined;
 
     try instance.spawnEntities(testContext(&world, &registry, &assets), &scene);
     try testing.expectEqual(try instance.resolve(test_source_id), activeCamera(&world).?);
-}
-
-test "SceneRuntimeInstance rejects an active camera absent from the instance" {
-    var scene = testDocument(&.{});
-    defer scene.deinit();
-    scene.active_camera = test_source_id;
-    var world = try initTestWorld();
-    defer world.deinit();
-    var registry = SchemaRegistry.init(testing.allocator);
-    defer registry.deinit();
-    var instance = TestInstance.init(testing.allocator, test_scene_id);
-    defer instance.deinit(&world);
-    var assets: AssetManager = undefined;
-
-    try testing.expectError(error.SceneEntityNotFound, instance.spawnEntities(testContext(&world, &registry, &assets), &scene));
 }
 
 test "SceneRuntimeInstance registers asset references without loading them" {

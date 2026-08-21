@@ -33,6 +33,7 @@ pub fn init(self: *WorldInstance, allocator: std.mem.Allocator, schemas: *Schema
         components.TransformComponent,
         components.MeshRenderComponent,
         components.CameraComponent,
+        components.ActiveCamera,
     });
     try schemas.registerComponents(game.components);
 
@@ -108,6 +109,7 @@ pub fn registerEngineComponents(world: *zcs.World) !void {
     _ = try registerComponent(world, components.TransformComponent, "zephyr.transform");
     _ = try registerComponent(world, components.MeshRenderComponent, "zephyr.meshrender");
     _ = try registerComponent(world, components.CameraComponent, "zephyr.camera");
+    _ = try registerComponent(world, components.ActiveCamera, "zephyr.active_camera");
 }
 
 fn registerComponent(world: *zcs.World, comptime T: type, name: []const u8) !zcs.ComponentId {
@@ -144,6 +146,7 @@ test "init registers engine components and schemas" {
     try testing.expect(schemas.getByName("zephyr.runtime.transform") != null);
     try testing.expect(schemas.getByName("zephyr.runtime.mesh.render") != null);
     try testing.expect(schemas.getByName("zephyr.runtime.camera") != null);
+    try testing.expect(schemas.getByName("zephyr.runtime.active_camera") != null);
     try testing.expect(instance.active_scene == null);
 }
 
