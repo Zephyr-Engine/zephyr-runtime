@@ -16,9 +16,6 @@
             .url = "git+https://github.com/ziglibs/zlm.git#35ab7df57cfb5392a11486f6e4b03a82f849a118",
             .hash = "zlm-0.1.0-LoZ6yDawAADMopilIe9MDzer0UqmruCy_PuhNv4OMc7c",
         },
-        .zimp = .{
-            .path = "../zimp",
-        },
         .zcs = .{
             .url = "git+https://github.com/Zephyr-Engine/zcs.git#1d4701563b9dea5aa35d1048445cc8d7c7d1b16f",
             .hash = "zcs-0.0.0-ypv9mzQrAQAzqv3TrRF-PFxJve01bMrroZt5XtixxtfT",
@@ -26,6 +23,10 @@
         .zob = .{
             .url = "git+https://github.com/Zephyr-Engine/zob.git#c4ee545ba07e59c4aac95bd5c39f932d2ee9668d",
             .hash = "zob-1.2.0-qYajyLa8AAA0NgQZaYY6DTC8GuKqWlgpOXkq-Xze4soh",
+        },
+        .zimp = .{
+            .url = "git+https://github.com/Zephyr-Engine/zimp.git#1edc8555be245fadbfef36afcbb7be4abe7fe69b",
+            .hash = "zimp-0.0.0-jO8AWrWREwDzaeRBnh8vaDih26snFgDblAfrQJsF-oo3",
         },
     },
     .paths = .{

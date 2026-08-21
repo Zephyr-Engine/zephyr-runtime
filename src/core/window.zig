@@ -257,7 +257,10 @@ pub fn getClipboard(self: *const Window) []const u8 {
 }
 
 pub fn setClipboard(self: *Window, text: []const u8) void {
-    if (!std.unicode.utf8ValidateSlice(text)) return;
+    if (!std.unicode.utf8ValidateSlice(text)) {
+        return;
+    }
+
     self.clipboard_buffer.clearRetainingCapacity();
     self.clipboard_buffer.appendSlice(self.allocator, text) catch return;
     self.clipboard_buffer.append(self.allocator, 0) catch return;
