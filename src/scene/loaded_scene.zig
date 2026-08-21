@@ -12,124 +12,78 @@ const scene = zimp.scene;
 
 const LoadedScene = @This();
 
-registry: *const SchemaRegistry,
+const RuntimeContext = SceneRuntimeInstance.RuntimeContext;
+
 instance: SceneRuntimeInstance,
 document: scene.SceneDocument,
-assets: *AssetManager,
-world: *zcs.World,
+context: RuntimeContext,
 
 pub fn init(allocator: std.mem.Allocator, document: scene.SceneDocument, registry: *SchemaRegistry, assets: *AssetManager, world: *zcs.World) !LoadedScene {
     return .{
         .instance = .init(allocator, document.scene_id),
-        .registry = registry,
         .document = document,
-        .assets = assets,
-        .world = world,
+        .context = .{
+            .world = world,
+            .registry = registry,
+            .assets = assets,
+        },
     };
 }
 
 pub fn start(self: *LoadedScene) !void {
-    try self.instance.spawnEntities(
-        self.world,
-        self.registry,
-        self.assets,
-        &self.document,
-    );
+    try self.instance.spawnEntities(self.context, &self.document);
 }
 
 pub fn spawnEntity(self: *LoadedScene, entity: scene.SceneEntity) !zcs.EntityID {
-    return self.instance.spawnEntity(
-        self.world,
-        self.registry,
-        self.assets,
-        entity,
-    );
+    return self.instance.spawnEntity(self.context, entity);
 }
 
 pub fn removeEntity(self: *LoadedScene, id: zimp.SceneEntityId) !void {
-    return self.instance.despawnEntity(self.world, id);
+    return self.instance.despawnEntity(self.context, id);
 }
 
 pub fn setActiveCamera(self: *LoadedScene, id: zimp.SceneEntityId) !void {
     const entity_id = try self.instance.resolve(id);
-    try camera.setActive(self.world, entity_id);
+    try camera.setActive(self.context.world, entity_id);
 }
 
 pub fn clearActiveCamera(self: *LoadedScene) void {
-    camera.clearActive(self.world);
+    camera.clearActive(self.context.world);
 }
 
 pub fn addComponent(self: *LoadedScene, entity: *const scene.SceneEntity, component: scene.SceneComponent) !void {
     const entity_id = try self.instance.resolve(entity.id);
-    return self.instance.addComponent(
-        self.world,
-        self.registry,
-        self.assets,
-        entity_id,
-        component,
-    );
+    return self.instance.addComponent(self.context, entity_id, component);
 }
 
 pub fn removeComponent(self: *LoadedScene, entity: *const scene.SceneEntity, component: zimp.ComponentTypeId) !void {
     const entity_id = try self.instance.resolve(entity.id);
-    return self.instance.removeComponent(
-        self.world,
-        self.registry,
-        entity_id,
-        component,
-    );
+    return self.instance.removeComponent(self.context, entity_id, component);
 }
 
 pub fn setField(self: *LoadedScene, entity: *const scene.SceneEntity, component: zimp.ComponentTypeId, number: u32, value: zimp.scene.Value) !void {
     const entity_id = try self.instance.resolve(entity.id);
-    return self.instance.setField(
-        self.world,
-        self.registry,
-        self.assets,
-        entity_id,
-        component,
-        number,
-        value,
-    );
+    return self.instance.setField(self.context, entity_id, component, number, value);
 }
 
 pub fn addField(self: *LoadedScene, entity: *const scene.SceneEntity, component: zimp.ComponentTypeId, number: u32, value: zimp.scene.Value) !void {
     const entity_id = try self.instance.resolve(entity.id);
-    return self.instance.addField(
-        self.world,
-        self.registry,
-        self.assets,
-        entity_id,
-        component,
-        number,
-        value,
-    );
+    return self.instance.addField(self.context, entity_id, component, number, value);
 }
 
 pub fn removeField(self: *LoadedScene, entity: *const scene.SceneEntity, component: zimp.ComponentTypeId, number: u32) !void {
     const entity_id = try self.instance.resolve(entity.id);
-    return self.instance.removeField(
-        self.world,
-        self.registry,
-        entity_id,
-        component,
-        number,
-    );
+    return self.instance.removeField(self.context, entity_id, component, number);
 }
 
 pub fn deinit(self: *LoadedScene) void {
-    self.instance.deinit(self.world);
+    self.instance.deinit(self.context.world);
     self.document.deinit();
 }
 
 pub fn reset(self: *LoadedScene) !void {
-    self.instance.reset(self.world);
-    try self.instance.spawnEntities(
-        self.world,
-        self.registry,
-        self.assets,
-        &self.document,
-    );
+    self.instance.reset(self.context.world);
+    try self.instance.spawnEntities(self.context, &self.document);
 }
 
 const testing = std.testing;

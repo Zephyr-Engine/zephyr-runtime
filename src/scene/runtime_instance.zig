@@ -18,6 +18,12 @@ const SceneRuntimeInstance = @This();
 const World = zcs.World;
 const Registry = SchemaRegistry;
 
+pub const RuntimeContext = struct {
+    world: *World,
+    registry: *const Registry,
+    assets: *AssetManager,
+};
+
 allocator: std.mem.Allocator,
 scene_id: zimp.SceneId,
 scene_to_runtime: std.AutoHashMap(zimp.SceneEntityId, zcs.EntityID),
@@ -59,33 +65,29 @@ pub fn resolve(self: *const SceneRuntimeInstance, id: zimp.SceneEntityId) !zcs.E
     return self.scene_to_runtime.get(id) orelse return error.SceneEntityNotFound;
 }
 
-pub fn spawnEntities(self: *SceneRuntimeInstance, world: *World, registry: *const Registry, assets: *AssetManager, scene: *const zimp.scene.SceneDocument) !void {
+pub fn spawnEntities(self: *SceneRuntimeInstance, context: RuntimeContext, scene: *const zimp.scene.SceneDocument) !void {
     for (scene.entities) |entity_data| {
-        _ = try self.spawnEntity(world, registry, assets, entity_data);
+        _ = try self.spawnEntity(context, entity_data);
     }
 
     if (scene.active_camera) |camera_id| {
         const runtime_camera = try self.resolve(camera_id);
-        try camera.setActive(world, runtime_camera);
+        try camera.setActive(context.world, runtime_camera);
     }
 }
 
 pub fn spawnEntity(
     self: *SceneRuntimeInstance,
-    world: *World,
-    registry: *const Registry,
-    assets: *AssetManager,
+    context: RuntimeContext,
     entity: zimp.scene.SceneEntity,
 ) !zcs.EntityID {
-    const entity_id = try world.spawn();
+    const entity_id = try context.world.spawn();
     try self.scene_to_runtime.put(entity.id, entity_id);
     try self.runtime_to_scene.put(entity_id, entity.id);
 
     for (entity.components) |component_data| {
         try self.addComponent(
-            world,
-            registry,
-            assets,
+            context,
             entity_id,
             component_data,
         );
@@ -95,14 +97,12 @@ pub fn spawnEntity(
 
 pub fn addComponent(
     self: *SceneRuntimeInstance,
-    world: *World,
-    registry: *const Registry,
-    assets: *AssetManager,
+    context: RuntimeContext,
     entity: zcs.EntityID,
     component: zimp.scene.SceneComponent,
 ) !void {
-    const codec = registry.get(component.type_id) orelse return error.UnknownComponent;
-    try codec.attach(world, entity, self.allocator, component.asData());
+    const codec = context.registry.get(component.type_id) orelse return error.UnknownComponent;
+    try codec.attach(context.world, entity, self.allocator, component.asData());
 
     for (component.fields) |field| {
         const schema_field = for (codec.schema.fields) |candidate| {
@@ -119,57 +119,50 @@ pub fn addComponent(
             .asset_ref => |id| id,
             else => continue,
         };
-        try registerAssetId(assets, asset_kind, asset_id);
+        try registerAssetId(context.assets, asset_kind, asset_id);
     }
 }
 
-pub fn despawnEntity(self: *SceneRuntimeInstance, world: *World, id: zimp.SceneEntityId) !void {
+pub fn despawnEntity(self: *SceneRuntimeInstance, context: RuntimeContext, id: zimp.SceneEntityId) !void {
     const entity = try self.resolve(id);
     _ = self.runtime_to_scene.remove(entity);
     _ = self.scene_to_runtime.remove(id);
-    world.despawn(entity);
+    context.world.despawn(entity);
 }
 
 pub fn removeComponent(
     self: *SceneRuntimeInstance,
-    world: *World,
-    registry: *const Registry,
+    context: RuntimeContext,
     entity: zcs.EntityID,
     component: zimp.ComponentTypeId,
 ) !void {
-    const codec = registry.get(component) orelse return error.UnknownComponent;
-    try codec.detach(world, entity, self.allocator);
+    const codec = context.registry.get(component) orelse return error.UnknownComponent;
+    try codec.detach(context.world, entity, self.allocator);
 }
 
 pub fn setField(
     self: *SceneRuntimeInstance,
-    world: *World,
-    registry: *const Registry,
-    assets: *AssetManager,
+    context: RuntimeContext,
     entity: zcs.EntityID,
     component: zimp.ComponentTypeId,
     number: u32,
     value: zimp.scene.Value,
 ) !void {
-    const codec = registry.get(component) orelse return error.UnknownComponent;
-    try registerFieldAssetId(assets, codec.schema, number, value);
-    try codec.writeField(world, entity, self.allocator, number, value);
+    const codec = context.registry.get(component) orelse return error.UnknownComponent;
+    try registerFieldAssetId(context.assets, codec.schema, number, value);
+    try codec.writeField(context.world, entity, self.allocator, number, value);
 }
 
 pub fn addField(
     self: *SceneRuntimeInstance,
-    world: *World,
-    registry: *const Registry,
-    assets: *AssetManager,
+    context: RuntimeContext,
     entity: zcs.EntityID,
     component: zimp.ComponentTypeId,
     number: u32,
     value: zimp.scene.Value,
 ) !void {
     return self.setField(
-        world,
-        registry,
-        assets,
+        context,
         entity,
         component,
         number,
@@ -179,16 +172,15 @@ pub fn addField(
 
 pub fn removeField(
     self: *SceneRuntimeInstance,
-    world: *World,
-    registry: *const Registry,
+    context: RuntimeContext,
     entity: zcs.EntityID,
     component: zimp.ComponentTypeId,
     number: u32,
 ) !void {
-    const codec = registry.get(component) orelse return error.UnknownComponent;
+    const codec = context.registry.get(component) orelse return error.UnknownComponent;
     for (codec.schema.fields) |field| {
         if (field.number == number) {
-            return codec.writeField(world, entity, self.allocator, number, field.default_value);
+            return codec.writeField(context.world, entity, self.allocator, number, field.default_value);
         }
     }
     return error.UnknownFieldNumber;
@@ -278,6 +270,14 @@ fn initTestWorld() !zcs.World {
     return world;
 }
 
+fn testContext(world: *World, registry: *const Registry, assets: *AssetManager) RuntimeContext {
+    return .{
+        .world = world,
+        .registry = registry,
+        .assets = assets,
+    };
+}
+
 fn testDocument(entities: []zimp.scene.SceneEntity) zimp.scene.SceneDocument {
     return .{
         .arena = std.heap.ArenaAllocator.init(testing.allocator),
@@ -327,7 +327,7 @@ test "SceneRuntimeInstance preserves scene entity references and resolves them t
     defer instance.deinit(&world);
 
     var assets: AssetManager = undefined;
-    try instance.spawnEntities(&world, &registry, &assets, &scene);
+    try instance.spawnEntities(testContext(&world, &registry, &assets), &scene);
 
     const source = try instance.resolve(test_source_id);
     const target = try instance.resolve(test_target_id);
@@ -365,15 +365,15 @@ test "SceneRuntimeInstance adds fields and restores defaults when fields are rem
     defer instance.deinit(&world);
     var assets: AssetManager = undefined;
 
-    try instance.spawnEntities(&world, &registry, &assets, &scene);
+    try instance.spawnEntities(testContext(&world, &registry, &assets), &scene);
     const entity = try instance.resolve(test_source_id);
 
-    try instance.addField(&world, &registry, &assets, entity, reference_component_id, 1, .{ .entity_ref = test_target_id });
+    try instance.addField(testContext(&world, &registry, &assets), entity, reference_component_id, 1, .{ .entity_ref = test_target_id });
     try testing.expect((world.getComponent(entity, ReferenceComponent).?).target.eql(test_target_id));
 
-    try instance.removeField(&world, &registry, entity, reference_component_id, 1);
+    try instance.removeField(testContext(&world, &registry, &assets), entity, reference_component_id, 1);
     try testing.expect((world.getComponent(entity, ReferenceComponent).?).target.eql(zimp.SceneEntityId.zero));
-    try testing.expectError(error.UnknownFieldNumber, instance.removeField(&world, &registry, entity, reference_component_id, 2));
+    try testing.expectError(error.UnknownFieldNumber, instance.removeField(testContext(&world, &registry, &assets), entity, reference_component_id, 2));
 }
 
 test "SceneRuntimeInstance instantiates an empty document" {
@@ -387,7 +387,7 @@ test "SceneRuntimeInstance instantiates an empty document" {
     defer instance.deinit(&world);
 
     var assets: AssetManager = undefined;
-    try instance.spawnEntities(&world, &registry, &assets, &scene);
+    try instance.spawnEntities(testContext(&world, &registry, &assets), &scene);
     try testing.expectError(error.SceneEntityNotFound, instance.resolve(test_source_id));
 }
 
@@ -404,7 +404,7 @@ test "SceneRuntimeInstance reports an unregistered component type" {
     defer instance.deinit(&world);
 
     var assets: AssetManager = undefined;
-    try testing.expectError(error.UnknownComponent, instance.spawnEntities(&world, &registry, &assets, &scene));
+    try testing.expectError(error.UnknownComponent, instance.spawnEntities(testContext(&world, &registry, &assets), &scene));
     const source = try instance.resolve(test_source_id);
     try testing.expect(world.isAlive(source));
 }
@@ -428,7 +428,7 @@ test "SceneRuntimeInstance applies the document active camera" {
     defer instance.deinit(&world);
     var assets: AssetManager = undefined;
 
-    try instance.spawnEntities(&world, &registry, &assets, &scene);
+    try instance.spawnEntities(testContext(&world, &registry, &assets), &scene);
     try testing.expectEqual(try instance.resolve(test_source_id), activeCamera(&world).?);
 }
 
@@ -444,7 +444,7 @@ test "SceneRuntimeInstance rejects an active camera absent from the instance" {
     defer instance.deinit(&world);
     var assets: AssetManager = undefined;
 
-    try testing.expectError(error.SceneEntityNotFound, instance.spawnEntities(&world, &registry, &assets, &scene));
+    try testing.expectError(error.SceneEntityNotFound, instance.spawnEntities(testContext(&world, &registry, &assets), &scene));
 }
 
 test "SceneRuntimeInstance registers asset references without loading them" {
@@ -483,7 +483,7 @@ test "SceneRuntimeInstance registers asset references without loading them" {
     var instance = TestInstance.init(testing.allocator, test_scene_id);
     defer instance.deinit(&world);
 
-    try instance.spawnEntities(&world, &registry, &assets, &scene);
+    try instance.spawnEntities(testContext(&world, &registry, &assets), &scene);
 
     try testing.expect(assets.assets.contains(test_mesh_id));
     try testing.expect(assets.assets.contains(test_material_id));
@@ -526,10 +526,10 @@ test "SceneRuntimeInstance registers asset references written through setField a
     var instance = TestInstance.init(testing.allocator, test_scene_id);
     defer instance.deinit(&world);
 
-    try instance.spawnEntities(&world, &registry, &assets, &scene);
+    try instance.spawnEntities(testContext(&world, &registry, &assets), &scene);
     const entity = try instance.resolve(test_source_id);
-    try instance.setField(&world, &registry, &assets, entity, mesh_component_id, 1, .{ .asset_ref = test_mesh_id });
-    try instance.addField(&world, &registry, &assets, entity, remaining_asset_component_id, 1, .{ .asset_ref = test_texture_id });
+    try instance.setField(testContext(&world, &registry, &assets), entity, mesh_component_id, 1, .{ .asset_ref = test_mesh_id });
+    try instance.addField(testContext(&world, &registry, &assets), entity, remaining_asset_component_id, 1, .{ .asset_ref = test_texture_id });
 
     try testing.expect(assets.assets.contains(test_mesh_id));
     try testing.expect(assets.assets.contains(test_texture_id));
@@ -562,5 +562,5 @@ test "SceneRuntimeInstance fails when an asset reference is absent from the mani
     var instance = TestInstance.init(testing.allocator, test_scene_id);
     defer instance.deinit(&world);
 
-    try testing.expectError(error.AssetNotFound, instance.spawnEntities(&world, &registry, &assets, &scene));
+    try testing.expectError(error.AssetNotFound, instance.spawnEntities(testContext(&world, &registry, &assets), &scene));
 }
