@@ -125,8 +125,8 @@ pub fn addComponent(
 
 pub fn despawnEntity(self: *SceneRuntimeInstance, world: *World, id: zimp.SceneEntityId) !void {
     const entity = try self.resolve(id);
-    self.runtime_to_scene.remove(entity);
-    self.scene_to_runtime.remove(id);
+    _ = self.runtime_to_scene.remove(entity);
+    _ = self.scene_to_runtime.remove(id);
     world.despawn(entity);
 }
 
