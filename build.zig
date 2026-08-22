@@ -16,6 +16,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    b.modules.put(b.graph.arena, b.dupe("zimp"), zimp_dep.module("zimp")) catch @panic("OOM");
 
     const zob_dep = b.dependency("zob", .{
         .target = target,

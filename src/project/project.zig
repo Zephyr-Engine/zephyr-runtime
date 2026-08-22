@@ -34,6 +34,13 @@ pub fn loadScene(self: *const Project, allocator: std.mem.Allocator, io: std.Io,
     });
 }
 
+pub fn saveScene(self: *const Project, allocator: std.mem.Allocator, io: std.Io, path: []const u8, document: *const zimp.scene.SceneDocument) !void {
+    try document.write(allocator, io, self.root_dir, path, .{
+        .project_id = self.manifest.project_id,
+        .format = .json,
+    });
+}
+
 pub fn loadDefaultScene(self: *const Project, allocator: std.mem.Allocator, io: std.Io) !zimp.scene.SceneDocument {
     const path = self.manifest.default_scene orelse return error.DefaultSceneNotFound;
     return self.loadScene(allocator, io, path);
