@@ -1,10 +1,21 @@
-const std = @import("std");
 const zimp = @import("zimp");
+const std = @import("std");
+
+const Geometry = @import("rhi/geometry.zig");
 const Device = @import("rhi/device.zig");
 const Buffer = @import("rhi/buffer.zig");
-const Geometry = @import("rhi/geometry.zig");
-const layout = @import("layout.zig");
 const math = @import("../core/math.zig");
+const layout = @import("layout.zig");
+
+pub const AttributeLocation = enum(u32) {
+    Position = 0,
+    Normal = 1,
+    UV0 = 2,
+    UV1 = 3,
+    Tangent = 4,
+    JointIndices = 5,
+    JointWeights = 6,
+};
 
 const Mesh = @This();
 allocator: std.mem.Allocator,
@@ -55,26 +66,25 @@ fn loadPart(allocator: std.mem.Allocator, device: *Device, mesh: zimp.formats.zm
 
     var streams: std.ArrayList(Geometry.VertexStream) = .empty;
     defer streams.deinit(allocator);
-    var location: u32 = 0;
 
-    try addStream(allocator, device, &buffers, &streams, std.mem.sliceAsBytes(mesh.positions), &location, .Float3, false);
+    try addStream(allocator, device, &buffers, &streams, std.mem.sliceAsBytes(mesh.positions), AttributeLocation.Position, .Float3, false);
     if (mesh.normals) |v| {
-        try addStream(allocator, device, &buffers, &streams, std.mem.sliceAsBytes(v), &location, .Short2, true);
+        try addStream(allocator, device, &buffers, &streams, std.mem.sliceAsBytes(v), AttributeLocation.Normal, .Short2, true);
     }
     if (mesh.uv0) |v| {
-        try addStream(allocator, device, &buffers, &streams, std.mem.sliceAsBytes(v), &location, .UShort2, true);
+        try addStream(allocator, device, &buffers, &streams, std.mem.sliceAsBytes(v), AttributeLocation.UV0, .UShort2, true);
     }
     if (mesh.uv1) |v| {
-        try addStream(allocator, device, &buffers, &streams, std.mem.sliceAsBytes(v), &location, .UShort2, true);
+        try addStream(allocator, device, &buffers, &streams, std.mem.sliceAsBytes(v), AttributeLocation.UV1, .UShort2, true);
     }
     if (mesh.tangents) |v| {
-        try addStream(allocator, device, &buffers, &streams, std.mem.sliceAsBytes(v), &location, .Half4, false);
+        try addStream(allocator, device, &buffers, &streams, std.mem.sliceAsBytes(v), AttributeLocation.Tangent, .Half4, false);
     }
     if (mesh.joint_indices) |v| {
-        try addStream(allocator, device, &buffers, &streams, std.mem.sliceAsBytes(v), &location, .UShort4, false);
+        try addStream(allocator, device, &buffers, &streams, std.mem.sliceAsBytes(v), AttributeLocation.JointIndices, .UShort4, false);
     }
     if (mesh.joint_weights) |v| {
-        try addStream(allocator, device, &buffers, &streams, std.mem.sliceAsBytes(v), &location, .Half4, false);
+        try addStream(allocator, device, &buffers, &streams, std.mem.sliceAsBytes(v), AttributeLocation.JointWeights, .Half4, false);
     }
 
     const index_bytes: []const u8 = if (mesh.indices_u16) |v| std.mem.sliceAsBytes(v) else if (mesh.indices_u32) |v| std.mem.sliceAsBytes(v) else return error.MissingIndexBuffer;
@@ -104,7 +114,16 @@ fn loadPart(allocator: std.mem.Allocator, device: *Device, mesh: zimp.formats.zm
     };
 }
 
-fn addStream(allocator: std.mem.Allocator, device: *Device, buffers: *std.ArrayList(Buffer), streams: *std.ArrayList(Geometry.VertexStream), bytes: []const u8, location: *u32, data_type: layout.DataType, normalized: bool) !void {
+fn addStream(
+    allocator: std.mem.Allocator,
+    device: *Device,
+    buffers: *std.ArrayList(Buffer),
+    streams: *std.ArrayList(Geometry.VertexStream),
+    bytes: []const u8,
+    location: AttributeLocation,
+    data_type: layout.DataType,
+    normalized: bool,
+) !void {
     const buffer = try device.createBuffer(.{ .size = bytes.len, .usage = .{ .vertex = true }, .initial_data = bytes });
     var buffer_owned = true;
     errdefer if (buffer_owned) {
@@ -116,9 +135,8 @@ fn addStream(allocator: std.mem.Allocator, device: *Device, buffers: *std.ArrayL
     buffer_owned = false;
     try streams.append(
         allocator,
-        .{ .buffer = buffer, .attribute = .{ .location = location.*, .data_type = data_type, .normalized = normalized } },
+        .{ .buffer = buffer, .attribute = .{ .location = @intFromEnum(location), .data_type = data_type, .normalized = normalized } },
     );
-    location.* += 1;
 }
 
 pub fn materialIdForSlot(self: *const Mesh, slot: u16) ?zimp.AssetId {
