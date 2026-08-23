@@ -121,7 +121,6 @@ test "LoadedScene keeps runtime entities and components synchronized through its
         .scene_id = test_scene_id,
         .project_id = test_project_id,
         .name = "loaded-scene-test",
-        .file_name = "loaded-scene-test.zscene",
         .entities = &entities,
     };
 
