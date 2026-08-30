@@ -20,7 +20,7 @@ pub const TextureBinding = struct {
     unit: u16,
     view: TextureView,
     sampler: Sampler,
-    resource_name: []const u8,
+    sampler_name: []const u8,
     /// Resolved once in `init`; `bindResources` runs per draw batch and should
     /// not pay for a uniform name lookup there.
     location: ?GraphicsPipeline.UniformLocation = null,
@@ -50,7 +50,7 @@ pub fn init(
     }
 
     for (texture_bindings) |*binding| {
-        binding.location = device.graphicsPipelineUniformLocation(pipeline, binding.resource_name);
+        binding.location = device.graphicsPipelineUniformLocation(pipeline, binding.sampler_name);
     }
 
     const alpha_cutoff_location = if (source.render_state.alpha_mode == .alpha_test)

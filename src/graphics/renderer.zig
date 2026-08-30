@@ -160,16 +160,16 @@ fn renderFromCamera(self: *Renderer, world: *zcs.World, assets: *AssetManager, v
     // relative order does not matter; pdq beats a stable sort on items this wide.
     std.sort.pdq(DrawItem, self.submissions.items, {}, DrawItem.lessThan);
 
-    self.renderQueue(view, projection);
+    self.renderQueue(view, projection, camera_transform.position);
 }
 
-/// The draw queue is sorted by pipeline then material, so consecutive items
-/// usually share both. Binding state only when it actually changes turns the
-/// per-draw cost into a single `u_model` upload for the common case.
-fn renderQueue(self: *Renderer, view: math.Mat4, projection: math.Mat4) void {
+fn renderQueue(self: *Renderer, view: math.Mat4, projection: math.Mat4, camera_pos: math.Vec3) void {
     var bound_pipeline: ?u64 = null;
     var bound_material: ?*const Material = null;
     var model_location: ?GraphicsPipeline.UniformLocation = null;
+    var normal_matrix_location: ?GraphicsPipeline.UniformLocation = null;
+    var uv_min_location: ?GraphicsPipeline.UniformLocation = null;
+    var uv_scale_location: ?GraphicsPipeline.UniformLocation = null;
 
     for (self.submissions.items) |draw_item| {
         const pipeline = draw_item.material.pipeline;
@@ -178,13 +178,17 @@ fn renderQueue(self: *Renderer, view: math.Mat4, projection: math.Mat4) void {
             self.device.bindGraphicsPipeline(pipeline);
             bound_pipeline = pipeline.sort_key;
 
-            // Uniform locations are per-program, so resolving them once per
-            // pipeline switch avoids a name lookup on every draw.
             model_location = self.device.graphicsPipelineUniformLocation(pipeline, "u_model");
+            normal_matrix_location = self.device.graphicsPipelineUniformLocation(pipeline, "u_normal_matrix");
+            uv_min_location = self.device.graphicsPipelineUniformLocation(pipeline, "u_uv_min");
+            uv_scale_location = self.device.graphicsPipelineUniformLocation(pipeline, "u_uv_scale");
+
             self.device.setGraphicsPipelineUniformByName(pipeline, "u_view", .{ .mat4 = view.fields });
             self.device.setGraphicsPipelineUniformByName(pipeline, "u_projection", .{ .mat4 = projection.fields });
+            self.device.setGraphicsPipelineUniformByName(pipeline, "u_camera_pos", .{
+                .vec3 = .{ camera_pos.x, camera_pos.y, camera_pos.z },
+            });
 
-            // A new program means the previous material's bindings are stale.
             bound_material = null;
         }
 
@@ -195,6 +199,18 @@ fn renderQueue(self: *Renderer, view: math.Mat4, projection: math.Mat4) void {
 
         if (model_location) |location| {
             self.device.setGraphicsPipelineUniform(pipeline, location, .{ .mat4 = draw_item.model.fields });
+        }
+
+        if (normal_matrix_location) |location| {
+            self.device.setGraphicsPipelineUniform(pipeline, location, .{ .mat3 = math.normalMatrix(draw_item.model).fields });
+        }
+
+        if (uv_min_location) |location| {
+            self.device.setGraphicsPipelineUniform(pipeline, location, .{ .vec2 = draw_item.part.uv_min });
+        }
+
+        if (uv_scale_location) |location| {
+            self.device.setGraphicsPipelineUniform(pipeline, location, .{ .vec2 = draw_item.part.uv_scale });
         }
 
         self.device.drawIndexed(draw_item.part.geometry, draw_item.submesh.index_offset, draw_item.submesh.index_count);

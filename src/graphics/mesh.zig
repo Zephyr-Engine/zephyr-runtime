@@ -30,6 +30,8 @@ pub const Part = struct {
     bounds_min: [3]f32,
     bounds_max: [3]f32,
     submeshes: []Submesh,
+    uv_min: [2]f32,
+    uv_scale: [2]f32,
 
     pub fn deinit(self: *Part, allocator: std.mem.Allocator, device: *Device) void {
         allocator.free(self.submeshes);
@@ -110,6 +112,8 @@ fn loadPart(allocator: std.mem.Allocator, device: *Device, mesh: zimp.formats.zm
         .transform = transform,
         .bounds_min = mesh.aabb_min,
         .bounds_max = mesh.aabb_max,
+        .uv_min = mesh.uv0_min,
+        .uv_scale = mesh.uv0_scale,
         .submeshes = submeshes,
     };
 }

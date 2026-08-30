@@ -9,6 +9,29 @@ pub const Mat4 = zlm.Mat4;
 pub const Mat3 = zlm.Mat3;
 pub const Mat2 = zlm.Mat2;
 
+pub fn normalMatrix(self: Mat4) Mat3 {
+    const m = self.fields;
+    const a = m[0][0];
+    const b = m[0][1];
+    const c = m[0][2];
+    const d = m[1][0];
+    const e = m[1][1];
+    const f = m[1][2];
+    const g = m[2][0];
+    const h = m[2][1];
+    const i = m[2][2];
+
+    const det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+    std.debug.assert(det != 0);
+    const inv_det = 1.0 / det;
+
+    return .{ .fields = .{
+        .{ (e * i - f * h) * inv_det, (f * g - d * i) * inv_det, (d * h - e * g) * inv_det },
+        .{ (c * h - b * i) * inv_det, (a * i - c * g) * inv_det, (b * g - a * h) * inv_det },
+        .{ (b * f - c * e) * inv_det, (c * d - a * f) * inv_det, (a * e - b * d) * inv_det },
+    } };
+}
+
 pub const Quat = struct {
     x: f32 = 0,
     y: f32 = 0,

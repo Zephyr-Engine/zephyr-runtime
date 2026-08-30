@@ -21,7 +21,7 @@ const AssetKind = zimp.AssetKind;
 const AssetId = zimp.AssetId;
 
 fn detectKind(path: []const u8) ?AssetKind {
-    return AssetKind.fromAssetType(zimp.runtime.detectType(path) orelse return null);
+    return zimp.runtime.detectKind(path);
 }
 
 const AssetState = enum {
@@ -430,7 +430,7 @@ pub const AssetManager = struct {
         return zimp.runtime.loadFromReader(
             self.allocator,
             &reader,
-            zimp.runtime.detectType(normalized_path) orelse return AssetError.UnsupportedAssetKind,
+            zimp.runtime.detectKind(normalized_path) orelse return AssetError.UnsupportedAssetKind,
         );
     }
 
@@ -579,7 +579,7 @@ pub const AssetManager = struct {
         material_source: *const zimp.Zamat,
         out_bindings: *std.ArrayList(Material.TextureBinding),
     ) !bool {
-        for (material_source.texture_slots) |slot| {
+        for (material_source.texture_slots, 0..) |slot, texture_unit| {
             if (slot.cooked_path.len == 0) continue;
 
             const texture_path = try materialDependencyPath(self.allocator, slot.cooked_path);
@@ -592,10 +592,10 @@ pub const AssetManager = struct {
                 else => unreachable,
             };
             try out_bindings.append(self.allocator, .{
-                .unit = slot.shader_binding,
+                .unit = @intCast(texture_unit),
                 .view = texture.view,
                 .sampler = texture.sampler,
-                .resource_name = slot.resource_name,
+                .sampler_name = slot.sampler_name,
             });
         }
         return true;
