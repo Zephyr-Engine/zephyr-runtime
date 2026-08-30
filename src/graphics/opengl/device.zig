@@ -12,6 +12,7 @@ const RhiTexture = @import("../rhi/texture.zig");
 const RhiSampler = @import("../rhi/sampler.zig");
 const render_state = @import("render_state.zig");
 const rhi_device = @import("../rhi/device.zig");
+const diagnostics = @import("diagnostics.zig");
 const RhiBuffer = @import("../rhi/buffer.zig");
 const OpenGLGeometry = @import("geometry.zig");
 const OpenGLTexture = @import("texture.zig");
@@ -154,6 +155,9 @@ fn beginRenderPass(impl: *anyopaque, info: rhi_device.RenderPassInfo) anyerror!v
     const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
     self.bindTarget(info.target);
     render_state.begin(.{ .color = info.color, .depth = info.depth });
+    if (!diagnostics.checkError("beginning render pass")) {
+        return error.OpenGLError;
+    }
 }
 
 fn bindRenderTarget(impl: *anyopaque, target: rhi_device.RenderTarget) void {
@@ -179,6 +183,7 @@ fn bindTexture(impl: *anyopaque, view: TextureView, sampler: RhiSampler, unit: u
     gl.glActiveTexture(@intCast(gl.GL_TEXTURE0 + @as(c_int, @intCast(unit))));
     gl.glBindTexture(gl.GL_TEXTURE_2D, self.textureId(view));
     gl.glBindSampler(unit, self.resolveSampler(sampler).id);
+    _ = diagnostics.checkError("binding texture and sampler");
 }
 
 fn textureViewNativeId(impl: *anyopaque, view: TextureView) u32 {
@@ -279,6 +284,7 @@ fn destroyGeometry(impl: *anyopaque, geometry: *RhiGeometry) void {
 fn drawIndexed(impl: *anyopaque, geometry: RhiGeometry, first: u32, count: u32) void {
     const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
     self.resolveGeometry(geometry).draw(first, count);
+    _ = diagnostics.checkError("drawing indexed geometry");
 }
 
 fn createGraphicsPipeline(impl: *anyopaque, desc: RhiGraphicsPipeline.GraphicsPipelineDesc) anyerror!RhiGraphicsPipeline {
@@ -320,6 +326,7 @@ fn graphicsPipelineUniformLocation(impl: *anyopaque, pipeline: RhiGraphicsPipeli
 fn setGraphicsPipelineUniform(impl: *anyopaque, pipeline: RhiGraphicsPipeline, location: RhiGraphicsPipeline.UniformLocation, value: RhiGraphicsPipeline.UniformValue) void {
     const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
     self.resolvePipeline(pipeline).setUniformFromLocation(location, value);
+    _ = diagnostics.checkError("setting graphics pipeline uniform");
 }
 
 fn resolveFramebuffer(self: *OpenGLDevice, handle: RhiFramebuffer) *OpenGLFramebuffer {
@@ -370,6 +377,7 @@ fn beginGpuTimer(impl: *anyopaque) void {
     if (!self.queries_initialized) {
         gl.glGenQueries(query_count, &self.query_ids);
         self.queries_initialized = true;
+        _ = diagnostics.checkError("creating GPU timer queries");
     }
 
     if (self.active_query != null) {
@@ -378,6 +386,9 @@ fn beginGpuTimer(impl: *anyopaque) void {
 
     for (self.query_pending, 0..) |pending, i| if (!pending) {
         gl.glBeginQuery(gl.GL_TIME_ELAPSED, self.query_ids[i]);
+        if (!diagnostics.checkError("beginning GPU timer query")) {
+            return;
+        }
         self.active_query = i;
         return;
     };
@@ -387,6 +398,10 @@ fn endGpuTimer(impl: *anyopaque) void {
     const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
     const i = self.active_query orelse return;
     gl.glEndQuery(gl.GL_TIME_ELAPSED);
+    if (!diagnostics.checkError("ending GPU timer query")) {
+        self.active_query = null;
+        return;
+    }
     self.query_pending[i] = true;
     self.active_query = null;
 }

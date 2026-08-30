@@ -87,7 +87,7 @@ pub fn init(
         if (device.graphicsPipelineUniformLocation(pipeline, set_name)) |location| {
             try slot_uniforms.append(allocator, .{
                 .location = location,
-                .value = .{ .mat3 = binding.uvTransform() },
+                .value = .{ .int = @intCast(binding.uv_set) },
             });
         }
 
