@@ -9,6 +9,8 @@ pub const Mat4 = zlm.Mat4;
 pub const Mat3 = zlm.Mat3;
 pub const Mat2 = zlm.Mat2;
 
+pub const epsilon: f32 = 1e-8;
+
 pub fn normalMatrix(self: Mat4) Mat3 {
     const m = self.fields;
     const a = m[0][0];
@@ -23,8 +25,15 @@ pub fn normalMatrix(self: Mat4) Mat3 {
 
     const det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
     std.debug.assert(det != 0);
-    const inv_det = 1.0 / det;
+    if (@abs(det) <= epsilon) {
+        return .{ .fields = .{
+            .{ 1, 0, 0 },
+            .{ 0, 1, 0 },
+            .{ 0, 0, 1 },
+        } };
+    }
 
+    const inv_det = 1.0 / det;
     return .{ .fields = .{
         .{ (e * i - f * h) * inv_det, (f * g - d * i) * inv_det, (d * h - e * g) * inv_det },
         .{ (c * h - b * i) * inv_det, (a * i - c * g) * inv_det, (b * g - a * h) * inv_det },

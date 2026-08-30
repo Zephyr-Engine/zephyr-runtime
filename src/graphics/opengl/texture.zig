@@ -11,6 +11,8 @@ pub fn init(desc: Texture.Desc) !OpenGLTexture {
     if (desc.mips.len == 0) {
         return error.InvalidMipChain;
     }
+
+    diagnostics.clearPendingErrors("before creating texture");
     if (!supports(desc.format)) {
         return error.UnsupportedTextureFormat;
     }
@@ -45,6 +47,10 @@ pub fn deinit(self: *OpenGLTexture) void {
 }
 
 fn supports(format: Texture.Format) bool {
+    if (isCoreFormat(format)) {
+        return true;
+    }
+
     const extension: ?[:0]const u8 = switch (format) {
         .bc4_unorm, .bc5_unorm => "GL_ARB_texture_compression_rgtc",
         .bc6h_ufloat, .bc7_unorm, .bc7_srgb => "GL_ARB_texture_compression_bptc",
@@ -56,6 +62,14 @@ fn supports(format: Texture.Format) bool {
     }
     log.err("texture format '{s}' requires {s}", .{ @tagName(format), extension.? });
     return false;
+}
+
+fn isCoreFormat(format: Texture.Format) bool {
+    return switch (format) {
+        .bc4_unorm, .bc5_unorm => gl.GLAD_GL_VERSION_3_0 != 0,
+        .bc6h_ufloat, .bc7_unorm, .bc7_srgb => gl.GLAD_GL_VERSION_4_2 != 0,
+        else => true,
+    };
 }
 
 const UploadFormat = struct {

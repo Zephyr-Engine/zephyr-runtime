@@ -180,8 +180,8 @@ fn renderQueue(self: *Renderer, view: math.Mat4, projection: math.Mat4, camera_p
 
             model_location = self.device.graphicsPipelineUniformLocation(pipeline, "u_model");
             normal_matrix_location = self.device.graphicsPipelineUniformLocation(pipeline, "u_normal_matrix");
-            uv_min_location = self.device.graphicsPipelineUniformLocation(pipeline, "u_uv_min");
-            uv_scale_location = self.device.graphicsPipelineUniformLocation(pipeline, "u_uv_scale");
+            uv_min_location = self.device.graphicsPipelineUniformLocation(pipeline, "u_uv0_min");
+            uv_scale_location = self.device.graphicsPipelineUniformLocation(pipeline, "u_uv0_scale");
 
             self.device.setGraphicsPipelineUniformByName(pipeline, "u_view", .{ .mat4 = view.fields });
             self.device.setGraphicsPipelineUniformByName(pipeline, "u_projection", .{ .mat4 = projection.fields });

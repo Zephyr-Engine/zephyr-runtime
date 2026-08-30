@@ -13,6 +13,7 @@ device: *Device,
 source: zimp.Zamat,
 texture_bindings: []TextureBinding,
 param_bindings: []ParamBinding,
+slot_uniform_bindings: []UniformBinding,
 alpha_cutoff_location: ?GraphicsPipeline.UniformLocation,
 allocator: std.mem.Allocator,
 
@@ -21,14 +22,39 @@ pub const TextureBinding = struct {
     view: TextureView,
     sampler: Sampler,
     sampler_name: []const u8,
+    uv_set: u32,
+    uv_offset: [2]f32,
+    uv_scale: [2]f32,
+    uv_rotation: f32,
+    normal_scale: f32,
+    occlusion_strength: f32,
     /// Resolved once in `init`; `bindResources` runs per draw batch and should
     /// not pay for a uniform name lookup there.
     location: ?GraphicsPipeline.UniformLocation = null,
+
+    fn uvTransform(self: TextureBinding) [3][3]f32 {
+        const c = @cos(self.uv_rotation);
+        const s = @sin(self.uv_rotation);
+        const sx = self.uv_scale[0];
+        const sy = self.uv_scale[1];
+
+        // offset + rotation * (scale * uv)
+        return .{
+            .{ c * sx, s * sx, 0 },
+            .{ -s * sy, c * sy, 0 },
+            .{ self.uv_offset[0], self.uv_offset[1], 1 },
+        };
+    }
 };
 
 pub const ParamBinding = struct {
     param_index: usize,
     location: GraphicsPipeline.UniformLocation,
+};
+
+pub const UniformBinding = struct {
+    location: GraphicsPipeline.UniformLocation,
+    value: GraphicsPipeline.UniformValue,
 };
 
 pub fn init(
@@ -41,6 +67,9 @@ pub fn init(
     var param_bindings = std.ArrayList(ParamBinding).empty;
     errdefer param_bindings.deinit(allocator);
 
+    var slot_uniforms: std.ArrayList(UniformBinding) = .empty;
+    errdefer slot_uniforms.deinit(allocator);
+
     for (source.param_entries, 0..) |param, i| {
         const location = device.graphicsPipelineUniformLocation(pipeline, param.name) orelse continue;
         try param_bindings.append(allocator, .{
@@ -51,6 +80,57 @@ pub fn init(
 
     for (texture_bindings) |*binding| {
         binding.location = device.graphicsPipelineUniformLocation(pipeline, binding.sampler_name);
+
+        const set_name = try std.fmt.allocPrint(allocator, "{s}_uv_set", .{binding.sampler_name});
+        defer allocator.free(set_name);
+
+        if (device.graphicsPipelineUniformLocation(pipeline, set_name)) |location| {
+            try slot_uniforms.append(allocator, .{
+                .location = location,
+                .value = .{ .mat3 = binding.uvTransform() },
+            });
+        }
+
+        const transform_name = try std.fmt.allocPrint(
+            allocator,
+            "{s}_uv_transform",
+            .{binding.sampler_name},
+        );
+        defer allocator.free(transform_name);
+
+        if (device.graphicsPipelineUniformLocation(
+            pipeline,
+            transform_name,
+        )) |location| {
+            try slot_uniforms.append(allocator, .{
+                .location = location,
+                .value = .{ .mat3 = binding.uvTransform() },
+            });
+        }
+
+        if (std.mem.eql(u8, binding.sampler_name, "u_normal_map")) {
+            if (device.graphicsPipelineUniformLocation(
+                pipeline,
+                "u_normal_scale",
+            )) |location| {
+                try slot_uniforms.append(allocator, .{
+                    .location = location,
+                    .value = .{ .float = binding.normal_scale },
+                });
+            }
+        }
+
+        if (std.mem.eql(u8, binding.sampler_name, "u_ao_map")) {
+            if (device.graphicsPipelineUniformLocation(
+                pipeline,
+                "u_occlusion_strength",
+            )) |location| {
+                try slot_uniforms.append(allocator, .{
+                    .location = location,
+                    .value = .{ .float = binding.occlusion_strength },
+                });
+            }
+        }
     }
 
     const alpha_cutoff_location = if (source.render_state.alpha_mode == .alpha_test)
@@ -64,6 +144,7 @@ pub fn init(
         .source = source,
         .texture_bindings = texture_bindings,
         .alpha_cutoff_location = alpha_cutoff_location,
+        .slot_uniform_bindings = try slot_uniforms.toOwnedSlice(allocator),
         .param_bindings = try param_bindings.toOwnedSlice(allocator),
         .allocator = allocator,
     };
@@ -75,6 +156,14 @@ pub fn bindResources(self: *const Material) void {
         if (binding.location) |location| {
             self.device.setGraphicsPipelineUniform(self.pipeline, location, .{ .int = @intCast(binding.unit) });
         }
+    }
+
+    for (self.slot_uniform_bindings) |binding| {
+        self.device.setGraphicsPipelineUniform(
+            self.pipeline,
+            binding.location,
+            binding.value,
+        );
     }
 
     for (self.param_bindings) |binding| {
@@ -137,6 +226,7 @@ pub fn bindResources(self: *const Material) void {
 }
 
 pub fn deinit(self: *Material) void {
+    self.allocator.free(self.slot_uniform_bindings);
     self.allocator.free(self.texture_bindings);
     self.allocator.free(self.param_bindings);
     self.source.deinit(self.allocator);

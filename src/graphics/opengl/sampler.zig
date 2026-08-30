@@ -47,5 +47,6 @@ fn address(mode: Sampler.AddressMode) c_int {
     return switch (mode) {
         .repeat => gl.GL_REPEAT,
         .clamp_to_edge => gl.GL_CLAMP_TO_EDGE,
+        .mirrored_repeat => gl.GL_MIRRORED_REPEAT,
     };
 }

@@ -7,10 +7,12 @@ const device_factory = @import("../graphics/device_factory.zig");
 const TextureAsset = @import("../graphics/texture_asset.zig");
 const render_state = @import("../graphics/render_state.zig");
 const RhiTexture = @import("../graphics/rhi/texture.zig");
+const Sampler = @import("../graphics/rhi/sampler.zig");
 const Device = @import("../graphics/rhi/device.zig");
 const RuntimeAssetManifest = @import("manifest.zig");
 const Material = @import("../graphics/material.zig");
 const Project = @import("../project/project.zig");
+const SamplerCache = @import("sampler_cache.zig");
 const Mesh = @import("../graphics/mesh.zig");
 const source_mod = @import("source.zig");
 const log = @import("../core/log.zig");
@@ -104,6 +106,8 @@ pub const AssetManager = struct {
     device: *Device,
     io: std.Io,
     source: CookedStore,
+    sampler_cache: SamplerCache,
+
     scheduler: zob.Scheduler,
     mutex: std.Io.Mutex = .init,
     cond: std.Io.Condition = .init,
@@ -154,6 +158,7 @@ pub const AssetManager = struct {
             .device = device,
             .io = io,
             .source = owned_source,
+            .sampler_cache = SamplerCache{ .allocator = allocator },
             .scheduler = zob.Scheduler.initWithOptions(io, allocator, .{
                 .max_concurrency = defaultLoadConcurrency(),
             }),
@@ -176,6 +181,8 @@ pub const AssetManager = struct {
         }
         self.scheduler.deinit();
         self.assets.deinit();
+
+        self.sampler_cache.deinit(self.device);
 
         var key_it = self.asset_keys.keyIterator();
         while (key_it.next()) |key| {
@@ -480,7 +487,9 @@ pub const AssetManager = struct {
 
         var mips: std.ArrayList(RhiTexture.MipData) = .empty;
         defer mips.deinit(self.allocator);
-        for (cooked_texture.mips) |mip| try mips.append(self.allocator, .{ .extent = .{ .width = mip.width, .height = mip.height }, .bytes = mip.data });
+        for (cooked_texture.mips) |mip| {
+            try mips.append(self.allocator, .{ .extent = .{ .width = mip.width, .height = mip.height }, .bytes = mip.data });
+        }
 
         const texture = try self.allocator.create(TextureAsset);
         errdefer self.allocator.destroy(texture);
@@ -491,10 +500,11 @@ pub const AssetManager = struct {
             .mips = mips.items,
         });
         errdefer self.device.destroyTexture(&gpu_texture);
-        var sampler = try self.device.createSampler(.{});
-        errdefer self.device.destroySampler(&sampler);
-        texture.* = .{ .texture = gpu_texture, .view = self.device.textureView(gpu_texture), .sampler = sampler, .device = self.device };
-        errdefer texture.deinit();
+        texture.* = .{
+            .texture = gpu_texture,
+            .view = self.device.textureView(gpu_texture),
+            .device = self.device,
+        };
 
         return texture;
     }
@@ -594,8 +604,14 @@ pub const AssetManager = struct {
             try out_bindings.append(self.allocator, .{
                 .unit = @intCast(texture_unit),
                 .view = texture.view,
-                .sampler = texture.sampler,
+                .sampler = try self.sampler_cache.get(self.device, Sampler.Desc.fromTextureSlotEntry(slot)),
                 .sampler_name = slot.sampler_name,
+                .uv_set = slot.uv_set,
+                .uv_offset = slot.uv_offset,
+                .uv_scale = slot.uv_scale,
+                .uv_rotation = slot.uv_rotation,
+                .normal_scale = slot.normal_scale,
+                .occlusion_strength = slot.occlusion_strength,
             });
         }
         return true;
