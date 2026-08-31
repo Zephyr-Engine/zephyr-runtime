@@ -172,6 +172,68 @@ const expect = std.testing.expect;
 const expectApproxEq = std.testing.expectApproxEqAbs;
 const tolerance: f32 = 1e-5;
 
+fn expectMat3ApproxEq(actual: Mat3, expected: [3][3]f32, tol: f32) !void {
+    for (0..3) |row| {
+        for (0..3) |col| {
+            try expectApproxEq(actual.fields[row][col], expected[row][col], tol);
+        }
+    }
+}
+
+fn expectQuatApproxEq(actual: Quat, expected: Quat, tol: f32) !void {
+    try expectApproxEq(actual.x, expected.x, tol);
+    try expectApproxEq(actual.y, expected.y, tol);
+    try expectApproxEq(actual.z, expected.z, tol);
+    try expectApproxEq(actual.w, expected.w, tol);
+}
+
+fn expectVec3ApproxEq(actual: Vec3, expected: Vec3, tol: f32) !void {
+    try expectApproxEq(actual.x, expected.x, tol);
+    try expectApproxEq(actual.y, expected.y, tol);
+    try expectApproxEq(actual.z, expected.z, tol);
+}
+
+fn quatLength(q: Quat) f32 {
+    return @sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
+}
+
+test "normalMatrix returns identity for identity and translation transforms" {
+    try expectMat3ApproxEq(normalMatrix(Mat4.identity), .{
+        .{ 1, 0, 0 },
+        .{ 0, 1, 0 },
+        .{ 0, 0, 1 },
+    }, tolerance);
+
+    try expectMat3ApproxEq(normalMatrix(Mat4.createTranslationXYZ(4, -2, 7)), .{
+        .{ 1, 0, 0 },
+        .{ 0, 1, 0 },
+        .{ 0, 0, 1 },
+    }, tolerance);
+}
+
+test "normalMatrix computes inverse transpose for non-uniform and reflected scales" {
+    try expectMat3ApproxEq(normalMatrix(Mat4.createScale(2, 4, -5)), .{
+        .{ 0.5, 0, 0 },
+        .{ 0, 0.25, 0 },
+        .{ 0, 0, -0.2 },
+    }, tolerance);
+}
+
+test "normalMatrix computes inverse transpose for a general linear transform" {
+    const transform = Mat4{ .fields = .{
+        .{ 1, 2, 3, 0 },
+        .{ 0, 1, 4, 0 },
+        .{ 5, 6, 0, 0 },
+        .{ 8, 9, 10, 1 },
+    } };
+
+    try expectMat3ApproxEq(normalMatrix(transform), .{
+        .{ -24, 20, -5 },
+        .{ 18, -15, 4 },
+        .{ 5, -4, 1 },
+    }, 0.0001);
+}
+
 test "normalMatrix preserves invertible small-scale transforms" {
     const transform = Mat4.createScale(0.001, 0.002, 0.003);
     const normal = normalMatrix(transform);
@@ -185,6 +247,81 @@ test "normalMatrix preserves invertible small-scale transforms" {
     try expectApproxEq(normal.fields[1][2], 0.0, tolerance);
     try expectApproxEq(normal.fields[2][0], 0.0, tolerance);
     try expectApproxEq(normal.fields[2][1], 0.0, tolerance);
+}
+
+test "normalMatrix remains finite for very large and very small uniform scales" {
+    const large = normalMatrix(Mat4.createUniformScale(1e20));
+    const small = normalMatrix(Mat4.createUniformScale(1e-20));
+
+    for (0..3) |index| {
+        try expect(std.math.isFinite(large.fields[index][index]));
+        try std.testing.expectApproxEqRel(@as(f32, 1e-20), large.fields[index][index], tolerance);
+        try expect(std.math.isFinite(small.fields[index][index]));
+        try std.testing.expectApproxEqRel(@as(f32, 1e20), small.fields[index][index], tolerance);
+    }
+}
+
+test "normalMatrix falls back to identity for singular transforms" {
+    const zero_scale = normalMatrix(Mat4.createScale(0, 0, 0));
+    try expectMat3ApproxEq(zero_scale, .{
+        .{ 1, 0, 0 },
+        .{ 0, 1, 0 },
+        .{ 0, 0, 1 },
+    }, tolerance);
+
+    const dependent_rows = Mat4{ .fields = .{
+        .{ 1, 2, 3, 0 },
+        .{ 2, 4, 6, 0 },
+        .{ 0, 1, 0, 0 },
+        .{ 0, 0, 0, 1 },
+    } };
+    try expectMat3ApproxEq(normalMatrix(dependent_rows), .{
+        .{ 1, 0, 0 },
+        .{ 0, 1, 0 },
+        .{ 0, 0, 1 },
+    }, tolerance);
+}
+
+test "Quat default value is identity" {
+    try std.testing.expectEqual(Quat.identity, Quat{});
+}
+
+test "Quat fromAxisAngle normalizes its axis" {
+    const angle: f32 = std.math.pi / 3.0;
+    const q = Quat.fromAxisAngle(Vec3.new(0, 5, 0), angle);
+
+    try expectQuatApproxEq(q, .{
+        .x = 0,
+        .y = @sin(angle / 2.0),
+        .z = 0,
+        .w = @cos(angle / 2.0),
+    }, tolerance);
+}
+
+test "Quat fromAxisAngle with zero angle returns identity" {
+    try expectQuatApproxEq(
+        Quat.fromAxisAngle(Vec3.new(2, -3, 4), 0),
+        Quat.identity,
+        tolerance,
+    );
+}
+
+test "Quat fromEuler matches its documented yaw pitch roll composition" {
+    const yaw: f32 = 0.4;
+    const pitch: f32 = -0.7;
+    const roll: f32 = 1.1;
+    const q = Quat.fromEuler(yaw, pitch, roll);
+    const expected = Quat.fromAxisAngle(Vec3.new(0, 1, 0), yaw)
+        .mul(Quat.fromAxisAngle(Vec3.new(1, 0, 0), pitch))
+        .mul(Quat.fromAxisAngle(Vec3.new(0, 0, 1), roll));
+
+    try expectQuatApproxEq(q, expected, tolerance);
+
+    const v = Vec3.new(0.3, -0.4, 0.8);
+    const rolled = Quat.fromAxisAngle(Vec3.new(0, 0, 1), roll).rotateVec3(v);
+    const pitched = Quat.fromAxisAngle(Vec3.new(1, 0, 0), pitch).rotateVec3(rolled);
+    const yawed = Quat.fromAxisAngle(Vec3.new(0, 1, 0), yaw).rotateVec3(pitched);
+    try expectVec3ApproxEq(q.rotateVec3(v), yawed, tolerance);
 }
 
 test "Quat identity rotation leaves vector unchanged" {
@@ -219,6 +356,22 @@ test "Quat 90° rotation around Z" {
     try expectApproxEq(r.z, 0, tolerance);
 }
 
+test "Quat identity is the left and right multiplication identity" {
+    const q = Quat.fromEuler(0.2, -0.4, 0.8);
+    try expectQuatApproxEq(Quat.identity.mul(q), q, tolerance);
+    try expectQuatApproxEq(q.mul(Quat.identity), q, tolerance);
+}
+
+test "Quat multiplication composes rotations" {
+    const x_rotation = Quat.fromAxisAngle(Vec3.new(1, 0, 0), 0.6);
+    const y_rotation = Quat.fromAxisAngle(Vec3.new(0, 1, 0), -0.9);
+    const v = Vec3.new(1, 2, 3);
+
+    const composed = y_rotation.mul(x_rotation).rotateVec3(v);
+    const sequential = y_rotation.rotateVec3(x_rotation.rotateVec3(v));
+    try expectVec3ApproxEq(composed, sequential, tolerance);
+}
+
 test "Quat mul is associative" {
     const a = Quat.fromAxisAngle(Vec3.new(1, 0, 0), 0.3);
     const b = Quat.fromAxisAngle(Vec3.new(0, 1, 0), 0.7);
@@ -238,6 +391,50 @@ test "Quat normalize" {
     const n = Quat.normalize(q);
     const len = @sqrt(n.x * n.x + n.y * n.y + n.z * n.z + n.w * n.w);
     try expectApproxEq(len, 1.0, tolerance);
+}
+
+test "Quat normalize preserves direction and handles near-zero input" {
+    const q = Quat{ .x = 2, .y = -4, .z = 6, .w = -8 };
+    const n = q.normalize();
+    const inverse_length = 1.0 / @sqrt(@as(f32, 120));
+    try expectQuatApproxEq(n, .{
+        .x = 2 * inverse_length,
+        .y = -4 * inverse_length,
+        .z = 6 * inverse_length,
+        .w = -8 * inverse_length,
+    }, tolerance);
+    try expectQuatApproxEq((Quat{ .x = 1e-12, .w = 1e-12 }).normalize(), Quat.identity, tolerance);
+}
+
+test "Quat conjugate negates the vector part and inverts unit rotations" {
+    const q = Quat.fromEuler(0.2, -0.5, 0.7);
+    try expectQuatApproxEq(q.conjugate(), .{
+        .x = -q.x,
+        .y = -q.y,
+        .z = -q.z,
+        .w = q.w,
+    }, tolerance);
+    try expectQuatApproxEq(q.mul(q.conjugate()), Quat.identity, tolerance);
+
+    const v = Vec3.new(-2, 0.5, 4);
+    try expectVec3ApproxEq(q.conjugate().rotateVec3(q.rotateVec3(v)), v, tolerance);
+}
+
+test "Quat rotateVec3 preserves vector length" {
+    const q = Quat.fromEuler(0.8, -1.2, 0.3);
+    const v = Vec3.new(2, -3, 6);
+    const rotated = q.rotateVec3(v);
+    try expectApproxEq(rotated.length(), v.length(), tolerance);
+}
+
+test "Quat identity converts to the identity matrix" {
+    const matrix = Quat.identity.toMat4();
+    for (0..4) |row| {
+        for (0..4) |col| {
+            const expected: f32 = if (row == col) 1 else 0;
+            try expectApproxEq(matrix.fields[row][col], expected, tolerance);
+        }
+    }
 }
 
 test "Quat toMat4 matches createAngleAxis for Y rotation" {
@@ -283,6 +480,45 @@ test "Quat slerp endpoints" {
     try expectApproxEq(s1.y, b.y, tolerance);
     try expectApproxEq(s1.z, b.z, tolerance);
     try expectApproxEq(s1.w, b.w, tolerance);
+}
+
+test "Quat slerp midpoint follows constant angular interpolation" {
+    const start = Quat.identity;
+    const end = Quat.fromAxisAngle(Vec3.new(0, 1, 0), std.math.pi / 2.0);
+    const midpoint = Quat.slerp(start, end, 0.5);
+    const expected = Quat.fromAxisAngle(Vec3.new(0, 1, 0), std.math.pi / 4.0);
+
+    try expectQuatApproxEq(midpoint, expected, tolerance);
+    try expectApproxEq(quatLength(midpoint), 1.0, tolerance);
+}
+
+test "Quat slerp chooses the shortest path for opposite quaternion signs" {
+    const end = Quat.fromAxisAngle(Vec3.new(0, 1, 0), std.math.pi / 2.0);
+    const negated_end = Quat{ .x = -end.x, .y = -end.y, .z = -end.z, .w = -end.w };
+    const midpoint = Quat.slerp(Quat.identity, negated_end, 0.5);
+    const expected = Quat.fromAxisAngle(Vec3.new(0, 1, 0), std.math.pi / 4.0);
+
+    try expectVec3ApproxEq(
+        midpoint.rotateVec3(Vec3.new(0, 0, -1)),
+        expected.rotateVec3(Vec3.new(0, 0, -1)),
+        tolerance,
+    );
+    try expectApproxEq(quatLength(midpoint), 1.0, tolerance);
+}
+
+test "Quat slerp normalizes the near-linear interpolation branch" {
+    const end = Quat.fromAxisAngle(Vec3.new(0, 0, 1), 0.001);
+    const midpoint = Quat.slerp(Quat.identity, end, 0.5);
+    const expected = Quat.fromAxisAngle(Vec3.new(0, 0, 1), 0.0005);
+
+    try expectQuatApproxEq(midpoint, expected, tolerance);
+    try expectApproxEq(quatLength(midpoint), 1.0, tolerance);
+}
+
+test "Quat slerp handles equivalent quaternions with opposite signs" {
+    const opposite_identity = Quat{ .w = -1 };
+    const interpolated = Quat.slerp(Quat.identity, opposite_identity, 0.37);
+    try expectQuatApproxEq(interpolated, Quat.identity, tolerance);
 }
 
 test "Quat rotateVec3 matches toMat4 transform" {
