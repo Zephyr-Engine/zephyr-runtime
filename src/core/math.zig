@@ -13,18 +13,35 @@ pub const epsilon: f32 = 1e-8;
 
 pub fn normalMatrix(self: Mat4) Mat3 {
     const m = self.fields;
-    const a = m[0][0];
-    const b = m[0][1];
-    const c = m[0][2];
-    const d = m[1][0];
-    const e = m[1][1];
-    const f = m[1][2];
-    const g = m[2][0];
-    const h = m[2][1];
-    const i = m[2][2];
+    const scale = @max(
+        @max(@max(@abs(m[0][0]), @abs(m[0][1])), @abs(m[0][2])),
+        @max(
+            @max(@max(@abs(m[1][0]), @abs(m[1][1])), @abs(m[1][2])),
+            @max(@max(@abs(m[2][0]), @abs(m[2][1])), @abs(m[2][2])),
+        ),
+    );
+    if (scale == 0) {
+        return .{ .fields = .{
+            .{ 1, 0, 0 },
+            .{ 0, 1, 0 },
+            .{ 0, 0, 1 },
+        } };
+    }
+
+    // Compute the determinant after scaling the linear part into a stable
+    // range. This keeps the singularity check relative to the matrix's
+    // magnitude, so small but invertible transforms are not rejected.
+    const a = m[0][0] / scale;
+    const b = m[0][1] / scale;
+    const c = m[0][2] / scale;
+    const d = m[1][0] / scale;
+    const e = m[1][1] / scale;
+    const f = m[1][2] / scale;
+    const g = m[2][0] / scale;
+    const h = m[2][1] / scale;
+    const i = m[2][2] / scale;
 
     const det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
-    std.debug.assert(det != 0);
     if (@abs(det) <= epsilon) {
         return .{ .fields = .{
             .{ 1, 0, 0 },
@@ -33,7 +50,7 @@ pub fn normalMatrix(self: Mat4) Mat3 {
         } };
     }
 
-    const inv_det = 1.0 / det;
+    const inv_det = 1.0 / (det * scale);
     return .{ .fields = .{
         .{ (e * i - f * h) * inv_det, (f * g - d * i) * inv_det, (d * h - e * g) * inv_det },
         .{ (c * h - b * i) * inv_det, (a * i - c * g) * inv_det, (b * g - a * h) * inv_det },
@@ -154,6 +171,21 @@ pub const Quat = struct {
 const expect = std.testing.expect;
 const expectApproxEq = std.testing.expectApproxEqAbs;
 const tolerance: f32 = 1e-5;
+
+test "normalMatrix preserves invertible small-scale transforms" {
+    const transform = Mat4.createScale(0.001, 0.002, 0.003);
+    const normal = normalMatrix(transform);
+
+    try expectApproxEq(normal.fields[0][0], 1000.0, 0.001);
+    try expectApproxEq(normal.fields[1][1], 500.0, 0.001);
+    try expectApproxEq(normal.fields[2][2], 1000.0 / 3.0, 0.001);
+    try expectApproxEq(normal.fields[0][1], 0.0, tolerance);
+    try expectApproxEq(normal.fields[0][2], 0.0, tolerance);
+    try expectApproxEq(normal.fields[1][0], 0.0, tolerance);
+    try expectApproxEq(normal.fields[1][2], 0.0, tolerance);
+    try expectApproxEq(normal.fields[2][0], 0.0, tolerance);
+    try expectApproxEq(normal.fields[2][1], 0.0, tolerance);
+}
 
 test "Quat identity rotation leaves vector unchanged" {
     const v = Vec3.new(1, 2, 3);
