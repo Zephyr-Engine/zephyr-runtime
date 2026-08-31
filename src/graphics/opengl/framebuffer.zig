@@ -1,5 +1,7 @@
 const c = @import("../../c.zig");
 const gl = c.glad;
+
+const diagnostics = @import("diagnostics.zig");
 const rhi = @import("../rhi/framebuffer.zig");
 
 pub const FramebufferError = error{
@@ -7,6 +9,7 @@ pub const FramebufferError = error{
     TextureCreationFailed,
     RenderbufferCreationFailed,
     FramebufferIncomplete,
+    OpenGLError,
 };
 
 const Framebuffer = @This();
@@ -127,6 +130,9 @@ pub fn resize(self: *Framebuffer, width: u32, height: u32) FramebufferError!void
     gl.glBindRenderbuffer(gl.GL_RENDERBUFFER, 0);
     gl.glBindTexture(gl.GL_TEXTURE_2D, 0);
     gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, 0);
+    if (!diagnostics.checkError("resizing framebuffer")) {
+        return error.OpenGLError;
+    }
 }
 
 const ColorUploadFormat = struct {
