@@ -14,6 +14,7 @@ const AssetManager = asset_manager.AssetManager;
 const AssetError = asset_manager.AssetError;
 const Mesh = @import("../graphics/mesh.zig");
 const camera = @import("camera.zig");
+const log = @import("../core/log.zig");
 
 const SceneRuntimeInstance = @This();
 
@@ -102,21 +103,7 @@ pub fn addComponent(
     try codec.attach(context.world, entity, self.allocator, component.asData());
 
     for (component.fields) |field| {
-        const schema_field = for (codec.schema.fields) |candidate| {
-            if (candidate.number == field.number) {
-                break candidate;
-            }
-        } else continue;
-
-        const asset_kind = switch (schema_field.kind) {
-            .asset_ref => |kind| kind,
-            else => continue,
-        };
-        const asset_id = switch (field.value) {
-            .asset_ref => |id| id,
-            else => continue,
-        };
-        try registerAssetId(context.assets, asset_kind, asset_id);
+        try registerFieldAssetId(context.assets, codec.schema, field.number, field.value);
     }
 }
 
@@ -197,7 +184,7 @@ fn registerAssetId(assets: *AssetManager, kind: zimp.AssetKind, id: zimp.AssetId
 
     _ = result catch |err| switch (err) {
         AssetError.AssetNotFound, AssetError.WrongAssetKind => {
-            std.log.err("scene references unavailable {s} asset {f}: {s}", .{ @tagName(kind), id, @errorName(err) });
+            log.err("scene references unavailable {s} asset {f}: {s}", .{ @tagName(kind), id, @errorName(err) });
             return;
         },
         else => return err,

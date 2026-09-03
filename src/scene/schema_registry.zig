@@ -24,11 +24,6 @@ pub fn deinit(self: *SchemaRegistry) void {
     self.codecs.deinit();
     self.names.deinit();
 }
-pub fn registerMany(self: *SchemaRegistry, comptime Components: []const type) !void {
-    inline for (Components) |Component| {
-        try self.register(Component);
-    }
-}
 
 pub fn registerComponents(self: *SchemaRegistry, comptime components: []const type) !void {
     inline for (components) |Component| {

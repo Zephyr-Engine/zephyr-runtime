@@ -55,11 +55,8 @@ pub fn init(allocator: std.mem.Allocator, desc: rhi.GraphicsPipelineDesc) Graphi
     var link_success: i32 = 0;
     gl.glGetProgramiv(program, gl.GL_LINK_STATUS, &link_success);
     if (link_success == 0) {
-        var info_log: [512]u8 = [_]u8{0} ** 512;
-        var info_log_len: c_int = 0;
-        gl.glGetProgramInfoLog(program, info_log.len, &info_log_len, @ptrCast(&info_log));
-        const message = info_log[0..@intCast(@min(@max(info_log_len, 0), info_log.len))];
-        log.err("graphics pipeline program linking failed: {s}", .{message});
+        var info_log: InfoLog = .{};
+        log.err("graphics pipeline program linking failed: {s}", .{info_log.fetch(program, gl.glGetProgramInfoLog)});
         return GraphicsPipelineError.ProgramLinkingFailed;
     }
 
@@ -70,6 +67,16 @@ pub fn init(allocator: std.mem.Allocator, desc: rhi.GraphicsPipelineDesc) Graphi
         .fixed_state = desc.fixed_state,
     };
 }
+
+const InfoLog = struct {
+    buffer: [512]u8 = @splat(0),
+
+    fn fetch(self: *InfoLog, object: u32, comptime getter: anytype) []const u8 {
+        var len: c_int = 0;
+        getter(object, self.buffer.len, &len, @ptrCast(&self.buffer));
+        return self.buffer[0..@intCast(@min(@max(len, 0), self.buffer.len))];
+    }
+};
 
 fn compileShader(comptime stage: enum { vertex, fragment }, source: []const u8) GraphicsPipelineError!u32 {
     const shader_type = switch (stage) {
@@ -91,11 +98,8 @@ fn compileShader(comptime stage: enum { vertex, fragment }, source: []const u8) 
     var success: i32 = 0;
     gl.glGetShaderiv(shader, gl.GL_COMPILE_STATUS, &success);
     if (success == 0) {
-        var info_log: [512]u8 = [_]u8{0} ** 512;
-        var info_log_len: c_int = 0;
-        gl.glGetShaderInfoLog(shader, info_log.len, &info_log_len, @ptrCast(&info_log));
-        const message = info_log[0..@intCast(@min(@max(info_log_len, 0), info_log.len))];
-        log.err("{s} shader compilation failed: {s}", .{ @tagName(stage), message });
+        var info_log: InfoLog = .{};
+        log.err("{s} shader compilation failed: {s}", .{ @tagName(stage), info_log.fetch(shader, gl.glGetShaderInfoLog) });
         return switch (stage) {
             .vertex => GraphicsPipelineError.VertexShaderCompilationFailed,
             .fragment => GraphicsPipelineError.FragmentShaderCompilationFailed,
@@ -166,7 +170,7 @@ pub fn setUniformFromLocation(_: *const GraphicsPipeline, location: rhi.UniformL
     }
 }
 
-pub fn bind(self: *const GraphicsPipeline) void {
+pub fn bind(self: *const GraphicsPipeline, cache: *render_state.Cache) void {
     gl.glUseProgram(self.id);
-    render_state.apply(self.fixed_state);
+    render_state.apply(cache, self.fixed_state);
 }

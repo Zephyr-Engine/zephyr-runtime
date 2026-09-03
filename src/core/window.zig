@@ -48,7 +48,21 @@ pub const CursorKind = enum {
     text,
     resize_x,
     resize_y,
+
+    /// Adding a kind above is a compile error here until it gets a shape, and
+    /// creation/lookup/teardown all follow from this one mapping.
+    fn glfwShape(kind: CursorKind) c_int {
+        return switch (kind) {
+            .arrow => glfw.GLFW_ARROW_CURSOR,
+            .hand => glfw.GLFW_HAND_CURSOR,
+            .text => glfw.GLFW_IBEAM_CURSOR,
+            .resize_x => glfw.GLFW_HRESIZE_CURSOR,
+            .resize_y => glfw.GLFW_VRESIZE_CURSOR,
+        };
+    }
 };
+
+const CursorSet = std.EnumArray(CursorKind, ?*glfw.GLFWcursor);
 
 const DefaultWindowBounds = struct {
     x: c_int = 0,
@@ -89,11 +103,7 @@ data: WindowData,
 clipboard_buffer: std.ArrayList(u8) = .empty,
 event_fn: ?*const fn (*anyopaque, event.ZEvent) anyerror!void = null,
 event_ctx: *anyopaque = undefined,
-arrow_cursor: ?*glfw.GLFWcursor = null,
-hand_cursor: ?*glfw.GLFWcursor = null,
-text_cursor: ?*glfw.GLFWcursor = null,
-resize_x_cursor: ?*glfw.GLFWcursor = null,
-resize_y_cursor: ?*glfw.GLFWcursor = null,
+cursors: CursorSet = CursorSet.initFill(null),
 
 pub fn init(allocator: std.mem.Allocator, params: WindowParams) WindowError!*Window {
     if (comptime builtin.os.tag == .linux) {
@@ -157,11 +167,9 @@ pub fn init(allocator: std.mem.Allocator, params: WindowParams) WindowError!*Win
             .height = height,
         },
     };
-    win.arrow_cursor = glfw.glfwCreateStandardCursor(glfw.GLFW_ARROW_CURSOR);
-    win.hand_cursor = glfw.glfwCreateStandardCursor(glfw.GLFW_HAND_CURSOR);
-    win.text_cursor = glfw.glfwCreateStandardCursor(glfw.GLFW_IBEAM_CURSOR);
-    win.resize_x_cursor = glfw.glfwCreateStandardCursor(glfw.GLFW_HRESIZE_CURSOR);
-    win.resize_y_cursor = glfw.glfwCreateStandardCursor(glfw.GLFW_VRESIZE_CURSOR);
+    for (std.enums.values(CursorKind)) |kind| {
+        win.cursors.set(kind, glfw.glfwCreateStandardCursor(kind.glfwShape()));
+    }
 
     return win;
 }
@@ -241,14 +249,7 @@ pub fn isFocused(self: *const Window) bool {
 }
 
 pub fn setCursor(self: *Window, cursor: CursorKind) void {
-    const handle = switch (cursor) {
-        .arrow => self.arrow_cursor,
-        .hand => self.hand_cursor,
-        .text => self.text_cursor,
-        .resize_x => self.resize_x_cursor,
-        .resize_y => self.resize_y_cursor,
-    };
-    glfw.glfwSetCursor(self.window, handle);
+    glfw.glfwSetCursor(self.window, self.cursors.get(cursor));
 }
 
 pub fn getClipboard(self: *const Window) []const u8 {
@@ -315,11 +316,9 @@ pub fn nativeMenuWindowHandle(self: *const Window) WindowError!usize {
 }
 
 pub fn deinit(self: *Window, allocator: std.mem.Allocator) void {
-    if (self.arrow_cursor) |cursor| glfw.glfwDestroyCursor(cursor);
-    if (self.hand_cursor) |cursor| glfw.glfwDestroyCursor(cursor);
-    if (self.text_cursor) |cursor| glfw.glfwDestroyCursor(cursor);
-    if (self.resize_x_cursor) |cursor| glfw.glfwDestroyCursor(cursor);
-    if (self.resize_y_cursor) |cursor| glfw.glfwDestroyCursor(cursor);
+    for (self.cursors.values) |cursor| {
+        if (cursor) |handle| glfw.glfwDestroyCursor(handle);
+    }
     self.clipboard_buffer.deinit(self.allocator);
     glfw.glfwDestroyWindow(self.window);
     glfw.glfwTerminate();

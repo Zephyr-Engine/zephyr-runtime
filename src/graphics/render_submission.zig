@@ -17,7 +17,7 @@ pub const DrawItem = struct {
     depth_key: f32,
 
     phase: zimp.AlphaMode,
-    pipeline_key: PipelineKey,
+    pipeline_key: u64,
 
     pub fn lessThan(_: void, a: DrawItem, b: DrawItem) bool {
         if (a.phase != b.phase) {
@@ -31,26 +31,9 @@ pub const DrawItem = struct {
     }
 };
 
-pub const PipelineKey = struct {
-    graphics_pipeline: u64,
-
-    pub fn eql(a: PipelineKey, b: PipelineKey) bool {
-        return std.meta.eql(a, b);
-    }
-
-    pub fn generate(material: *const Material) PipelineKey {
-        return .{
-            .graphics_pipeline = material.pipeline.sort_key,
-        };
-    }
-};
-
 fn lessOpaqueLike(a: DrawItem, b: DrawItem) bool {
-    if (!a.pipeline_key.eql(b.pipeline_key)) {
-        return pipelineLessThan(
-            a.pipeline_key,
-            b.pipeline_key,
-        );
+    if (a.pipeline_key != b.pipeline_key) {
+        return a.pipeline_key < b.pipeline_key;
     }
 
     if (!zimp.AssetId.eql(
@@ -71,11 +54,8 @@ fn lessTransparentLike(a: DrawItem, b: DrawItem) bool {
         return a.depth_key > b.depth_key;
     }
 
-    if (!a.pipeline_key.eql(b.pipeline_key)) {
-        return pipelineLessThan(
-            a.pipeline_key,
-            b.pipeline_key,
-        );
+    if (a.pipeline_key != b.pipeline_key) {
+        return a.pipeline_key < b.pipeline_key;
     }
 
     return assetIdLessThan(
@@ -92,19 +72,7 @@ fn assetIdLessThan(
         std.mem.readInt(u128, &b.uuid.bytes, .big);
 }
 
-fn pipelineLessThan(
-    a: PipelineKey,
-    b: PipelineKey,
-) bool {
-    if (a.graphics_pipeline != b.graphics_pipeline) {
-        return a.graphics_pipeline <
-            b.graphics_pipeline;
-    }
-
-    return false;
-}
-
-fn drawItem(phase: zimp.AlphaMode, depth_key: f32, material_id: zimp.AssetId, pipeline_key: PipelineKey) DrawItem {
+fn drawItem(phase: zimp.AlphaMode, depth_key: f32, material_id: zimp.AssetId, pipeline_key: u64) DrawItem {
     return .{
         .part = undefined,
         .submesh = undefined,
@@ -117,13 +85,8 @@ fn drawItem(phase: zimp.AlphaMode, depth_key: f32, material_id: zimp.AssetId, pi
     };
 }
 
-const pipeline_a = PipelineKey{
-    .graphics_pipeline = 1,
-};
-
-const pipeline_b = PipelineKey{
-    .graphics_pipeline = 2,
-};
+const pipeline_a: u64 = 1;
+const pipeline_b: u64 = 2;
 
 const material_a = zimp.AssetId.parseComptime("11111111-1111-4111-8111-111111111111");
 const material_b = zimp.AssetId.parseComptime("22222222-2222-4222-8222-222222222222");
@@ -152,12 +115,12 @@ test "opaque draw items batch by pipeline then material then front-to-back depth
 
     std.mem.sort(DrawItem, &items, {}, DrawItem.lessThan);
 
-    try std.testing.expect(items[0].pipeline_key.eql(pipeline_a));
+    try std.testing.expect(items[0].pipeline_key == pipeline_a);
     try std.testing.expect(items[0].material_id.eql(material_a));
     try std.testing.expectEqual(@as(f32, 1), items[0].depth_key);
     try std.testing.expectEqual(@as(f32, 5), items[1].depth_key);
     try std.testing.expect(items[2].material_id.eql(material_b));
-    try std.testing.expect(items[3].pipeline_key.eql(pipeline_b));
+    try std.testing.expect(items[3].pipeline_key == pipeline_b);
 }
 
 test "transparent draw items sort back-to-front before batching ties" {
@@ -171,8 +134,8 @@ test "transparent draw items sort back-to-front before batching ties" {
     std.mem.sort(DrawItem, &items, {}, DrawItem.lessThan);
 
     try std.testing.expectEqual(@as(f32, 8), items[0].depth_key);
-    try std.testing.expect(items[0].pipeline_key.eql(pipeline_a));
-    try std.testing.expect(items[1].pipeline_key.eql(pipeline_b));
+    try std.testing.expect(items[0].pipeline_key == pipeline_a);
+    try std.testing.expect(items[1].pipeline_key == pipeline_b);
     try std.testing.expect(items[1].material_id.eql(material_a));
     try std.testing.expectEqual(@as(f32, 2), items[3].depth_key);
 }
@@ -191,6 +154,6 @@ test "asset id ordering stays byte-lexicographic over the uuid" {
 }
 
 test "pipeline ordering uses the backend-neutral pipeline sort key" {
-    try std.testing.expect(pipelineLessThan(pipeline_a, pipeline_b));
-    try std.testing.expect(!pipelineLessThan(pipeline_b, pipeline_a));
+    try std.testing.expect(pipeline_a < pipeline_b);
+    try std.testing.expect(!(pipeline_b < pipeline_a));
 }

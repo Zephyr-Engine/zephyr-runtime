@@ -52,11 +52,14 @@ pub fn init(streams: []const Stream, index_buffer_id: u32, format: Geometry.Inde
     return .{ .id = id, .index_format = format, .index_count = count };
 }
 
-pub fn draw(self: OpenGLGeometry, first: u32, count: u32) void {
+pub fn draw(self: OpenGLGeometry, bound_vao: *u32, first: u32, count: u32) void {
     std.debug.assert(first + count <= self.index_count);
     const size: usize = if (self.index_format == .u16) 2 else 4;
 
-    gl.glBindVertexArray(self.id);
+    if (bound_vao.* != self.id) {
+        gl.glBindVertexArray(self.id);
+        bound_vao.* = self.id;
+    }
     gl.glDrawElements(
         gl.GL_TRIANGLES,
         @intCast(count),

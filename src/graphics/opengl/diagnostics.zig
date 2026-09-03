@@ -21,19 +21,11 @@ pub fn checkError(operation: []const u8) bool {
     }
 }
 
-/// Reports and clears errors that were raised before the next OpenGL operation.
-///
-/// OpenGL keeps errors in a context-wide queue. Call this at API boundaries so a
-/// prior caller's error cannot be attributed to, or cause failure of, the next
-/// operation.
 pub fn clearPendingErrors(operation: []const u8) void {
     _ = checkError(operation);
 }
 
 pub fn hasExtension(name: []const u8) bool {
-    // Do not let an error from an earlier operation make a supported extension
-    // appear unavailable. The caller can use the diagnostic to locate that
-    // earlier operation without poisoning capability detection.
     clearPendingErrors("before enumerating OpenGL extensions");
 
     var extension_count: i32 = 0;

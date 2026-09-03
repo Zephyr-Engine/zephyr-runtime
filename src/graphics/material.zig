@@ -175,45 +175,27 @@ pub fn bindResources(self: *const Material) void {
         }
         const bytes = self.source.param_data[start..end];
 
-        switch (param.param_type) {
-            .float => self.device.setGraphicsPipelineUniform(self.pipeline, binding.location, .{ .float = readF32(bytes[0..4]) }),
-            .vec2 => self.device.setGraphicsPipelineUniform(
-                self.pipeline,
-                binding.location,
-                .{ .vec2 = .{
-                    readF32(bytes[0..4]),
-                    readF32(bytes[4..8]),
-                } },
-            ),
-            .vec3 => self.device.setGraphicsPipelineUniform(
-                self.pipeline,
-                binding.location,
-                .{ .vec3 = .{
-                    readF32(bytes[0..4]),
-                    readF32(bytes[4..8]),
-                    readF32(bytes[8..12]),
-                } },
-            ),
-            .vec4 => self.device.setGraphicsPipelineUniform(
-                self.pipeline,
-                binding.location,
-                .{ .vec4 = .{
-                    readF32(bytes[0..4]),
-                    readF32(bytes[4..8]),
-                    readF32(bytes[8..12]),
-                    readF32(bytes[12..16]),
-                } },
-            ),
-            .int => self.device.setGraphicsPipelineUniform(
-                self.pipeline,
-                binding.location,
-                .{ .int = std.mem.readInt(i32, bytes[0..4], .little) },
-            ),
-            .bool => {
-                const val: i32 = if (std.mem.readInt(u32, bytes[0..4], .little) != 0) 1 else 0;
-                self.device.setGraphicsPipelineUniform(self.pipeline, binding.location, .{ .int = val });
-            },
-        }
+        const value: GraphicsPipeline.UniformValue = switch (param.param_type) {
+            .float => .{ .float = readF32(bytes[0..4]) },
+            .vec2 => .{ .vec2 = .{
+                readF32(bytes[0..4]),
+                readF32(bytes[4..8]),
+            } },
+            .vec3 => .{ .vec3 = .{
+                readF32(bytes[0..4]),
+                readF32(bytes[4..8]),
+                readF32(bytes[8..12]),
+            } },
+            .vec4 => .{ .vec4 = .{
+                readF32(bytes[0..4]),
+                readF32(bytes[4..8]),
+                readF32(bytes[8..12]),
+                readF32(bytes[12..16]),
+            } },
+            .int => .{ .int = std.mem.readInt(i32, bytes[0..4], .little) },
+            .bool => .{ .int = @intFromBool(std.mem.readInt(u32, bytes[0..4], .little) != 0) },
+        };
+        self.device.setGraphicsPipelineUniform(self.pipeline, binding.location, value);
     }
 
     if (self.alpha_cutoff_location) |location| {

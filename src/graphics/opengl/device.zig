@@ -31,6 +31,7 @@ samplers: ResourcePool(OpenGLSampler) = .{},
 buffers: ResourcePool(OpenGLBuffer) = .{},
 geometries: ResourcePool(OpenGLGeometry) = .{},
 next_pipeline_sort_key: u64 = 1,
+state_cache: render_state.Cache = .{},
 query_ids: [query_count]u32 = [_]u32{0} ** query_count,
 query_pending: [query_count]bool = [_]bool{false} ** query_count,
 active_query: ?usize = null,
@@ -132,7 +133,7 @@ fn resizeFramebuffer(impl: *anyopaque, target: *RhiFramebuffer, extent: RhiFrame
 fn beginRenderPass(impl: *anyopaque, info: rhi_device.RenderPassInfo) anyerror!void {
     const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
     self.bindTarget(info.target);
-    render_state.begin(.{ .color = info.color, .depth = info.depth });
+    render_state.begin(&self.state_cache, .{ .color = info.color, .depth = info.depth });
     if (!diagnostics.checkError("beginning render pass")) {
         return error.OpenGLError;
     }
@@ -242,6 +243,9 @@ fn createGeometry(impl: *anyopaque, desc: RhiGeometry.Desc) anyerror!RhiGeometry
     }
 
     var r = try OpenGLGeometry.init(streams.items, self.resolveBuffer(desc.index_buffer).id, desc.index_format, desc.index_count);
+    // Geometry initialization binds its VAO while configuring attributes, then
+    // leaves VAO 0 bound.  Keep the bind-elision cache in sync with GL.
+    self.state_cache.bound_vao = 0;
     errdefer r.deinit();
 
     const a = try self.geometries.insert(self.allocator, r);
@@ -255,13 +259,15 @@ fn createGeometry(impl: *anyopaque, desc: RhiGeometry.Desc) anyerror!RhiGeometry
 fn destroyGeometry(impl: *anyopaque, geometry: *RhiGeometry) void {
     const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
     var r = self.remove(&self.geometries, geometry.handle, "geometry");
+    const was_bound = self.state_cache.bound_vao == r.id;
     r.deinit();
+    if (was_bound) self.state_cache.bound_vao = 0;
     geometry.* = undefined;
 }
 
 fn drawIndexed(impl: *anyopaque, geometry: RhiGeometry, first: u32, count: u32) void {
     const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
-    self.resolveGeometry(geometry).draw(first, count);
+    self.resolveGeometry(geometry).draw(&self.state_cache.bound_vao, first, count);
     _ = diagnostics.checkError("drawing indexed geometry");
 }
 
@@ -288,7 +294,7 @@ fn destroyGraphicsPipeline(impl: *anyopaque, pipeline: *RhiGraphicsPipeline) voi
 
 fn bindGraphicsPipeline(impl: *anyopaque, pipeline: RhiGraphicsPipeline) void {
     const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
-    self.resolvePipeline(pipeline).bind();
+    self.resolvePipeline(pipeline).bind(&self.state_cache);
 }
 
 fn graphicsPipelineUniformLocation(impl: *anyopaque, pipeline: RhiGraphicsPipeline, name: []const u8) ?RhiGraphicsPipeline.UniformLocation {

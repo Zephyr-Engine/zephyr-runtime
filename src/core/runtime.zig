@@ -73,7 +73,7 @@ pub fn Runtime(comptime game: Game) type {
         }
 
         pub fn resetActiveScene(self: *@This()) !void {
-            try self.world.resetActiveScene(&self.schemas, &self.assets);
+            try self.world.resetActiveScene();
         }
 
         pub fn beginFrame(self: *@This(), now: f64, focused: bool) void {

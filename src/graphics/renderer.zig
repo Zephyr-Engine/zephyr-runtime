@@ -55,7 +55,7 @@ fn renderWorld(self: *Renderer, world: *zcs.World, assets: *AssetManager, target
     defer self.device.endRenderPass();
 
     const camera_entity = camera_system.active(world) orelse {
-        std.log.warn("Skipping scene render: no active camera", .{});
+        log.warn("Skipping scene render: no active camera", .{});
         return;
     };
 
@@ -86,7 +86,6 @@ fn gatherDrawItems(self: *Renderer, world: *zcs.World, assets: *AssetManager, ca
         .read = &.{ components.TransformComponent, components.MeshRenderComponent },
     });
 
-    // sorted by material, so remember the last hit
     var cached_material_id: ?zimp.AssetId = null;
     var cached_material: *const Material = undefined;
 
@@ -152,7 +151,7 @@ fn gatherDrawItems(self: *Renderer, world: *zcs.World, assets: *AssetManager, ca
                         part.bounds_max,
                     ),
                     .phase = state.alpha_mode,
-                    .pipeline_key = .generate(material),
+                    .pipeline_key = material.pipeline.sort_key,
                 });
             }
         }
@@ -187,6 +186,11 @@ fn renderQueue(self: *Renderer, view: math.Mat4, projection: math.Mat4, camera_p
     var uv_min_location: ?GraphicsPipeline.UniformLocation = null;
     var uv_scale_location: ?GraphicsPipeline.UniformLocation = null;
 
+    // Uniform values are per-program state, so these caches are only valid while
+    // the same pipeline stays bound and are cleared on every pipeline switch.
+    var uploaded_model: ?math.Mat4 = null;
+    var uploaded_part: ?*const Mesh.Part = null;
+
     for (self.submissions.items) |draw_item| {
         const pipeline = draw_item.material.pipeline;
 
@@ -206,6 +210,8 @@ fn renderQueue(self: *Renderer, view: math.Mat4, projection: math.Mat4, camera_p
             });
 
             bound_material = null;
+            uploaded_model = null;
+            uploaded_part = null;
         }
 
         if (bound_material != draw_item.material) {
@@ -213,20 +219,31 @@ fn renderQueue(self: *Renderer, view: math.Mat4, projection: math.Mat4, camera_p
             bound_material = draw_item.material;
         }
 
-        if (model_location) |location| {
-            self.device.setGraphicsPipelineUniform(pipeline, location, .{ .mat4 = draw_item.model.fields });
+        // A part's submeshes share one model matrix, so the inverse-transpose
+        // behind `normalMatrix` only has to run when the transform changes.
+        if (uploaded_model == null or !std.meta.eql(uploaded_model.?.fields, draw_item.model.fields)) {
+            if (model_location) |location| {
+                self.device.setGraphicsPipelineUniform(pipeline, location, .{ .mat4 = draw_item.model.fields });
+            }
+
+            if (normal_matrix_location) |location| {
+                self.device.setGraphicsPipelineUniform(pipeline, location, .{ .mat3 = math.normalMatrix(draw_item.model).fields });
+            }
+
+            uploaded_model = draw_item.model;
         }
 
-        if (normal_matrix_location) |location| {
-            self.device.setGraphicsPipelineUniform(pipeline, location, .{ .mat3 = math.normalMatrix(draw_item.model).fields });
-        }
+        // The UV transform is a property of the part, shared by its submeshes.
+        if (uploaded_part != draw_item.part) {
+            if (uv_min_location) |location| {
+                self.device.setGraphicsPipelineUniform(pipeline, location, .{ .vec2 = draw_item.part.uv_min });
+            }
 
-        if (uv_min_location) |location| {
-            self.device.setGraphicsPipelineUniform(pipeline, location, .{ .vec2 = draw_item.part.uv_min });
-        }
+            if (uv_scale_location) |location| {
+                self.device.setGraphicsPipelineUniform(pipeline, location, .{ .vec2 = draw_item.part.uv_scale });
+            }
 
-        if (uv_scale_location) |location| {
-            self.device.setGraphicsPipelineUniform(pipeline, location, .{ .vec2 = draw_item.part.uv_scale });
+            uploaded_part = draw_item.part;
         }
 
         self.device.drawIndexed(draw_item.part.geometry, draw_item.submesh.index_offset, draw_item.submesh.index_count);

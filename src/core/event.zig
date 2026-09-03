@@ -140,7 +140,7 @@ pub const Key = enum(u16) {
     Menu = 348,
 
     pub fn fromGLFW(key: c_int) Key {
-        return @enumFromInt(key);
+        return std.enums.fromInt(Key, key) orelse .Unknown;
     }
 };
 

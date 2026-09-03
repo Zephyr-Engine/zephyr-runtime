@@ -28,31 +28,20 @@ pub const Desc = struct {
     max_anisotropy: f32 = 8,
 
     pub fn fromTextureSlotEntry(entry: zimp.TextureSlotEntry) Desc {
+        const sampler = entry.sampler;
         return .{
-            .min_filter = switch (entry.sampler.min_filter) {
-                .nearest => .nearest,
-                .linear => .linear,
-            },
-            .mag_filter = switch (entry.sampler.mag_filter) {
-                .nearest => .nearest,
-                .linear => .linear,
-            },
-            .mip_filter = switch (entry.sampler.mip_filter) {
-                .nearest => .nearest,
-                .linear => .linear,
-                .none => .none,
-            },
-            .address_u = switch (entry.sampler.wrap_s) {
-                .clamp_to_edge => .clamp_to_edge,
-                .mirrored_repeat => .mirrored_repeat,
-                .repeat => .repeat,
-            },
-            .address_v = switch (entry.sampler.wrap_t) {
-                .clamp_to_edge => .clamp_to_edge,
-                .mirrored_repeat => .mirrored_repeat,
-                .repeat => .repeat,
-            },
-            .max_anisotropy = entry.sampler.max_anisotropy,
+            .min_filter = convert(Filter, sampler.min_filter),
+            .mag_filter = convert(Filter, sampler.mag_filter),
+            .mip_filter = convert(MipFilter, sampler.mip_filter),
+            .address_u = convert(AddressMode, sampler.wrap_s),
+            .address_v = convert(AddressMode, sampler.wrap_t),
+            .max_anisotropy = sampler.max_anisotropy,
+        };
+    }
+
+    fn convert(comptime T: type, value: anytype) T {
+        return switch (value) {
+            inline else => |tag| @field(T, @tagName(tag)),
         };
     }
 };

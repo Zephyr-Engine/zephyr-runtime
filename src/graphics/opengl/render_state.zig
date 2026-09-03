@@ -4,15 +4,18 @@ const render_state = @import("../render_state.zig");
 const c = @import("../../c.zig");
 const gl = c.glad;
 
-var applied: ?render_state.FixedState = null;
+pub const Cache = struct {
+    fixed: ?render_state.FixedState = null,
+    bound_vao: u32 = 0,
+};
 
-pub fn apply(state: render_state.FixedState) void {
-    if (applied) |current| {
+pub fn apply(cache: *Cache, state: render_state.FixedState) void {
+    if (cache.fixed) |current| {
         if (std.meta.eql(current, state)) {
             return;
         }
     }
-    applied = state;
+    cache.fixed = state;
 
     if (state.depth_test) {
         gl.glEnable(gl.GL_DEPTH_TEST);
@@ -62,8 +65,8 @@ pub fn apply(state: render_state.FixedState) void {
     }
 }
 
-pub fn begin(info: render_state.BeginInfo) void {
-    applied = null;
+pub fn begin(cache: *Cache, info: render_state.BeginInfo) void {
+    cache.* = .{};
 
     var clear_mask: c_uint = 0;
 

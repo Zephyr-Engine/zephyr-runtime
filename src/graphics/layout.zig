@@ -1,3 +1,5 @@
+const std = @import("std");
+
 pub const StreamAttribute = struct {
     location: u32,
     data_type: DataType,
@@ -21,51 +23,36 @@ pub const DataType = enum {
     UShort4,
     Half4,
 
+    const Info = struct { size: u32, components: u32, integer: bool };
+
+    const info = std.EnumArray(DataType, Info).init(.{
+        .Float = .{ .size = 4, .components = 1, .integer = false },
+        .Float2 = .{ .size = 8, .components = 2, .integer = false },
+        .Float3 = .{ .size = 12, .components = 3, .integer = false },
+        .Float4 = .{ .size = 16, .components = 4, .integer = false },
+        .Mat3 = .{ .size = 36, .components = 9, .integer = false },
+        .Mat4 = .{ .size = 64, .components = 16, .integer = false },
+        .Int = .{ .size = 4, .components = 1, .integer = true },
+        .Int2 = .{ .size = 8, .components = 2, .integer = true },
+        .Int3 = .{ .size = 12, .components = 3, .integer = true },
+        .Int4 = .{ .size = 16, .components = 4, .integer = true },
+        .Bool = .{ .size = 1, .components = 1, .integer = false },
+        .Short2 = .{ .size = 4, .components = 2, .integer = false },
+        .UShort2 = .{ .size = 4, .components = 2, .integer = false },
+        .UShort4 = .{ .size = 8, .components = 4, .integer = true },
+        .Half4 = .{ .size = 8, .components = 4, .integer = false },
+    });
+
     pub fn size(dt: DataType) u32 {
-        return switch (dt) {
-            .Float => 4,
-            .Float2 => 8,
-            .Float3 => 12,
-            .Float4 => 16,
-            .Mat3 => 36,
-            .Mat4 => 64,
-            .Int => 4,
-            .Int2 => 8,
-            .Int3 => 12,
-            .Int4 => 16,
-            .Bool => 1,
-            .Short2 => 4,
-            .UShort2 => 4,
-            .UShort4 => 8,
-            .Half4 => 8,
-        };
+        return info.get(dt).size;
     }
 
     pub fn componentCount(dt: DataType) u32 {
-        return switch (dt) {
-            .Float => 1,
-            .Float2 => 2,
-            .Float3 => 3,
-            .Float4 => 4,
-            .Mat3 => 9,
-            .Mat4 => 16,
-            .Int => 1,
-            .Int2 => 2,
-            .Int3 => 3,
-            .Int4 => 4,
-            .Bool => 1,
-            .Short2 => 2,
-            .UShort2 => 2,
-            .UShort4 => 4,
-            .Half4 => 4,
-        };
+        return info.get(dt).components;
     }
 
     pub fn isIntegerType(dt: DataType) bool {
-        return switch (dt) {
-            .UShort4, .Int, .Int2, .Int3, .Int4 => true,
-            else => false,
-        };
+        return info.get(dt).integer;
     }
 };
 
@@ -94,12 +81,11 @@ test "DataType reports upload metadata" {
         .{ .data_type = .Half4, .size = 8, .components = 4, .is_integer = false },
     };
 
-    // Exhaustive: fail if a DataType variant is added without a matching case.
-    try @import("std").testing.expectEqual(@typeInfo(DataType).@"enum".fields.len, cases.len);
+    try std.testing.expectEqual(@typeInfo(DataType).@"enum".fields.len, cases.len);
 
     for (cases) |case| {
-        try @import("std").testing.expectEqual(case.size, case.data_type.size());
-        try @import("std").testing.expectEqual(case.components, case.data_type.componentCount());
-        try @import("std").testing.expectEqual(case.is_integer, case.data_type.isIntegerType());
+        try std.testing.expectEqual(case.size, case.data_type.size());
+        try std.testing.expectEqual(case.components, case.data_type.componentCount());
+        try std.testing.expectEqual(case.is_integer, case.data_type.isIntegerType());
     }
 }
