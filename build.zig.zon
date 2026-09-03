@@ -25,7 +25,8 @@
             .hash = "zob-1.2.0-qYajyLa8AAA0NgQZaYY6DTC8GuKqWlgpOXkq-Xze4soh",
         },
         .zimp = .{
-            .path = "git+https://github.com/Zephyr-Engine/zimp.git#e9aa6f5facd898e28cd62e55a43a2642e10fab0b",
+            .url = "git+https://github.com/Zephyr-Engine/zimp.git#e9aa6f5facd898e28cd62e55a43a2642e10fab0b",
+            .hash = "zimp-0.0.0-jO8AWkVbEwDyNfh7sOvrmH6idy-DlTGjETu1APnqNMRJ",
         },
     },
     .paths = .{
