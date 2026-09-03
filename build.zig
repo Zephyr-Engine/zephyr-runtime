@@ -43,12 +43,16 @@ pub fn build(b: *std.Build) void {
         .target = target,
     });
 
-    mod.linkLibrary(glfw_dep.artifact("glfw"));
-    mod.linkLibrary(glad_dep.artifact("glad"));
-    mod.addImport("zlm", zlm_dep.module("zlm"));
-    mod.addImport("zimp", zimp_dep.module("zimp"));
-    mod.addImport("zob", zob_dep.module("zob"));
-    mod.addImport("zcs", zcs_dep.module("zcs"));
+    const deps: Deps = .{
+        .glfw = glfw_dep.artifact("glfw"),
+        .glad = glad_dep.artifact("glad"),
+        .zlm = zlm_dep.module("zlm"),
+        .zimp = zimp_dep.module("zimp"),
+        .zob = zob_dep.module("zob"),
+        .zcs = zcs_dep.module("zcs"),
+    };
+
+    deps.wire(mod);
 
     const check = b.step("check", "Check if library compiles");
     const lib_check = b.createModule(.{
@@ -56,12 +60,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    lib_check.linkLibrary(glfw_dep.artifact("glfw"));
-    lib_check.linkLibrary(glad_dep.artifact("glad"));
-    lib_check.addImport("zlm", zlm_dep.module("zlm"));
-    lib_check.addImport("zimp", zimp_dep.module("zimp"));
-    lib_check.addImport("zob", zob_dep.module("zob"));
-    lib_check.addImport("zcs", zcs_dep.module("zcs"));
+    deps.wire(lib_check);
 
     const check_compile = b.addObject(.{
         .name = "zephyr_runtime_check",
@@ -75,12 +74,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    lib_unit_tests.root_module.linkLibrary(glfw_dep.artifact("glfw"));
-    lib_unit_tests.root_module.linkLibrary(glad_dep.artifact("glad"));
-    lib_unit_tests.root_module.addImport("zlm", zlm_dep.module("zlm"));
-    lib_unit_tests.root_module.addImport("zimp", zimp_dep.module("zimp"));
-    lib_unit_tests.root_module.addImport("zob", zob_dep.module("zob"));
-    lib_unit_tests.root_module.addImport("zcs", zcs_dep.module("zcs"));
+    deps.wire(lib_unit_tests.root_module);
 
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
 
@@ -88,3 +82,21 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_lib_unit_tests.step);
     check.dependOn(&check_compile.step);
 }
+
+const Deps = struct {
+    glfw: *std.Build.Step.Compile,
+    glad: *std.Build.Step.Compile,
+    zlm: *std.Build.Module,
+    zimp: *std.Build.Module,
+    zob: *std.Build.Module,
+    zcs: *std.Build.Module,
+
+    fn wire(deps: Deps, mod: *std.Build.Module) void {
+        mod.linkLibrary(deps.glfw);
+        mod.linkLibrary(deps.glad);
+        mod.addImport("zlm", deps.zlm);
+        mod.addImport("zimp", deps.zimp);
+        mod.addImport("zob", deps.zob);
+        mod.addImport("zcs", deps.zcs);
+    }
+};

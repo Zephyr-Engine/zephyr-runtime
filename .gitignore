@@ -2,4 +2,4 @@
 zig-out/
 .DS_Store
 zig-pkg
-graphify-out/
+.claude/

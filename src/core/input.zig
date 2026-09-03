@@ -71,63 +71,61 @@ pub fn applyEvent(self: *Input, ev: event.ZEvent) void {
 }
 
 pub fn isKeyDown(self: *const Input, key: event.Key) bool {
-    return self.key_down[keyIndex(key)];
+    return self.key_down[@intFromEnum(key)];
 }
 
 pub fn wasKeyPressed(self: *const Input, key: event.Key) bool {
-    return self.key_pressed[keyIndex(key)];
+    return self.key_pressed[@intFromEnum(key)];
 }
 
 pub fn wasKeyReleased(self: *const Input, key: event.Key) bool {
-    return self.key_released[keyIndex(key)];
+    return self.key_released[@intFromEnum(key)];
 }
 
 pub fn isMouseButtonDown(self: *const Input, button: event.MouseButton) bool {
-    return self.mouse_button_down[mouseButtonIndex(button)];
+    return self.mouse_button_down[@intFromEnum(button)];
 }
 
 pub fn wasMouseButtonPressed(self: *const Input, button: event.MouseButton) bool {
-    return self.mouse_button_pressed[mouseButtonIndex(button)];
+    return self.mouse_button_pressed[@intFromEnum(button)];
 }
 
 pub fn wasMouseButtonReleased(self: *const Input, button: event.MouseButton) bool {
-    return self.mouse_button_released[mouseButtonIndex(button)];
+    return self.mouse_button_released[@intFromEnum(button)];
 }
 
 pub fn textInput(self: *const Input) []const u32 {
     return self.text_codepoints[0..self.text_len];
 }
 
-fn setKeyDown(self: *Input, key: event.Key) void {
-    const index = keyIndex(key);
-    if (!self.key_down[index]) {
-        self.key_pressed[index] = true;
-        self.key_down[index] = true;
+fn setDown(down: []bool, pressed: []bool, index: usize) void {
+    if (!down[index]) {
+        pressed[index] = true;
+        down[index] = true;
     }
+}
+
+fn setUp(down: []bool, released: []bool, index: usize) void {
+    if (down[index]) {
+        released[index] = true;
+        down[index] = false;
+    }
+}
+
+fn setKeyDown(self: *Input, key: event.Key) void {
+    setDown(&self.key_down, &self.key_pressed, @intFromEnum(key));
 }
 
 fn setKeyUp(self: *Input, key: event.Key) void {
-    const index = keyIndex(key);
-    if (self.key_down[index]) {
-        self.key_released[index] = true;
-        self.key_down[index] = false;
-    }
+    setUp(&self.key_down, &self.key_released, @intFromEnum(key));
 }
 
 fn setMouseButtonDown(self: *Input, button: event.MouseButton) void {
-    const index = mouseButtonIndex(button);
-    if (!self.mouse_button_down[index]) {
-        self.mouse_button_pressed[index] = true;
-        self.mouse_button_down[index] = true;
-    }
+    setDown(&self.mouse_button_down, &self.mouse_button_pressed, @intFromEnum(button));
 }
 
 fn setMouseButtonUp(self: *Input, button: event.MouseButton) void {
-    const index = mouseButtonIndex(button);
-    if (self.mouse_button_down[index]) {
-        self.mouse_button_released[index] = true;
-        self.mouse_button_down[index] = false;
-    }
+    setUp(&self.mouse_button_down, &self.mouse_button_released, @intFromEnum(button));
 }
 
 fn setMousePosition(self: *Input, position: Position) void {
@@ -162,14 +160,6 @@ pub fn setFocused(self: *Input, focused: bool) void {
 fn releaseAll(self: *Input) void {
     @memset(&self.key_down, false);
     @memset(&self.mouse_button_down, false);
-}
-
-inline fn keyIndex(key: event.Key) usize {
-    return @intFromEnum(key);
-}
-
-inline fn mouseButtonIndex(button: event.MouseButton) usize {
-    return @intFromEnum(button);
 }
 
 test "Input tracks press, hold, and release edges" {

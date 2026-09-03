@@ -72,13 +72,13 @@ fn isCoreFormat(format: Texture.Format) bool {
     };
 }
 
-const UploadFormat = struct {
+pub const UploadFormat = struct {
     internal: u32,
     external: u32,
     ty: u32,
 };
 
-fn uploadFormat(format: Texture.Format) ?UploadFormat {
+pub fn uploadFormat(format: Texture.Format) ?UploadFormat {
     return switch (format) {
         .r8_unorm => .{ .internal = gl.GL_R8, .external = gl.GL_RED, .ty = gl.GL_UNSIGNED_BYTE },
         .rg8_unorm => .{ .internal = gl.GL_RG8, .external = gl.GL_RG, .ty = gl.GL_UNSIGNED_BYTE },

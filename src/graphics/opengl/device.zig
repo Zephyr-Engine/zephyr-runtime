@@ -80,18 +80,7 @@ pub fn init(allocator: std.mem.Allocator) !rhi_device {
 
 fn deinit(impl: *anyopaque) void {
     const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
-    for (self.framebuffers.slots.items) |*slot| {
-        if (slot.resource) |*resource| {
-            resource.deinit();
-        }
-    }
-
-    for (self.pipelines.slots.items) |*slot| {
-        if (slot.resource) |*pipeline| {
-            pipeline.deinit();
-        }
-    }
-    inline for (.{ &self.geometries, &self.buffers, &self.samplers, &self.textures }) |pool| {
+    inline for (.{ &self.geometries, &self.buffers, &self.samplers, &self.textures, &self.framebuffers, &self.pipelines }) |pool| {
         for (pool.slots.items) |*slot| {
             if (slot.resource) |*resource| {
                 resource.deinit();
@@ -103,8 +92,6 @@ fn deinit(impl: *anyopaque) void {
     if (self.queries_initialized) {
         gl.glDeleteQueries(query_count, &self.query_ids);
     }
-    self.framebuffers.deinit(self.allocator);
-    self.pipelines.deinit(self.allocator);
     const allocator = self.allocator;
     allocator.destroy(self);
 }
@@ -121,11 +108,7 @@ fn createFramebuffer(impl: *anyopaque, desc: RhiFramebuffer.FramebufferDesc) any
 
     const allocation = try self.framebuffers.insert(self.allocator, resource);
     return .{
-        .handle = .{
-            .owner = self,
-            .index = allocation.index,
-            .generation = allocation.generation,
-        },
+        .handle = self.makeHandle(allocation),
         .extent = extent,
         .color_format = desc.color_format,
         .depth_stencil_format = desc.depth_stencil_format,
@@ -134,12 +117,7 @@ fn createFramebuffer(impl: *anyopaque, desc: RhiFramebuffer.FramebufferDesc) any
 
 fn destroyFramebuffer(impl: *anyopaque, target: *RhiFramebuffer) void {
     const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
-    self.requireOwner(target.handle, "framebuffer");
-    var resource = self.framebuffers.remove(
-        target.handle.index,
-        target.handle.generation,
-    ) orelse @panic("stale framebuffer handle");
-
+    var resource = self.remove(&self.framebuffers, target.handle, "framebuffer");
     resource.deinit();
     target.* = undefined;
 }
@@ -296,19 +274,14 @@ fn createGraphicsPipeline(impl: *anyopaque, desc: RhiGraphicsPipeline.GraphicsPi
     const sort_key = self.next_pipeline_sort_key;
     self.next_pipeline_sort_key = nextSortKey(sort_key);
     return .{
-        .handle = .{
-            .owner = self,
-            .index = allocation.index,
-            .generation = allocation.generation,
-        },
+        .handle = self.makeHandle(allocation),
         .sort_key = sort_key,
     };
 }
 
 fn destroyGraphicsPipeline(impl: *anyopaque, pipeline: *RhiGraphicsPipeline) void {
     const self: *OpenGLDevice = @ptrCast(@alignCast(impl));
-    self.requireOwner(pipeline.handle, "graphics pipeline");
-    var resource = self.pipelines.remove(pipeline.handle.index, pipeline.handle.generation) orelse @panic("stale graphics pipeline handle");
+    var resource = self.remove(&self.pipelines, pipeline.handle, "graphics pipeline");
     resource.deinit();
     pipeline.* = undefined;
 }
@@ -330,8 +303,7 @@ fn setGraphicsPipelineUniform(impl: *anyopaque, pipeline: RhiGraphicsPipeline, l
 }
 
 fn resolveFramebuffer(self: *OpenGLDevice, handle: RhiFramebuffer) *OpenGLFramebuffer {
-    self.requireOwner(handle.handle, "framebuffer");
-    return self.framebuffers.get(handle.handle.index, handle.handle.generation) orelse @panic("stale framebuffer handle");
+    return self.resolve(&self.framebuffers, handle.handle, "framebuffer");
 }
 
 fn textureId(self: *OpenGLDevice, view: TextureView) u32 {
@@ -342,8 +314,7 @@ fn textureId(self: *OpenGLDevice, view: TextureView) u32 {
 }
 
 fn resolvePipeline(self: *OpenGLDevice, handle: RhiGraphicsPipeline) *OpenGLGraphicsPipeline {
-    self.requireOwner(handle.handle, "graphics pipeline");
-    return self.pipelines.get(handle.handle.index, handle.handle.generation) orelse @panic("stale graphics pipeline handle");
+    return self.resolve(&self.pipelines, handle.handle, "graphics pipeline");
 }
 
 fn makeHandle(self: *OpenGLDevice, allocation: anytype) ResourceHandle {
@@ -429,10 +400,6 @@ fn pollGpuTime(impl: *anyopaque) ?f32 {
         return @as(f32, @floatFromInt(ns)) / std.time.ns_per_ms;
     }
     return null;
-}
-
-fn requireOwner(self: *OpenGLDevice, resource_handle: ResourceHandle, comptime kind: []const u8) void {
-    if (!resource_handle.belongsTo(@as(*const anyopaque, @ptrCast(self)))) @panic("foreign " ++ kind ++ " handle");
 }
 
 fn nextSortKey(current: u64) u64 {

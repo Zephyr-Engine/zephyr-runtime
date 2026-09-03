@@ -2,7 +2,9 @@ const c = @import("../../c.zig");
 const gl = c.glad;
 
 const diagnostics = @import("diagnostics.zig");
+const OpenGLTexture = @import("texture.zig");
 const rhi = @import("../rhi/framebuffer.zig");
+const RhiTexture = @import("../rhi/texture.zig");
 
 pub const FramebufferError = error{
     FramebufferCreationFailed,
@@ -135,17 +137,12 @@ pub fn resize(self: *Framebuffer, width: u32, height: u32) FramebufferError!void
     }
 }
 
-const ColorUploadFormat = struct {
-    internal: u32,
-    external: u32,
-    ty: u32,
-};
-
-fn colorFormat(format: rhi.ColorFormat) ColorUploadFormat {
-    return switch (format) {
-        .rgba8 => .{ .internal = gl.GL_RGBA8, .external = gl.GL_RGBA, .ty = gl.GL_UNSIGNED_BYTE },
-        .rgba16_float => .{ .internal = gl.GL_RGBA16F, .external = gl.GL_RGBA, .ty = gl.GL_HALF_FLOAT },
+fn colorFormat(format: rhi.ColorFormat) OpenGLTexture.UploadFormat {
+    const texture_format: RhiTexture.Format = switch (format) {
+        .rgba8 => .rgba8_unorm,
+        .rgba16_float => .rgba16_float,
     };
+    return OpenGLTexture.uploadFormat(texture_format).?;
 }
 
 const DepthFormat = struct {

@@ -140,129 +140,7 @@ pub const Key = enum(u16) {
     Menu = 348,
 
     pub fn fromGLFW(key: c_int) Key {
-        return switch (key) {
-            glfw.GLFW_KEY_SPACE => .Space,
-            glfw.GLFW_KEY_APOSTROPHE => .Apostrophe,
-            glfw.GLFW_KEY_COMMA => .Comma,
-            glfw.GLFW_KEY_MINUS => .Minus,
-            glfw.GLFW_KEY_PERIOD => .Period,
-            glfw.GLFW_KEY_SLASH => .Slash,
-            glfw.GLFW_KEY_0 => .Num0,
-            glfw.GLFW_KEY_1 => .Num1,
-            glfw.GLFW_KEY_2 => .Num2,
-            glfw.GLFW_KEY_3 => .Num3,
-            glfw.GLFW_KEY_4 => .Num4,
-            glfw.GLFW_KEY_5 => .Num5,
-            glfw.GLFW_KEY_6 => .Num6,
-            glfw.GLFW_KEY_7 => .Num7,
-            glfw.GLFW_KEY_8 => .Num8,
-            glfw.GLFW_KEY_9 => .Num9,
-            glfw.GLFW_KEY_SEMICOLON => .Semicolon,
-            glfw.GLFW_KEY_EQUAL => .Equal,
-            glfw.GLFW_KEY_A => .A,
-            glfw.GLFW_KEY_B => .B,
-            glfw.GLFW_KEY_C => .C,
-            glfw.GLFW_KEY_D => .D,
-            glfw.GLFW_KEY_E => .E,
-            glfw.GLFW_KEY_F => .F,
-            glfw.GLFW_KEY_G => .G,
-            glfw.GLFW_KEY_H => .H,
-            glfw.GLFW_KEY_I => .I,
-            glfw.GLFW_KEY_J => .J,
-            glfw.GLFW_KEY_K => .K,
-            glfw.GLFW_KEY_L => .L,
-            glfw.GLFW_KEY_M => .M,
-            glfw.GLFW_KEY_N => .N,
-            glfw.GLFW_KEY_O => .O,
-            glfw.GLFW_KEY_P => .P,
-            glfw.GLFW_KEY_Q => .Q,
-            glfw.GLFW_KEY_R => .R,
-            glfw.GLFW_KEY_S => .S,
-            glfw.GLFW_KEY_T => .T,
-            glfw.GLFW_KEY_U => .U,
-            glfw.GLFW_KEY_V => .V,
-            glfw.GLFW_KEY_W => .W,
-            glfw.GLFW_KEY_X => .X,
-            glfw.GLFW_KEY_Y => .Y,
-            glfw.GLFW_KEY_Z => .Z,
-            glfw.GLFW_KEY_LEFT_BRACKET => .LeftBracket,
-            glfw.GLFW_KEY_BACKSLASH => .Backslash,
-            glfw.GLFW_KEY_RIGHT_BRACKET => .RightBracket,
-            glfw.GLFW_KEY_GRAVE_ACCENT => .GraveAccent,
-            glfw.GLFW_KEY_WORLD_1 => .World1,
-            glfw.GLFW_KEY_WORLD_2 => .World2,
-            glfw.GLFW_KEY_ESCAPE => .Escape,
-            glfw.GLFW_KEY_ENTER => .Enter,
-            glfw.GLFW_KEY_TAB => .Tab,
-            glfw.GLFW_KEY_BACKSPACE => .Backspace,
-            glfw.GLFW_KEY_INSERT => .Insert,
-            glfw.GLFW_KEY_DELETE => .Delete,
-            glfw.GLFW_KEY_RIGHT => .Right,
-            glfw.GLFW_KEY_LEFT => .Left,
-            glfw.GLFW_KEY_DOWN => .Down,
-            glfw.GLFW_KEY_UP => .Up,
-            glfw.GLFW_KEY_PAGE_UP => .PageUp,
-            glfw.GLFW_KEY_PAGE_DOWN => .PageDown,
-            glfw.GLFW_KEY_HOME => .Home,
-            glfw.GLFW_KEY_END => .End,
-            glfw.GLFW_KEY_CAPS_LOCK => .CapsLock,
-            glfw.GLFW_KEY_SCROLL_LOCK => .ScrollLock,
-            glfw.GLFW_KEY_NUM_LOCK => .NumLock,
-            glfw.GLFW_KEY_PRINT_SCREEN => .PrintScreen,
-            glfw.GLFW_KEY_PAUSE => .Pause,
-            glfw.GLFW_KEY_F1 => .F1,
-            glfw.GLFW_KEY_F2 => .F2,
-            glfw.GLFW_KEY_F3 => .F3,
-            glfw.GLFW_KEY_F4 => .F4,
-            glfw.GLFW_KEY_F5 => .F5,
-            glfw.GLFW_KEY_F6 => .F6,
-            glfw.GLFW_KEY_F7 => .F7,
-            glfw.GLFW_KEY_F8 => .F8,
-            glfw.GLFW_KEY_F9 => .F9,
-            glfw.GLFW_KEY_F10 => .F10,
-            glfw.GLFW_KEY_F11 => .F11,
-            glfw.GLFW_KEY_F12 => .F12,
-            glfw.GLFW_KEY_F13 => .F13,
-            glfw.GLFW_KEY_F14 => .F14,
-            glfw.GLFW_KEY_F15 => .F15,
-            glfw.GLFW_KEY_F16 => .F16,
-            glfw.GLFW_KEY_F17 => .F17,
-            glfw.GLFW_KEY_F18 => .F18,
-            glfw.GLFW_KEY_F19 => .F19,
-            glfw.GLFW_KEY_F20 => .F20,
-            glfw.GLFW_KEY_F21 => .F21,
-            glfw.GLFW_KEY_F22 => .F22,
-            glfw.GLFW_KEY_F23 => .F23,
-            glfw.GLFW_KEY_F24 => .F24,
-            glfw.GLFW_KEY_F25 => .F25,
-            glfw.GLFW_KEY_KP_0 => .Kp0,
-            glfw.GLFW_KEY_KP_1 => .Kp1,
-            glfw.GLFW_KEY_KP_2 => .Kp2,
-            glfw.GLFW_KEY_KP_3 => .Kp3,
-            glfw.GLFW_KEY_KP_4 => .Kp4,
-            glfw.GLFW_KEY_KP_5 => .Kp5,
-            glfw.GLFW_KEY_KP_6 => .Kp6,
-            glfw.GLFW_KEY_KP_7 => .Kp7,
-            glfw.GLFW_KEY_KP_8 => .Kp8,
-            glfw.GLFW_KEY_KP_9 => .Kp9,
-            glfw.GLFW_KEY_KP_DECIMAL => .KpDecimal,
-            glfw.GLFW_KEY_KP_DIVIDE => .KpDivide,
-            glfw.GLFW_KEY_KP_MULTIPLY => .KpMultiply,
-            glfw.GLFW_KEY_KP_SUBTRACT => .KpSubtract,
-            glfw.GLFW_KEY_KP_ADD => .KpAdd,
-            glfw.GLFW_KEY_KP_ENTER => .KpEnter,
-            glfw.GLFW_KEY_KP_EQUAL => .KpEqual,
-            glfw.GLFW_KEY_LEFT_SHIFT => .LeftShift,
-            glfw.GLFW_KEY_LEFT_CONTROL => .LeftControl,
-            glfw.GLFW_KEY_LEFT_ALT => .LeftAlt,
-            glfw.GLFW_KEY_LEFT_SUPER => .LeftSuper,
-            glfw.GLFW_KEY_RIGHT_SHIFT => .RightShift,
-            glfw.GLFW_KEY_RIGHT_CONTROL => .RightControl,
-            glfw.GLFW_KEY_RIGHT_ALT => .RightAlt,
-            glfw.GLFW_KEY_RIGHT_SUPER => .RightSuper,
-            glfw.GLFW_KEY_MENU => .Menu,
-            else => .Unknown,
-        };
+        return @enumFromInt(key);
     }
 };
 
@@ -393,4 +271,26 @@ test "Key.fromGLFW maps known and unknown key codes" {
     try std.testing.expectEqual(Key.A, Key.fromGLFW(glfw.GLFW_KEY_A));
     try std.testing.expectEqual(Key.F12, Key.fromGLFW(glfw.GLFW_KEY_F12));
     try std.testing.expectEqual(Key.Unknown, Key.fromGLFW(-1));
+    try std.testing.expectEqual(Key.Unknown, Key.fromGLFW(glfw.GLFW_KEY_UNKNOWN));
+    try std.testing.expectEqual(Key.Unknown, Key.fromGLFW(31));
+}
+
+test "Key values are the GLFW key codes" {
+    try std.testing.expectEqual(@intFromEnum(Key.Space), glfw.GLFW_KEY_SPACE);
+    try std.testing.expectEqual(@intFromEnum(Key.Apostrophe), glfw.GLFW_KEY_APOSTROPHE);
+    try std.testing.expectEqual(@intFromEnum(Key.Num0), glfw.GLFW_KEY_0);
+    try std.testing.expectEqual(@intFromEnum(Key.A), glfw.GLFW_KEY_A);
+    try std.testing.expectEqual(@intFromEnum(Key.GraveAccent), glfw.GLFW_KEY_GRAVE_ACCENT);
+    try std.testing.expectEqual(@intFromEnum(Key.Escape), glfw.GLFW_KEY_ESCAPE);
+    try std.testing.expectEqual(@intFromEnum(Key.F1), glfw.GLFW_KEY_F1);
+    try std.testing.expectEqual(@intFromEnum(Key.F25), glfw.GLFW_KEY_F25);
+    try std.testing.expectEqual(@intFromEnum(Key.Kp0), glfw.GLFW_KEY_KP_0);
+    try std.testing.expectEqual(@intFromEnum(Key.KpEqual), glfw.GLFW_KEY_KP_EQUAL);
+    try std.testing.expectEqual(@intFromEnum(Key.LeftShift), glfw.GLFW_KEY_LEFT_SHIFT);
+    try std.testing.expectEqual(@intFromEnum(Key.Menu), glfw.GLFW_KEY_MENU);
+
+    inline for (@typeInfo(Key).@"enum".fields) |f| {
+        const key: Key = @enumFromInt(f.value);
+        try std.testing.expectEqual(key, Key.fromGLFW(f.value));
+    }
 }
