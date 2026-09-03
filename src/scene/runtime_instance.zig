@@ -182,12 +182,9 @@ fn registerAssetId(assets: *AssetManager, kind: zimp.AssetKind, id: zimp.AssetId
         .material => assets.registerId(Material, id),
     };
 
-    _ = result catch |err| switch (err) {
-        AssetError.AssetNotFound, AssetError.WrongAssetKind => {
-            log.err("scene references unavailable {s} asset {f}: {s}", .{ @tagName(kind), id, @errorName(err) });
-            return;
-        },
-        else => return err,
+    _ = result catch |err| {
+        log.err("scene references unavailable {s} asset {f}: {s}", .{ @tagName(kind), id, @errorName(err) });
+        return err;
     };
 }
 
