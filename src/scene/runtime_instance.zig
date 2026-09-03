@@ -3,13 +3,15 @@ const std = @import("std");
 const zimp = @import("zimp");
 const zcs = @import("zcs");
 
-const AssetManager = @import("../assets/asset_manager.zig").AssetManager;
 const activeCamera = @import("camera.zig").active;
-const TextureAsset = @import("../graphics/texture_asset.zig");
 const device_factory = @import("../graphics/device_factory.zig");
+const TextureAsset = @import("../graphics/texture_asset.zig");
+const asset_manager = @import("../assets/asset_manager.zig");
 const SchemaRegistry = @import("schema_registry.zig");
 const Material = @import("../graphics/material.zig");
 const Project = @import("../project/project.zig");
+const AssetManager = asset_manager.AssetManager;
+const AssetError = asset_manager.AssetError;
 const Mesh = @import("../graphics/mesh.zig");
 const camera = @import("camera.zig");
 
@@ -182,12 +184,24 @@ pub fn removeField(
 }
 
 fn registerAssetId(assets: *AssetManager, kind: zimp.AssetKind, id: zimp.AssetId) !void {
-    switch (kind) {
-        .mesh => _ = try assets.registerId(Mesh, id),
-        .texture => _ = try assets.registerId(TextureAsset, id),
-        .shader_stage => _ = try assets.registerId(zimp.ZShader, id),
-        .material => _ = try assets.registerId(Material, id),
+    if (id.isZero()) {
+        return error.AssetIdZero;
     }
+
+    const result = switch (kind) {
+        .mesh => assets.registerId(Mesh, id),
+        .texture => assets.registerId(TextureAsset, id),
+        .shader_stage => assets.registerId(zimp.ZShader, id),
+        .material => assets.registerId(Material, id),
+    };
+
+    _ = result catch |err| switch (err) {
+        AssetError.AssetNotFound, AssetError.WrongAssetKind => {
+            std.log.err("scene references unavailable {s} asset {f}: {s}", .{ @tagName(kind), id, @errorName(err) });
+            return;
+        },
+        else => return err,
+    };
 }
 
 fn registerFieldAssetId(assets: *AssetManager, schema: zimp.scene.ComponentSchema, number: u32, value: zimp.scene.Value) !void {

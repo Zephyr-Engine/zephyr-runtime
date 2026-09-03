@@ -46,6 +46,8 @@ pub fn Runtime(comptime game: Game) type {
             runtime.assets = try AssetManager.init(allocator, io, project, &runtime.renderer.device);
             errdefer runtime.assets.deinit();
 
+            try runtime.assets.preloadBuiltins();
+
             runtime.schemas = SchemaRegistry.init(allocator);
             errdefer runtime.schemas.deinit();
 

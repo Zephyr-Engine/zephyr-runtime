@@ -17,8 +17,8 @@ const Mesh = @import("../graphics/mesh.zig");
 const source_mod = @import("source.zig");
 const log = @import("../core/log.zig");
 
+pub const AssetError = source_mod.AssetError;
 const CookedStore = source_mod.CookedStore;
-const AssetError = source_mod.AssetError;
 const AssetKind = zimp.AssetKind;
 const AssetId = zimp.AssetId;
 
@@ -32,6 +32,13 @@ const AssetState = enum {
     ready_for_finalize,
     waiting_dependencies,
     finalizing,
+    loaded,
+    failed,
+};
+
+const Availability = enum {
+    missing,
+    pending,
     loaded,
     failed,
 };
@@ -201,12 +208,33 @@ pub const AssetManager = struct {
         self.manifest.deinit();
     }
 
-    /// Register an asset by its durable id from `assets.zmanifest`. This is
-    /// the data-driven path scene instantiation uses: scene files store
-    /// AssetIds, never paths.
     pub fn registerId(self: *AssetManager, comptime T: type, id: AssetId) !AssetId {
         const expected = comptime kindFor(T);
         return self.requestKindById(expected, id);
+    }
+
+    pub fn availability(self: *AssetManager, id: AssetId) Availability {
+        self.lock();
+        const record = self.assets.get(id) orelse return .missing;
+        self.unlock();
+
+        return switch (record.state) {
+            .loaded => .loaded,
+            .failed => .failed,
+            else => .pending,
+        };
+    }
+
+    pub fn preloadBuiltins(self: *AssetManager) !void {
+        const id = try self.registerId(
+            Material,
+            zimp.builtin.error_meterial_id,
+        );
+        try self.wait(id);
+    }
+
+    pub fn errorMaterial(self: *AssetManager) *Material {
+        return self.get(Material, zimp.builtin.error_meterial_id).?;
     }
 
     fn requestKindById(self: *AssetManager, expected: AssetKind, id: AssetId) !AssetId {

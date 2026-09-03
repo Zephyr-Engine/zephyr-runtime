@@ -96,6 +96,13 @@ fn gatherDrawItems(self: *Renderer, world: *zcs.World, assets: *AssetManager, ca
 
         const model = transform.modelMatrix();
         const mesh = assets.get(Mesh, target.mesh) orelse {
+            switch (assets.availability(target.mesh)) {
+                .pending => {},
+                .missing, .failed => {
+                    log.err("mesh asset {f} is missing or failed to load", .{target.mesh});
+                },
+                .loaded => unreachable,
+            }
             continue;
         };
 
@@ -115,7 +122,16 @@ fn gatherDrawItems(self: *Renderer, world: *zcs.World, assets: *AssetManager, ca
                         }
                     }
 
-                    const looked_up = assets.get(Material, material_id) orelse continue;
+                    const looked_up = assets.get(Material, material_id) orelse {
+                        switch (assets.availability(material_id)) {
+                            .pending => {},
+                            .missing, .failed => {
+                                log.err("material asset {f} is missing or failed to load", .{material_id});
+                            },
+                            .loaded => unreachable,
+                        }
+                        continue;
+                    };
                     cached_material_id = material_id;
                     cached_material = looked_up;
                     break :blk looked_up;
